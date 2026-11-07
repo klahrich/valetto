@@ -343,7 +343,7 @@ export default function AgentToAgentPage() {
           <p className="a2a-kicker">Agent-to-agent messaging</p>
           <h1>Let your AI agents hand each other work</h1>
           <p className="lead">
-            Your agents send each other tasks through Valetto, and each answer comes back in the shape you asked for.
+            Your agents send each other tasks through Valetto, and each answer comes back in the expected shape.
           </p>
           <section className="a2a-mcp" aria-labelledby="mcp-url-h">
             <h2 id="mcp-url-h" className="a2a-mcp-l">
