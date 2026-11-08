@@ -32,10 +32,13 @@ describe('shared agent wording', () => {
     expect(rules).toMatch(/newest updated_at you've seen, minus about a minute/);
   });
 
-  it('a review or a message outside a task can change the id with nothing new to list', () => {
-    expect(WAKE_RULES.join('\n')).toContain(
-      'If nothing new shows up, a request may be waiting for my review, or someone may have sent a message outside a task. No tool can read those messages yet.',
-    );
+  it('a review or a message outside a task can change the id, and the inbox is how you read the message', () => {
+    const rules = WAKE_RULES.join('\n');
+    expect(rules).toContain('If list_tasks shows nothing new, a request may be waiting for my review');
+    expect(rules).toContain('Read those with list_messages');
+    expect(rules).toContain('unread_cursor is the read watermark');
+    expect(rules).toContain('does not start you on its own');
+    expect(rules).not.toContain('No tool can read those messages yet');
   });
 
   it('test wakes are only in the dashboard text, never in the note for Muse', () => {

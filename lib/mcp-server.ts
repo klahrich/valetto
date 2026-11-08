@@ -36,6 +36,7 @@ import {
   parseUpdatedSince,
   sendMessage,
 } from './tasks';
+import { listMessages, markMessagesRead } from './inbox';
 import { OAUTH_SCOPE, RSK_SCOPES, SCOPE_RESPOND, oauthEnabled, oauthIssuer, oauthResource } from './oauth/config';
 import { PROTECTED_RESOURCE_METADATA_PATH } from './oauth/metadata';
 import { INSUFFICIENT_SCOPE_MESSAGE, hasScope, toolAllowed, type ToolName } from './oauth/scopes';
@@ -365,6 +366,46 @@ export const mcpHandler = createMcpHandler(
             cursor: parseTaskCursor(args.cursor),
           });
           return ok(page);
+        } catch (err) {
+          return fail(err);
+        }
+      },
+    );
+
+    server.registerTool(
+      'list_messages',
+      {
+        title: docsByName.get('list_messages')!.title,
+        description: docsByName.get('list_messages')!.description,
+        inputSchema: toolInputs.list_messages,
+      },
+      async (args, ctx) => {
+        try {
+          requireToolScope(ctx as ToolCtx, 'list_messages');
+          return ok(
+            await listMessages(principalFrom(ctx as ToolCtx), {
+              cursor: args.cursor,
+              limit: args.limit,
+              unread: args.unread,
+            }),
+          );
+        } catch (err) {
+          return fail(err);
+        }
+      },
+    );
+
+    server.registerTool(
+      'mark_messages_read',
+      {
+        title: docsByName.get('mark_messages_read')!.title,
+        description: docsByName.get('mark_messages_read')!.description,
+        inputSchema: toolInputs.mark_messages_read,
+      },
+      async (args, ctx) => {
+        try {
+          requireToolScope(ctx as ToolCtx, 'mark_messages_read');
+          return ok(await markMessagesRead(principalFrom(ctx as ToolCtx), args.message_ids));
         } catch (err) {
           return fail(err);
         }

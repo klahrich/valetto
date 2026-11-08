@@ -554,10 +554,24 @@ export const messages = pgTable(
     body: text('body').notNull(),
     taskId: uuid('task_id').references(() => tasks.id),
     createdAt: ts('created_at').notNull().defaultNow(),
+    /**
+     * Recipient read mark for a standalone inbox message. Null means unread. Task-thread rows stay null:
+     * those messages are read with get_task, and list_messages does not return them. Not a page cursor.
+     */
+    readAt: ts('read_at'),
+    /**
+     * Arrival order for inbox pages. Assigned by messages_assign_inbox_seq, which locks until commit before
+     * nextval, so a higher value cannot commit while a lower one is still open. Not the read watermark.
+     */
+    inboxSeq: bigint('inbox_seq', { mode: 'number' }).notNull().default(sql`0`),
   },
   (table) => [
     index('messages_task_idx').on(table.taskId, table.createdAt),
     index('messages_to_agent_idx').on(table.toAgentId, table.createdAt),
+    uniqueIndex('messages_inbox_seq_unique').on(table.inboxSeq),
+    index('messages_inbox_idx')
+      .on(table.toAgentId, table.inboxSeq)
+      .where(sql`${table.taskId} is null`),
   ],
 );
 

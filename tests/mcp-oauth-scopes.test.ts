@@ -61,11 +61,11 @@ async function snapshot(workspaceId: string) {
 }
 
 describe('tool scopes', () => {
-  it('every registered tool has a scope entry, and the 19 tools are all listed for rsk_', async () => {
+  it('every registered tool has a scope entry, and the 21 tools are all listed for rsk_', async () => {
     const { appKey } = await setup();
     const listed = (await mcpListTools(appKey)).map((tool) => tool.name).sort();
     expect(listed).toEqual(Object.keys(TOOL_SCOPES).sort());
-    expect(listed).toHaveLength(19);
+    expect(listed).toHaveLength(21);
     expect(DENIED_TOOLS).toHaveLength(11);
   });
 
@@ -75,7 +75,18 @@ describe('tool scopes', () => {
     const listed = await mcpListTools(oauth);
     const names = listed.map((tool) => tool.name).sort();
     expect(names).toEqual(
-      ['answer_task', 'create_task', 'get_agent_card', 'get_task', 'list_agents', 'list_tasks', 'send_message', 'whoami'].sort(),
+      [
+        'answer_task',
+        'create_task',
+        'get_agent_card',
+        'get_task',
+        'list_agents',
+        'list_messages',
+        'list_tasks',
+        'mark_messages_read',
+        'send_message',
+        'whoami',
+      ].sort(),
     );
     expect(names).toEqual(Object.keys(TOOL_SCOPES).filter((name) => toolAllowed(name, ['agent'])).sort());
     for (const denied of DENIED_TOOLS) expect(names).not.toContain(denied);
@@ -87,9 +98,9 @@ describe('tool scopes', () => {
     const { appKey, oauth } = await setup();
     vi.stubEnv('VALETTO_AGENT_GUESTS', '');
     const rsk = (await mcpListTools(appKey)).map((tool) => tool.name);
-    expect(rsk).toHaveLength(18);
+    expect(rsk).toHaveLength(20);
     expect(rsk).not.toContain('redeem_invite');
-    expect((await mcpListTools(oauth)).map((tool) => tool.name)).toHaveLength(8);
+    expect((await mcpListTools(oauth)).map((tool) => tool.name)).toHaveLength(10);
   });
 
   it('toolAllowed is the shared predicate: rsk_ scopes allow everything, unknown names never pass', () => {
@@ -159,6 +170,35 @@ describe('tool scopes', () => {
     expect(refused.payload).toMatchObject({ error: 'forbidden' });
     const [row] = await getDb().select().from(tasks).where(eq(tasks.id, received));
     expect(row?.status).toBe('needs_info');
+  });
+
+  it('reads and marks only the connected agent inbox, and a foreign id marks nothing', async () => {
+    const { owner, oauth, bKey } = await setup();
+    const cee = await createAgent(owner.cookie, 'cee');
+    const ceeKey = await createKey(owner.cookie, cee.id);
+    expect((await mcpTool(bKey, 'send_message', { to: 'chatgpt', body: 'completion notice' })).isError).toBe(false);
+    const hidden = await mcpTool(bKey, 'send_message', { to: 'cee', body: 'not for the app' });
+    expect(hidden.isError).toBe(false);
+    const hiddenId = hidden.payload.message.id as string;
+
+    const listed = await mcpTool(oauth, 'list_messages', {});
+    expect(listed.isError, listed.text).toBe(false);
+    expect(listed.payload.messages.map((message: { body: string }) => message.body)).toEqual(['completion notice']);
+    expect(listed.payload.messages[0].unread).toBe(true);
+    const noticeId = listed.payload.messages[0].id as string;
+
+    const mixed = await mcpTool(oauth, 'mark_messages_read', { message_ids: [noticeId, hiddenId] });
+    expect(mixed.payload).toMatchObject({ error: 'not_found' });
+    const still = await mcpTool(oauth, 'list_messages', { unread: true });
+    expect(still.payload.messages.map((message: { id: string }) => message.id)).toEqual([noticeId]);
+    const forCee = await mcpTool(ceeKey, 'list_messages', { unread: true });
+    expect(forCee.payload.messages.map((message: { id: string }) => message.id)).toEqual([hiddenId]);
+
+    const marked = await mcpTool(oauth, 'mark_messages_read', { message_ids: [noticeId] });
+    expect(marked.isError, marked.text).toBe(false);
+    expect(marked.payload.messages[0]).toMatchObject({ id: noticeId, unread: false });
+    expect(marked.payload.unread_cursor).toBeNull();
+    expect((await mcpTool(ceeKey, 'list_messages', { unread: true })).payload.messages).toHaveLength(1);
   });
 });
 
