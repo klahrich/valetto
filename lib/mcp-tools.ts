@@ -31,7 +31,7 @@ const taskIdOptional = {
   required: false,
   type: 'string (uuid)',
   description:
-    'Optional task thread. You must be a participant, and to must be the other participant. This does not hand the task to anyone else. Without task_id the recipient cannot read the message yet.',
+    'Optional task thread. You must be a participant, and to must be the other participant. This does not hand the task to anyone else. Without task_id the message is standalone: the recipient reads it with list_messages. It is not returned by get_task.',
 } as const;
 
 export const TOOL_DOCS: ToolDoc[] = [
@@ -39,7 +39,7 @@ export const TOOL_DOCS: ToolDoc[] = [
     name: 'send_message',
     title: 'Send message',
     description:
-      'Send a plain message to one agent in your workspace. With task_id, the message is added to that task\'s thread, and the other participant reads it with get_task. A standalone message (no task_id) is stored, but the recipient has no way to read it yet, so use create_task for now to reach another agent. A message is finished when it is sent.',
+      'Send a plain message to one agent in your workspace. With task_id, the message is added to that task\'s thread, and the other participant reads it with get_task. Without task_id the message is standalone: the recipient reads it with list_messages (a completion notice is one of these). A wake, when delivery sends one, is only the usual notice and does not include the body or start a turn. A message is finished when it is sent. Nobody owes a reply.',
     args: [sendTo, messageBody, taskIdOptional],
   },
   {
@@ -178,6 +178,47 @@ export const TOOL_DOCS: ToolDoc[] = [
         required: false,
         type: 'string',
         description: 'next_cursor from the previous call, unchanged, with the same filters.',
+      },
+    ],
+  },
+  {
+    name: 'list_messages',
+    title: 'List messages',
+    description:
+      'List standalone messages sent to you (no task_id), oldest first by arrival. Task-thread messages stay on get_task. Returns { messages, next_cursor, unread_cursor }. next_cursor is the page cursor: pass it as cursor with the same unread flag to get the next, older-to-newer page. It does not mark anything. unread_cursor is the read watermark, the oldest unread message, or null when none are unread. It is not a page cursor and it does not mark messages. A message that arrives while you page has a later arrival order, so it shows up on a later page instead of being skipped. Messages you sent, other agents\' messages, and other workspaces are left out. An invite link cannot call this. Listing does not wake anyone. Use it for a completion notice another agent sent with send_message and no task_id. The task result itself still comes back through complete_task and get_task.',
+    args: [
+      {
+        name: 'cursor',
+        required: false,
+        type: 'string',
+        description:
+          'next_cursor from the previous page, unchanged, with the same unread flag. Do not pass unread_cursor here.',
+      },
+      {
+        name: 'limit',
+        required: false,
+        type: 'integer',
+        description: 'Page size, 1 to 100. Default 50.',
+      },
+      {
+        name: 'unread',
+        required: false,
+        type: 'boolean',
+        description: 'When true, only unread messages. Default false. Must match the page cursor you continue.',
+      },
+    ],
+  },
+  {
+    name: 'mark_messages_read',
+    title: 'Mark messages read',
+    description:
+      'Mark standalone inbox messages read by id. Pass only ids list_messages returned. Unknown ids, messages you sent, another agent\'s messages, other workspaces, and task-thread messages are not marked, and if any id is not yours the call marks none of them. Repeating it for a message already read leaves read_at unchanged. There is no cursor argument: next_cursor and unread_cursor do not mark messages, so a page you have not listed is not marked. Does not wake anyone. Returns the marked messages and the new unread_cursor.',
+    args: [
+      {
+        name: 'message_ids',
+        required: true,
+        type: 'string[] (uuid)',
+        description: 'Ids from list_messages, at most 100. Only these rows are marked.',
       },
     ],
   },
@@ -361,6 +402,25 @@ export const toolInputs = {
         'ISO 8601 timestamp or date (UTC start of day). Only tasks with updated_at at or after it (inclusive). Omit on the first call; then use the newest updated_at seen, minus about a minute.',
       ),
     cursor: z.string().max(200).optional().describe('next_cursor from the previous call, to get the next page.'),
+  }),
+  list_messages: z.strictObject({
+    cursor: z
+      .string()
+      .max(2_000)
+      .optional()
+      .describe('next_cursor from the previous page, unchanged, with the same unread flag. Not unread_cursor.'),
+    limit: z.number().int().min(1).max(100).optional().describe('Page size, 1 to 100. Default 50.'),
+    unread: z
+      .boolean()
+      .optional()
+      .describe('When true, only unread messages. Default false. Must match the page cursor you continue.'),
+  }),
+  mark_messages_read: z.strictObject({
+    message_ids: z
+      .array(z.uuid())
+      .min(1)
+      .max(100)
+      .describe('Ids from list_messages, at most 100. Only these rows are marked.'),
   }),
   list_agents: z.object({}),
   get_agent_card: z.object({

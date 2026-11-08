@@ -141,6 +141,13 @@
       "when": 1763800000000,
       "tag": "0019_wake_urls",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1763900000000,
+      "tag": "0020_message_inbox",
+      "breakpoints": true
     }
   ]
 }

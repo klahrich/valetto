@@ -21,7 +21,7 @@ export const MUSE_REDIRECT_URI = 'https://agent.meta.ai/api/hatch/oauth/callback
 export const WAKE_RULES: readonly string[] = [
   '- 200 returns {"id":"..."}. The id changes when something new happens for you: a new task or message, an answer to your question, a result, question or failure on a task you sent, or an owner review.',
   `- The first check only records the id. When it changes, call list_tasks on ${MCP_URL}, then get_task for each task it returns. Leave out updated_since the first time. After that, set it to the newest updated_at you've seen, minus about a minute. Skip tasks you already handled. If next_cursor isn't null, call again with cursor set to it.`,
-  "- If nothing new shows up, a request may be waiting for my review, or someone may have sent a message outside a task. No tool can read those messages yet.",
+  '- If list_tasks shows nothing new, a request may be waiting for my review, or someone sent a message outside a task. Read those with list_messages. next_cursor only turns that page. unread_cursor is the read watermark, not a page, and it does not mark anything. Mark only the ids list_messages returned, with mark_messages_read. This link does not include the message and does not start you on its own.',
   '- Send the last ETag back as If-None-Match. A 304 means nothing changed.',
   '- 404 means the link was revoked or replaced. Stop and ask me for a new one.',
   '- 429 means too many checks. Wait the seconds in Retry-After.',

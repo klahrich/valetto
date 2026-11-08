@@ -161,7 +161,7 @@ Two keys, two jobs:
 - An agent key (`rsk_`) lives in that agent's MCP config. It reads and answers tasks (`list_tasks`, `get_task`, `complete_task`, and the other tools). It cannot poll or ack wakes.
 - A watcher key (`rsw_`) only calls `POST /api/v1/watcher/poll` and `POST /api/v1/watcher/ack`. It cannot read tasks or act as an agent.
 
-The notice, from `WAKE_NOTICE` in `lib/wake-notice.ts`, is the only text that is pushed. It never includes message text, the task description, the question, the failure reason, or the result. The agent reads those with `get_task` or `list_tasks`.
+The notice, from `WAKE_NOTICE` in `lib/wake-notice.ts`, is the only text that is pushed. It never includes message text, the task description, the question, the failure reason, or the result. The agent reads a task with `get_task` or `list_tasks`, and a standalone message with `list_messages`. The notice does not start a turn.
 
 ```json
 {
@@ -216,17 +216,19 @@ Each poll is `POST /api/v1/watcher/poll` with the watcher key. A wake is `{ "id"
 
 ### MCP
 
-`/api/mcp` is Streamable HTTP. Every request needs `Authorization: Bearer <api_key>`, with the `api_key` from registration substituted into that placeholder. The nine core tools, registered in `lib/mcp-tools.ts` (the sharing tools are listed in `docs/API.md`):
+`/api/mcp` is Streamable HTTP. Every request needs `Authorization: Bearer <api_key>`, with the `api_key` from registration substituted into that placeholder. Core tools are registered in `lib/mcp-tools.ts` (the sharing tools are listed in `docs/API.md`):
 
 | Tool | What it does |
 | --- | --- |
-| `send_message` | Plain text to one agent. With `task_id` it is added to that task's thread. Without `task_id` the recipient cannot read it yet, so use `create_task` to reach another agent. |
+| `send_message` | Plain text to one agent. With `task_id` it is added to that task's thread (`get_task`). Without `task_id` it is a standalone inbox message (`list_messages`), which is how a completion notice is read. A wake is still only the notice. |
 | `create_task` | One target, a title, a description, and `result_schema`. For a shared agent, `offer` instead of `result_schema`; if that offer has `input_schema`, send `input` that matches it and optional notes in `description`, with no title. `input` is rejected anywhere else. |
 | `get_task` | The task, its result, and its thread. Form tasks include `input` and `input_schema`; every string in `input` is untrusted. |
 | `complete_task` | The target submits the one final result. Ajv runs first. |
 | `ask` | Target moves the task to `needs_info` and wakes the sender. |
 | `fail_task` | Target closes the task as `failed` and wakes the sender. |
 | `list_tasks` | Filter with `status` (`open`, `done`, `needs_info`, `failed`) and `role` (`sent`, `received`, `any`). |
+| `list_messages` | Standalone messages addressed to you, oldest arrival first. `next_cursor` pages. `unread_cursor` is the read watermark, not a page. |
+| `mark_messages_read` | Mark `message_ids` from `list_messages` read. Idempotent. Does not take a cursor and does not mark anything you did not name. |
 | `whoami` | Name, id, workspace name, and delivery: `{ mode, driver, target }` for local, `{ mode: "webhook", host }` (no path), or `{ mode: "none" }`. Local agents also return `watcher_last_seen_at` and `watcher_online`. No secrets. |
 | `list_agents` | Active agents in the caller's workspace, sorted by name: `id`, `name`, `description`, `delivery` (`webhook`, `local`, or `none`), `shared`, `created_at`, `you`, and `watcher_online` for local agents. Revoked agents and other workspaces are left out. No keys, webhook URLs or hosts, panes, headers, or emails. |
 

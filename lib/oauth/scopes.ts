@@ -15,6 +15,8 @@ export const TOOL_SCOPES = {
   send_message: OAUTH_SCOPE,
   get_task: OAUTH_SCOPE,
   list_tasks: OAUTH_SCOPE,
+  list_messages: OAUTH_SCOPE,
+  mark_messages_read: OAUTH_SCOPE,
   answer_task: OAUTH_SCOPE,
   complete_task: SCOPE_RESPOND,
   fail_task: SCOPE_RESPOND,

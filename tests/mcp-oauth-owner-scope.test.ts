@@ -378,7 +378,7 @@ describe('MCP_OAUTH_OWNER_SCOPE off', () => {
   it('an existing opted-in grant drops to agent tools while the flag is off', async () => {
     const owner = await signIn();
     const full = await connectWith(owner, ALL, true);
-    expect(await names(full.tokens.access_token)).toHaveLength(19);
+    expect(await names(full.tokens.access_token)).toHaveLength(21);
     vi.stubEnv('MCP_OAUTH_OWNER_SCOPE', '');
     expect(await names(full.tokens.access_token)).toEqual(AGENT_TOOLS);
     const refused = await mcpTool(full.tokens.access_token, 'set_workspace_handle', { handle: 'acme-owner' });
@@ -415,7 +415,7 @@ describe('MCP_OAUTH_OWNER_SCOPE off, then on again', () => {
 });
 
 describe('rsk_ keys', () => {
-  it('list all 19 tools with the flag on or off', async () => {
+  it('list all 21 tools with the flag on or off', async () => {
     const owner = await signIn();
     const bee = await createAgent(owner.cookie, 'bee');
     const key = await createKey(owner.cookie, bee.id);
