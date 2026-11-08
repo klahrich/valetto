@@ -174,8 +174,8 @@ export async function listMessages(
   const conditions = [inboxWhere(caller)];
   if (unread) conditions.push(isNull(messages.readAt));
   if (cursor) {
-    // Strictly after the last returned row. A higher inbox_seq committed later, even with an earlier created_at,
-    // is still ahead of this cursor, so it shows up on a later page instead of being skipped.
+    // Strictly after the last returned row. inbox_seq is taken under a lock held until the insert commits
+    // (messages_assign_inbox_seq), so a higher number cannot be visible while a lower one is still uncommitted.
     conditions.push(sql`(${messages.inboxSeq}, ${messages.id}) > (${cursor.s}::bigint, ${cursor.id}::uuid)`);
   }
   const db = getDb();

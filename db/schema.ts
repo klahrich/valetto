@@ -560,11 +560,10 @@ export const messages = pgTable(
      */
     readAt: ts('read_at'),
     /**
-     * Monotonic arrival order (identity). Inbox pages keyset on this, then id. A later commit gets a higher
-     * value even when created_at ties or is earlier, so a page cursor does not skip a new arrival. This is
-     * not the read watermark; that is the oldest row with read_at null.
+     * Arrival order for inbox pages. Assigned by messages_assign_inbox_seq, which locks until commit before
+     * nextval, so a higher value cannot commit while a lower one is still open. Not the read watermark.
      */
-    inboxSeq: bigint('inbox_seq', { mode: 'number' }).generatedByDefaultAsIdentity().notNull(),
+    inboxSeq: bigint('inbox_seq', { mode: 'number' }).notNull().default(sql`0`),
   },
   (table) => [
     index('messages_task_idx').on(table.taskId, table.createdAt),
