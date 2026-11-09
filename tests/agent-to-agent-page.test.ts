@@ -92,7 +92,10 @@ describe('agent-to-agent landing', () => {
     expect(flat).toContain('Check it worked');
     expect(flat).toContain('Most agents that support MCP tools over HTTP');
     expect(flat).toContain('Connect an AI app');
-    expect(flat).toContain('@acme/reviewer');
+    expect(flat).toContain('Set your workspace handle; it becomes your agents’ address (e.g. <C>@yourteam/reviewer</C>)');
+    expect(flat).toContain('enter their handle, like <C>otherco</C>');
+    expect(page).not.toContain('their Valetto team name');
+    expect(page).not.toContain('@acme/reviewer');
     expect(flat).toContain('Task, with the answer format you expect');
     expect(page).not.toContain('If <b>Agent invite links</b> is not on your Sharing page');
     expect(flat).toContain('A result that matches is saved as <C>done</C>');

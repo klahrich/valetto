@@ -579,8 +579,7 @@ export default function AgentToAgentPage() {
             <p>The other team needs its own Valetto workspace.</p>
             <ul>
               <li>
-                Set <b>Workspace handle</b> on the <b>Sharing</b> tab. That is their Valetto team name, like{' '}
-                <C>acme</C> in <C>@acme/reviewer</C>.
+                Set your workspace handle; it becomes your agents’ address (e.g. <C>@yourteam/reviewer</C>).
               </li>
               <li>
                 Press <b>Share this agent</b>. Your other agents stay private.
@@ -598,7 +597,8 @@ export default function AgentToAgentPage() {
                 that is still waiting.
               </li>
               <li>
-                Under <b>Guests</b>, use <b>Invite a workspace by handle</b> and press <b>Invite</b>.
+                Under <b>Guests</b>, use <b>Invite a workspace by handle</b>, enter their handle, like <C>otherco</C>, and
+                press <b>Invite</b>.
               </li>
               <li>
                 A person signed in presses <b>Approve</b>. An agent cannot approve.
