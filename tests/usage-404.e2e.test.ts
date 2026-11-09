@@ -25,18 +25,48 @@ function tokenFrom(cookie: string): string {
 
 const NOISE = ['date', 'etag', 'x-nextjs-date', 'keep-alive', 'connection'];
 
+/**
+ * One page fetch as the browser's router would see it. RSC requests use `?_rsc`; some hosts answer with a 307 to a
+ * corrected `?_rsc` URL (the owner's can point at the rewritten /internal-usage), so same-origin redirects are
+ * followed, up to 3, with the same headers. `redirects` lists the paths followed.
+ */
 async function fetchPage(path: string, token: string | null, rsc = false) {
   const headers: Record<string, string> = { host: 'valetto.tech' };
   if (token) headers.cookie = `${SESSION_COOKIE}=${encodeURIComponent(token)}`;
   if (rsc) headers.rsc = '1';
   // `?_rsc` with no value is the cache-busting key Next expects when no router-state headers are sent.
-  const res = await fetch(`${BASE}${path}${rsc ? '?_rsc' : ''}`, { headers, redirect: 'manual' });
+  let target = `${path}${rsc ? '?_rsc' : ''}`;
+  const redirects: string[] = [];
+  let res = await fetch(`${BASE}${target}`, { headers, redirect: 'manual' });
+  while ([301, 302, 303, 307, 308].includes(res.status) && redirects.length < 3) {
+    const location = res.headers.get('location');
+    if (!location) break;
+    const next = new URL(location, `${BASE}${target}`);
+    target = `${next.pathname}${next.search}`;
+    redirects.push(target);
+    await res.text();
+    res = await fetch(`${BASE}${target}`, { headers, redirect: 'manual' });
+  }
   const body = (await res.text()).split(path).join('<path>');
   const head = [...res.headers.entries()]
     .filter(([name]) => !NOISE.includes(name))
     .map(([name, value]) => `${name}: ${value}`)
     .sort();
-  return { status: res.status, body, head };
+  return { status: res.status, body, head, redirects };
+}
+
+const REWRITE_HEADERS = ['x-middleware-rewrite', 'x-nextjs-rewritten-path'];
+
+/** True for a rewrite header naming the not-found path, relative (`/__valetto-not-found`) or absolute (`http://host/…`). */
+function isNotFoundRewrite(line: string): boolean {
+  const at = line.indexOf(': ');
+  const name = line.slice(0, at);
+  if (!REWRITE_HEADERS.includes(name)) return false;
+  try {
+    return new URL(line.slice(at + 2), 'http://placeholder.invalid').pathname === '/__valetto-not-found';
+  } catch {
+    return false;
+  }
 }
 
 run('/admin/usage over HTTP', () => {
@@ -95,6 +125,9 @@ run('/admin/usage over HTTP', () => {
     for (const rsc of [false, true]) {
       const page = await fetchPage('/admin/usage', token, rsc);
       expect(page.status).toBe(200);
+      // Plain GET: no redirect. RSC: either served directly or after a 307 to a corrected `?_rsc` URL.
+      if (!rsc) expect(page.redirects).toEqual([]);
+      for (const hop of page.redirects) expect(hop).toMatch(/^\/(admin\/usage|internal-usage)\?_rsc/);
       expect(page.body).toContain('Outside usage');
       expect(page.body).toContain('j***@example.com');
       expect(page.body.toLowerCase()).not.toContain('jane');
@@ -123,9 +156,8 @@ run('/admin/usage over HTTP', () => {
           expect(got.status).toBe(404);
           expect(got.body).toBe(unknown.body);
           // Only difference: Next names the rewrite target (the not-found path) in its rewrite headers.
-          const rewrite = [`x-middleware-rewrite: /__valetto-not-found`, `x-nextjs-rewritten-path: /__valetto-not-found`];
-          expect(got.head.filter((h) => !rewrite.includes(h))).toEqual(unknown.head);
-          expect(got.head).toContain(rewrite[0]);
+          expect(got.head.some(isNotFoundRewrite)).toBe(true);
+          expect(got.head.filter((h) => !isNotFoundRewrite(h))).toEqual(unknown.head);
           expect(got.body).not.toContain('Outside usage');
           expect(got.body).not.toContain('internal-usage');
         }
