@@ -38,10 +38,10 @@ export const SHARE_TITLE = 'Share your agent · Valetto';
 export const SHARE_DESCRIPTION =
   'Send a private link so an outside agent can ask yours for help. They need no Valetto account. You choose the tasks, the daily limit, and when access ends.';
 export const SHARE_OG_IMAGE = {
-  url: '/valetto/og-share-v1.png',
+  url: '/valetto/og-share-v2.png',
   width: 1200,
   height: 630,
-  alt: 'Valetto: Got a private link? Use it with any agent.',
+  alt: 'Valetto: Got a private link? Paste it into your agent.',
 };
 
 const PAGE_OG_IMAGE: Partial<Record<(typeof VALETTO_PATHS)[number], typeof VALETTO_OG_IMAGE>> = {

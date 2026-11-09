@@ -70,6 +70,9 @@ describe('Valetto social image', () => {
     );
     expect(AGENT_TO_AGENT_DESCRIPTION).toContain(PLAN_LIMITS.free.tasksPerMonth.toLocaleString('en-US'));
     expect(`${AGENT_TO_AGENT_TITLE} ${AGENT_TO_AGENT_DESCRIPTION} ${AGENT_TO_AGENT_OG_IMAGE.alt}`).not.toMatch(/JSON Schema/i);
+    expect(SHARE_OG_IMAGE.url).toBe('/valetto/og-share-v2.png');
+    expect(SHARE_OG_IMAGE.alt).toBe('Valetto: Got a private link? Paste it into your agent.');
+    expect(readFileSync(join(ROOT, 'components/site/valetto/seo.ts'), 'utf8')).not.toContain(['any', 'agent'].join(' '));
     expect(SHARE_TITLE).toBe('Share your agent · Valetto');
     expect(SHARE_DESCRIPTION).toBe(
       'Send a private link so an outside agent can ask yours for help. They need no Valetto account. You choose the tasks, the daily limit, and when access ends.',
