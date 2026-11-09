@@ -103,7 +103,7 @@ export default function ValettoPage() {
             <li>
               <a href="#how">How it works</a>
             </li>
-            <li>
+            <li className="vt-nav-agents">
               <Link href={AGENT_TO_AGENT}>Valetto for agents</Link>
             </li>
             <li className="vt-nav-in">

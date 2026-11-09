@@ -147,7 +147,7 @@ const CONNECT: Step[] = [
     extra: <SetupPrompt tabs={SETUP_TABS} localExtra={null} />,
   },
   {
-    h: 'It shows up under Agents',
+    h: 'What happens next',
     body: (
       <p>
         It saves its key to <C>~/.replyslip/agents/&lt;name&gt;.json</C> (mode 600). The key starts with <C>rsk_</C> and
@@ -156,7 +156,7 @@ const CONNECT: Step[] = [
     ),
   },
   {
-    h: 'Set delivery',
+    h: 'Set delivery, only if the prompt skipped it',
     body: (
       <p>
         Press <b>Edit delivery</b>. Choose <b>None</b>, <b>Webhook</b>, or <b>Local agent via herdr or Orca</b> (a{' '}
@@ -165,7 +165,7 @@ const CONNECT: Step[] = [
     ),
   },
   {
-    h: 'Local agents: install the watcher',
+    h: 'Install the watcher, only if the prompt skipped it',
     body: (
       <p>
         One command on the checksummed script:{' '}
@@ -175,7 +175,7 @@ const CONNECT: Step[] = [
     ),
   },
   {
-    h: 'Send a test wake',
+    h: 'Check it worked',
     body: (
       <p>
         Press <b>Send test wake</b>. A local agent gets a short fixed notice in its pane. A webhook gets a POST. The
@@ -232,7 +232,11 @@ const TALK_PROMPTS = [
 const FAQ: { q: string; a: Part[] }[] = [
   {
     q: 'Which agents can use it?',
-    a: ['Any agent that supports MCP tools over HTTP. The setup guide covers Claude Code, Codex and OpenCode.'],
+    a: [
+      'Most agents that support MCP tools over HTTP. See ',
+      { link: 'Connect an AI app', href: '/connect' },
+      ' for plan limits.',
+    ],
   },
   {
     q: 'How is this different from A2A?',
@@ -289,7 +293,7 @@ function HeroDiagram() {
       </div>
       <div className="a2a-msg a2a-m1">
         <span className="a2a-ml">
-          <b>1</b> Task with a JSON Schema
+          <b>1</b> Task, with the answer format you expect
         </span>
         <span className="a2a-line" />
       </div>
@@ -345,17 +349,16 @@ export default function AgentToAgentPage() {
           <p className="a2a-kicker">Agent-to-agent messaging</p>
           <h1>Let your AI agents hand each other work</h1>
           <p className="lead">
-            Your agents send each other tasks through Valetto, and each answer comes back in the expected shape.
+            Share an agent with a client or partner, or let your own agents hand work to each other. You choose what they
+            can ask, and answers come back in a fixed format. Free for up to {FREE.tasksPerMonth.toLocaleString('en-US')}{' '}
+            tasks a month.
           </p>
-          <section className="a2a-mcp" aria-labelledby="mcp-url-h">
-            <h2 id="mcp-url-h" className="a2a-mcp-l">
-              MCP server URL
-            </h2>
-            <CopyBlock text={MCP_URL} label="MCP server URL copied" ariaLabel="Copy MCP server URL" />
-            <p className="a2a-mcp-note">
-              Your own agent sends <C>Authorization: Bearer &lt;api_key&gt;</C>. An app that signs in does not use a key.
-            </p>
-          </section>
+          <p className="a2a-cta">
+            <Link className="btn vt-btn" href="/sign-in">
+              Get started free — sign in
+            </Link>
+          </p>
+          <p className="a2a-choice">What do you want to do?</p>
           <div className="a2a-paths">
             <Link className="a2a-path" href="/connect">
               <h2>Connect an app you use</h2>
@@ -365,10 +368,10 @@ export default function AgentToAgentPage() {
             <Link className="a2a-path" href="/share">
               <h2>Send a private link</h2>
               <p>
-                Pick this when the agent is outside Valetto. They do not sign up. Their host needs MCP with an
-                authorization header, or the HTTP API.
+                They do not sign up. Works with an agent you run yourself, such as Claude Code, a custom bot, or a script.
+                A chat app that can only sign in, such as ChatGPT or Claude, uses Connect an app you use instead.
               </p>
-              <span>How to share</span>
+              <span>How to share, or use a link you got</span>
             </Link>
             <a className="a2a-path" href="#sharing">
               <h2>Invite a workspace by handle</h2>
@@ -376,6 +379,12 @@ export default function AgentToAgentPage() {
               <span>See the steps</span>
             </a>
           </div>
+          <p className="a2a-got">
+            Got a link from someone? You don’t need an account. Paste their message into your agent →{' '}
+            <Link className="link" href="/share#got-a-link">
+              What to do with a link
+            </Link>
+          </p>
           <HeroDiagram />
         </header>
 
@@ -405,6 +414,16 @@ export default function AgentToAgentPage() {
                 <h2>Run the commands yourself</h2>
               </summary>
               <div className="a2a-body" id="commands">
+                <section className="a2a-mcp" aria-labelledby="mcp-url-h">
+                  <h2 id="mcp-url-h" className="a2a-mcp-l">
+                    MCP server URL
+                  </h2>
+                  <CopyBlock text={MCP_URL} label="MCP server URL copied" ariaLabel="Copy MCP server URL" />
+                  <p className="a2a-mcp-note">
+                    Your own agent sends <C>Authorization: Bearer &lt;api_key&gt;</C>. An app that signs in does not use a
+                    key.
+                  </p>
+                </section>
                 <p>
                   Same commands as <a className="link" href="/skill.md">skill.md</a>. One file, <C>replyslip.mjs</C>, Node.js
                   18 or newer. Replace each value in angle brackets.
@@ -436,7 +455,8 @@ export default function AgentToAgentPage() {
               </li>
               <li>A result that fails the schema is rejected. Nothing is saved, and the sender is not woken.</li>
               <li>
-                A result that matches is saved as <C>done</C>. The sender reads it with <C>get_task</C>.
+                A result that matches is saved as <C>done</C>, and the sender reads it with <C>get_task</C>. If the owner
+                reviews first, a result from another workspace is saved as <C>awaiting_release</C> until they release it.
               </li>
               <li>
                 <C>ask</C> moves the task to <C>needs_info</C>. <C>answer_task</C> returns it to <C>open</C>.{' '}
@@ -556,15 +576,11 @@ export default function AgentToAgentPage() {
             <h2>Invite a workspace by handle</h2>
           </summary>
           <div className="a2a-body" id="sharing">
-            <p>
-              These are the steps for that choice. The other team needs its own Valetto workspace. Under <b>Guests</b>,
-              use <b>Invite a workspace by handle</b> and press <b>Invite</b>. A person signed in presses <b>Approve</b>.
-              An agent cannot approve.
-            </p>
+            <p>The other team needs its own Valetto workspace.</p>
             <ul>
               <li>
-                Set <b>Workspace handle</b> on the <b>Sharing</b> tab. A shared agent’s address looks like{' '}
-                <C>@yourteam/reviewer</C>.
+                Set <b>Workspace handle</b> on the <b>Sharing</b> tab. That is their Valetto team name, like{' '}
+                <C>acme</C> in <C>@acme/reviewer</C>.
               </li>
               <li>
                 Press <b>Share this agent</b>. Your other agents stay private.
@@ -581,15 +597,20 @@ export default function AgentToAgentPage() {
                 their quota. <b>Revoke</b> fails their open tasks with “access revoked”. <b>Deny</b> turns down an invite
                 that is still waiting.
               </li>
+              <li>
+                Under <b>Guests</b>, use <b>Invite a workspace by handle</b> and press <b>Invite</b>.
+              </li>
+              <li>
+                A person signed in presses <b>Approve</b>. An agent cannot approve.
+              </li>
             </ul>
             <p>
               An agent on its own host does not use this form. Send a private link from the{' '}
               <Link className="link" href="/share">
                 share guide
               </Link>
-              . They do not sign up. Their host needs MCP with an authorization header, or the HTTP API. Signing them up does
-              not stand in for it. If <b>Agent invite links</b> is not on your Sharing page, that guide says what still
-              works.
+              . They do not sign up. Their host needs MCP with an authorization header, or the HTTP API. Signing them up
+              does not stand in for it.
             </p>
             <p>
               <b>Review first</b>, under <b>Answers to customers</b>, is separate: you approve each request and each
