@@ -84,6 +84,7 @@ const nextConfig: NextConfig = {
       // The dashboard and the JSON/MCP API are never indexed, even after launch.
       { source: '/dashboard', headers: noindex },
       { source: '/dashboard/:path*', headers: noindex },
+      // /admin/usage sets its private headers in proxy.ts, for the owner only, so a non-owner's 404 matches any other 404.
       { source: '/api/:path*', headers: noindex },
       // Valetto and invite pages carry tokens in the URL (/i/:token, /claim?token=…) or sign people in:
       // never indexed, never sent as a referrer (spec 14, 17.11).

@@ -194,6 +194,7 @@ describe('POST /api/valetto/early-access', () => {
     setEmailSenderForTests({
       async sendLoginCode() {},
       async sendFirstAgentAlert() {},
+      async sendSignupAlert() {},
       async sendEarlyAccessNotice(message) {
         if (fail) throw new Error('resend down');
         sent.push(message.to);

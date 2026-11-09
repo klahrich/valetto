@@ -15,6 +15,18 @@ export type FirstAgentAlertEmail = {
   createdAt: Date;
 };
 
+/** Internal notice to ALERT_EMAIL: an outside person finished their first sign-in. */
+export type SignupAlertEmail = {
+  to: string;
+  email: string;
+  workspaceName: string;
+  /** signup: a new workspace from email sign-in. claim: they claimed a workspace an agent made from an invite. */
+  kind: 'signup' | 'claim';
+  signupSource: string | null;
+  wantsSharing: boolean;
+  createdAt: Date;
+};
+
 /** Owner notice for pending customer requests. Count and link only: no customer email or task text. */
 export type PendingCustomersEmail = {
   to: string;
@@ -67,6 +79,7 @@ export type EarlyAccessNoticeEmail = {
 export interface EmailSender {
   sendLoginCode(message: LoginCodeEmail): Promise<void>;
   sendFirstAgentAlert(message: FirstAgentAlertEmail): Promise<void>;
+  sendSignupAlert(message: SignupAlertEmail): Promise<void>;
   sendPendingCustomers(message: PendingCustomersEmail): Promise<void>;
   sendEarlyAccessNotice(message: EarlyAccessNoticeEmail): Promise<void>;
   sendReviewNeeded(message: ReviewNeededEmail): Promise<void>;
@@ -77,6 +90,7 @@ export interface EmailSender {
 export const EMAIL_BRAND = 'Valetto';
 const SIGN_IN_SUBJECT = `Your ${EMAIL_BRAND} sign-in code`;
 const FIRST_AGENT_SUBJECT = `${EMAIL_BRAND}: first agent`;
+const SIGNUP_SUBJECT = `${EMAIL_BRAND}: new signup`;
 const PENDING_CUSTOMERS_SUBJECT = `${EMAIL_BRAND}: new customer requests are waiting`;
 const REVIEW_NEEDED_SUBJECT = `${EMAIL_BRAND}: requests are waiting for your review`;
 
@@ -178,6 +192,20 @@ export function firstAgentAlertText(message: Omit<FirstAgentAlertEmail, 'to'>): 
   ].join('\n');
 }
 
+export function signupAlertText(message: Omit<SignupAlertEmail, 'to'>): string {
+  return [
+    message.kind === 'claim'
+      ? 'Someone outside the team signed in and claimed a workspace made from an invite.'
+      : 'Someone outside the team signed up.',
+    '',
+    `Email: ${singleLine(message.email, 320)}`,
+    `Workspace: ${singleLine(message.workspaceName, 120)}`,
+    `Signup source: ${message.signupSource ?? 'none'}`,
+    `Wants sharing: ${message.wantsSharing ? 'yes' : 'no'}`,
+    `Time (UTC): ${message.createdAt.toISOString()}`,
+  ].join('\n');
+}
+
 /** One line, no control characters, so submitter text cannot add header-like lines to a subject. */
 function singleLine(value: string, max: number): string {
   const flat = value.replace(/[\u0000-\u001f\u007f\u2028\u2029]+/g, ' ').replace(/\s+/g, ' ').trim();
@@ -238,6 +266,10 @@ class ConsoleEmailSender implements EmailSender {
     console.info(`[replyslip] first-agent alert for ${message.to}\n${firstAgentAlertText(message)}`);
   }
 
+  async sendSignupAlert(message: SignupAlertEmail): Promise<void> {
+    console.info(`[replyslip] signup alert for ${message.to}\n${signupAlertText(message)}`);
+  }
+
   async sendPendingCustomers(message: PendingCustomersEmail): Promise<void> {
     console.info(`[replyslip] pending-customers notice\n${pendingCustomersText(message)}`);
   }
@@ -268,6 +300,10 @@ class UnconfiguredEmailSender implements EmailSender {
 
   async sendFirstAgentAlert(): Promise<void> {
     this.fail('first-agent alert');
+  }
+
+  async sendSignupAlert(): Promise<void> {
+    this.fail('signup alert');
   }
 
   async sendPendingCustomers(): Promise<void> {
@@ -307,6 +343,10 @@ class ResendEmailSender implements EmailSender {
 
   async sendFirstAgentAlert(message: FirstAgentAlertEmail): Promise<void> {
     await this.post(message.to, FIRST_AGENT_SUBJECT, firstAgentAlertText(message), 'first-agent alert');
+  }
+
+  async sendSignupAlert(message: SignupAlertEmail): Promise<void> {
+    await this.post(message.to, SIGNUP_SUBJECT, signupAlertText(message), 'signup alert');
   }
 
   async sendPendingCustomers(message: PendingCustomersEmail): Promise<void> {
