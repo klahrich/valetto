@@ -12,7 +12,14 @@ const share = read('app/(site)/share/page.tsx');
 describe('agent-to-agent landing', () => {
   it('opens with the outcome, the MCP URL, and three equal choices', () => {
     expect(page).toContain('Let your AI agents hand each other work');
-    expect(page).toContain('in the expected shape');
+    expect(page).toContain('answers come back in a fixed format');
+    expect(page).toContain('Free for up to');
+    expect(page).toContain('What do you want to do?');
+    expect(page).toContain('Get started free — sign in');
+    expect(page).toContain('href="/sign-in"');
+    expect(page).toContain('href="/share#got-a-link"');
+    expect(page).toContain('How to share, or use a link you got');
+    expect(page).toContain('id="mcp-url-h"');
     expect(page).toContain("const SITE = 'https://valetto.tech'");
     expect(page).toContain('const MCP_URL = `${SITE}/api/mcp`');
     expect(page).toContain('text={MCP_URL}');
@@ -24,7 +31,8 @@ describe('agent-to-agent landing', () => {
     expect(page).toContain('Send a private link');
     expect(page).toContain('Invite a workspace by handle');
     expect(page).toContain('Pick this when ChatGPT, Claude, or Cursor signs in');
-    expect(page).toContain('Pick this when the agent is outside Valetto');
+    expect(page).toContain('Claude Code, a custom bot, or a script');
+    expect(page).toContain('A chat app that can only sign in, such as ChatGPT or Claude');
     expect(page).toContain('Pick this when they already have a Valetto workspace');
     expect(page).not.toContain('A team that already uses Valetto');
     expect(page).not.toContain('and another team’s agent can send tasks to one of yours once you approve it');
@@ -79,6 +87,19 @@ describe('agent-to-agent landing', () => {
     expect(flat).toContain('goes on that task’s thread instead');
     expect(flat).toContain('It stays in your workspace, and it does not count toward the monthly task cap.');
     expect(flat).toContain('It has no message text, and it does not start a turn.');
+    expect(flat).toContain('What happens next');
+    expect(flat).toContain('only if the prompt skipped it');
+    expect(flat).toContain('Check it worked');
+    expect(flat).toContain('Most agents that support MCP tools over HTTP');
+    expect(flat).toContain('Connect an AI app');
+    expect(flat).toContain('Set your workspace handle; it becomes your agents’ address (e.g. <C>@yourteam/reviewer</C>)');
+    expect(flat).toContain('enter their handle, like <C>otherco</C>');
+    expect(page).not.toContain('their Valetto team name');
+    expect(page).not.toContain('@acme/reviewer');
+    expect(flat).toContain('Task, with the answer format you expect');
+    expect(page).not.toContain('If <b>Agent invite links</b> is not on your Sharing page');
+    expect(flat).toContain('A result that matches is saved as <C>done</C>');
+    expect(flat).toContain('saved as <C>awaiting_release</C> until they release it');
     expect(flat).toContain('with its own key');
     expect(page).not.toMatch(/isn.t billed|Coming soon|not available to guests/i);
     expect(page).toContain('id="tasks-or-messages"');
