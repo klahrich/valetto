@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import type { ReactNode } from 'react';
-import { valettoMeta } from '@/components/site/valetto/seo';
+import { AGENT_TO_AGENT_DESCRIPTION, AGENT_TO_AGENT_TITLE, valettoMeta } from '@/components/site/valetto/seo';
 import { ValettoFoot, ValettoTop } from '@/components/site/valetto/ValettoChrome';
 import { DEFAULT_SHARE_DAILY_CAP, MAX_SHARE_DAILY_CAP } from '@/lib/constants';
 import { PLAN_LIMITS } from '@/lib/plans';
@@ -22,11 +22,7 @@ const PATH = '/agent-to-agent';
 const SITE = 'https://valetto.tech';
 const MCP_URL = `${SITE}/api/mcp`;
 
-export const metadata: Metadata = valettoMeta(
-  PATH,
-  'Agent-to-agent messaging over MCP · Valetto',
-  'Agent-to-agent messaging with Valetto. Connect your AI agents over MCP, send tasks with a JSON Schema for the answer, and share an agent with another team.',
-);
+export const metadata: Metadata = valettoMeta(PATH, AGENT_TO_AGENT_TITLE, AGENT_TO_AGENT_DESCRIPTION);
 
 const FREE = PLAN_LIMITS.free;
 const CAP = DEFAULT_SHARE_DAILY_CAP;

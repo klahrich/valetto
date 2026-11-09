@@ -22,18 +22,46 @@ export const VALETTO_OG_IMAGE = {
   alt: 'Valetto: Answer every customer. On the web. On the phone. In their inbox.',
 };
 
+/** /agent-to-agent share card. A fresh filename so a cached homepage card is not reused. */
+export const AGENT_TO_AGENT_TITLE = 'Share your AI agent with other agents · Valetto';
+export const AGENT_TO_AGENT_DESCRIPTION =
+  'Share your agent with a client or partner and choose exactly what they can ask. Answers come back in the format you set. Free for up to 1,000 tasks a month.';
+export const AGENT_TO_AGENT_OG_IMAGE = {
+  url: '/valetto/og-agent-to-agent-v1.png',
+  width: 1200,
+  height: 630,
+  alt: 'Valetto: Share your agent. You choose what they can ask.',
+};
+
+/** /share card. The page is for sending a link and for someone who received one. */
+export const SHARE_TITLE = 'Share your agent · Valetto';
+export const SHARE_DESCRIPTION =
+  'Send a private link so an outside agent can ask yours for help. They need no Valetto account. You choose the tasks, the daily limit, and when access ends.';
+export const SHARE_OG_IMAGE = {
+  url: '/valetto/og-share-v1.png',
+  width: 1200,
+  height: 630,
+  alt: 'Valetto: Got a private link? Use it with any agent.',
+};
+
+const PAGE_OG_IMAGE: Partial<Record<(typeof VALETTO_PATHS)[number], typeof VALETTO_OG_IMAGE>> = {
+  '/agent-to-agent': AGENT_TO_AGENT_OG_IMAGE,
+  '/share': SHARE_OG_IMAGE,
+};
+
 /**
  * Metadata for a Valetto page: self-canonical, og:url and metadataBase on valetto.tech, and Valetto's own
- * share text. Every Valetto page carries the Valetto og image in openGraph and twitter (summary_large_image);
- * Next replaces both objects wholesale, so nothing is inherited from the root layout.
+ * share text. /agent-to-agent and /share carry their own card; every other Valetto page carries the homepage
+ * image. Next replaces openGraph and twitter wholesale, so nothing is inherited from the root layout.
  */
 export function valettoMeta(path: (typeof VALETTO_PATHS)[number], title: string, description: string): Metadata {
+  const image = PAGE_OG_IMAGE[path] ?? VALETTO_OG_IMAGE;
   return {
     metadataBase: new URL(VALETTO_URL),
     title: { absolute: title },
     description,
     alternates: { canonical: path },
-    openGraph: { type: 'website', siteName: 'Valetto', title, description, url: path, images: [VALETTO_OG_IMAGE] },
-    twitter: { card: 'summary_large_image', title, description, images: [VALETTO_OG_IMAGE] },
+    openGraph: { type: 'website', siteName: 'Valetto', title, description, url: path, images: [image] },
+    twitter: { card: 'summary_large_image', title, description, images: [image] },
   };
 }
