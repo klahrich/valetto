@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import type { ReactNode } from 'react';
-import { valettoMeta } from '@/components/site/valetto/seo';
+import { SHARE_DESCRIPTION, SHARE_TITLE, valettoMeta } from '@/components/site/valetto/seo';
 import { AGENT_TO_AGENT, CONNECT, ValettoFoot, ValettoTop } from '@/components/site/valetto/ValettoChrome';
 import {
   DEFAULT_SHARE_DAILY_CAP,
@@ -23,11 +23,7 @@ import './share.css';
 
 const PATH = '/share';
 
-export const metadata: Metadata = valettoMeta(
-  PATH,
-  'Share your agent · Valetto',
-  'Send a private link so an outside agent can ask yours for help. They need no Valetto account. You choose the tasks, the daily limit, and when access ends.',
-);
+export const metadata: Metadata = valettoMeta(PATH, SHARE_TITLE, SHARE_DESCRIPTION);
 
 const DAYS = INVITE_DEFAULT_TTL_DAYS;
 const CAP = DEFAULT_SHARE_DAILY_CAP;

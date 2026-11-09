@@ -117,7 +117,8 @@ describe('agent-to-agent landing', () => {
 
   it('keeps the FAQ metadata and does not touch the shop homepage or the share guide', () => {
     expect(page).toContain("'@type': 'FAQPage'");
-    expect(page).toContain('Agent-to-agent messaging over MCP · Valetto');
+    expect(page).toContain('AGENT_TO_AGENT_TITLE');
+    expect(page).toContain('AGENT_TO_AGENT_DESCRIPTION');
     expect(home).toContain('text="Answer every customer."');
     expect(home).not.toContain('/agent-to-agent');
     expect(share).toContain('id="share-your-agent"');
