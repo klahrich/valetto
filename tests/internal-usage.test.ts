@@ -376,12 +376,24 @@ describe('/admin/usage proxy gate', () => {
     for (const [name, value] of Object.entries(OWNER_HEADERS)) expect(res.headers.get(name)).toBe(value);
   });
 
-  it('never serves the internal route directly, even to the owner', async () => {
+  it('serves the internal route only to the owner; everyone else is sent to the not-found path', async () => {
     const owner = await signIn(OWNER);
-    for (const p of [OWNER_ROUTE, `${OWNER_ROUTE}/x`]) {
-      for (const token of [null, tokenFrom(owner.cookie)]) {
+    const ownerToken = tokenFrom(owner.cookie);
+    // The owner, as after the /admin/usage rewrite (or a direct hit): passes with private headers, no rewrite.
+    const pass = await proxy(usageRequest(OWNER_ROUTE, ownerToken));
+    expect(pass.headers.get('x-middleware-rewrite')).toBeNull();
+    expect(pass.headers.get('x-middleware-next')).toBe('1');
+    for (const [name, value] of Object.entries(OWNER_HEADERS)) expect(pass.headers.get(name)).toBe(value);
+    // Sub-paths have no page; they go to the ordinary 404 even for the owner.
+    const sub = await proxy(usageRequest(`${OWNER_ROUTE}/x`, ownerToken));
+    expect(new URL(sub.headers.get('x-middleware-rewrite')!, 'https://valetto.tech').pathname).toBe(NOT_FOUND_REWRITE);
+
+    const cases = await nonOwnerTokens();
+    for (const [label, token] of Object.entries(cases)) {
+      for (const p of [OWNER_ROUTE, `${OWNER_ROUTE}/x`]) {
         const res = await proxy(usageRequest(p, token));
-        expect(new URL(res.headers.get('x-middleware-rewrite')!, 'https://valetto.tech').pathname).toBe(NOT_FOUND_REWRITE);
+        expect(new URL(res.headers.get('x-middleware-rewrite')!, 'https://valetto.tech').pathname, label).toBe(NOT_FOUND_REWRITE);
+        for (const name of Object.keys(OWNER_HEADERS)) expect(res.headers.get(name), label).toBeNull();
       }
     }
   });

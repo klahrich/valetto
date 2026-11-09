@@ -100,8 +100,36 @@ run('/admin/usage over HTTP', () => {
       expect(page.body.toLowerCase()).not.toContain('jane');
       expect(page.body.toLowerCase()).not.toContain('doe');
     }
-    const html = await fetchPage('/admin/usage', token);
-    expect(html.head).toContain('x-robots-tag: noindex, nofollow');
-    expect(html.head).toContain('cache-control: private, no-store');
+    for (const rsc of [false, true]) {
+      const page = await fetchPage('/admin/usage', token, rsc);
+      expect(page.head).toContain('x-robots-tag: noindex, nofollow');
+      expect(page.head).toContain('cache-control: private, no-store');
+      expect(page.head).toContain('referrer-policy: no-referrer');
+      // The owner can also open the internal route directly.
+      const direct = await fetchPage('/internal-usage', token, rsc);
+      expect(direct.status).toBe(200);
+      expect(direct.body).toContain('Outside usage');
+      expect(direct.head).toContain('cache-control: private, no-store');
+    }
+  });
+
+  it('a non-owner hitting /internal-usage directly gets the same 404 body as an unknown path', async () => {
+    const stranger = await signIn();
+    for (const token of [null, `rs_${randomUUID().replace(/-/g, '')}`, tokenFrom(stranger.cookie)]) {
+      for (const p of ['/internal-usage', '/internal-usage/x']) {
+        for (const rsc of [false, true]) {
+          const unknown = await fetchPage(`/zz-${randomUUID()}`, null, rsc);
+          const got = await fetchPage(p, token, rsc);
+          expect(got.status).toBe(404);
+          expect(got.body).toBe(unknown.body);
+          // Only difference: Next names the rewrite target (the not-found path) in its rewrite headers.
+          const rewrite = [`x-middleware-rewrite: /__valetto-not-found`, `x-nextjs-rewritten-path: /__valetto-not-found`];
+          expect(got.head.filter((h) => !rewrite.includes(h))).toEqual(unknown.head);
+          expect(got.head).toContain(rewrite[0]);
+          expect(got.body).not.toContain('Outside usage');
+          expect(got.body).not.toContain('internal-usage');
+        }
+      }
+    }
   });
 });
