@@ -84,6 +84,9 @@ const nextConfig: NextConfig = {
       // The dashboard and the JSON/MCP API are never indexed, even after launch.
       { source: '/dashboard', headers: noindex },
       { source: '/dashboard/:path*', headers: noindex },
+      // Owner-only usage page (app/admin). The page itself 404s for everyone but the owner allowlist.
+      { source: '/admin', headers: [...noindex, noReferrer, { key: 'Cache-Control', value: 'private, no-store' }] },
+      { source: '/admin/:path*', headers: [...noindex, noReferrer, { key: 'Cache-Control', value: 'private, no-store' }] },
       { source: '/api/:path*', headers: noindex },
       // Valetto and invite pages carry tokens in the URL (/i/:token, /claim?token=…) or sign people in:
       // never indexed, never sent as a referrer (spec 14, 17.11).

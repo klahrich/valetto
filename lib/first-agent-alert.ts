@@ -3,6 +3,7 @@ import { after } from 'next/server';
 import type { Db } from '@/db';
 import { users, workspaces } from '@/db/schema';
 import { getEmailSender, type FirstAgentAlertEmail } from './email';
+import { isInternalEmail } from './internal-accounts';
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -114,13 +115,15 @@ export function installChainedFirstAgentAlertsForTests(): void {
 /**
  * Schedules the send after the registration response. `createAgent` and
  * `registerAgentWithJoinCode` both call this, including when a tool on the MCP
- * route calls them. Skips when `ALERT_EMAIL` is unset or the workspace is excluded.
+ * route calls them. Skips when `ALERT_EMAIL` is unset, the workspace is excluded, or the owner's email is internal
+ * (lib/internal-accounts).
  * A send failure is logged and does not reject.
  */
 export function queueFirstAgentAlert(notice: FirstAgentNotice): void {
   const to = process.env.ALERT_EMAIL?.trim() ?? '';
   if (!to) return;
   if (isExcludedWorkspace(notice.workspaceId)) return;
+  if (isInternalEmail(notice.ownerEmail)) return;
   const message: FirstAgentAlertEmail = {
     to,
     workspaceName: notice.workspaceName,

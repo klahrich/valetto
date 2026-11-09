@@ -24,6 +24,7 @@ import { recordMarketingOptIn } from './marketing';
 import { clientIp } from './origin';
 import { consumeRateLimit } from './rate-limit';
 import { workspaceNameFromEmail } from './workspace-name';
+import { queueSignupAlert, type SignupKind } from './signup-alert';
 
 export const REQUEST_CODE_MESSAGE =
   'If that email can receive mail, we sent a sign-in code. It expires in 10 minutes.';
@@ -218,7 +219,7 @@ export async function verifyLoginCode(
   const tokenHash = sha256(token);
   const expiresAt = new Date(Date.now() + SESSION_TTL_SECONDS * 1000);
 
-  const user = await db.transaction(async (tx) => {
+  const { user, signup } = await db.transaction(async (tx) => {
     const [consumed] = await tx
       .update(loginCodes)
       .set({ consumedAt: new Date() })
@@ -240,6 +241,7 @@ export async function verifyLoginCode(
     }
 
     let workspaceId = row.workspaceId;
+    let signupKind: SignupKind | null = null;
     let workspace: { id: string; name: string; handle: string | null; createdAt: Date } | null = null;
     if (claimHash && workspaceId) throw new HttpError(409, 'already_in_workspace', ALREADY_IN_WORKSPACE);
     if (!workspaceId) {
@@ -259,6 +261,7 @@ export async function verifyLoginCode(
           .returning();
       }
       if (!created) throw new HttpError(500, 'internal_error', 'Something went wrong.');
+      signupKind = claimHash ? 'claim' : 'signup';
       workspaceId = created.id;
       workspace = { id: created.id, name: created.name, handle: created.handle, createdAt: created.createdAt };
       await tx
@@ -288,15 +291,30 @@ export async function verifyLoginCode(
     const [fresh] = await tx.select().from(users).where(eq(users.id, row.id)).limit(1);
     if (!fresh || !workspace) throw new HttpError(500, 'internal_error', 'Something went wrong.');
     return {
-      id: fresh.id,
-      email: fresh.email,
-      emailVerifiedAt: fresh.emailVerifiedAt,
-      marketingOptIn: fresh.marketingOptIn,
-      createdAt: fresh.createdAt,
-      workspace,
-    } satisfies SessionUser;
+      user: {
+        id: fresh.id,
+        email: fresh.email,
+        emailVerifiedAt: fresh.emailVerifiedAt,
+        marketingOptIn: fresh.marketingOptIn,
+        createdAt: fresh.createdAt,
+        workspace,
+      } satisfies SessionUser,
+      signup: signupKind
+        ? {
+            kind: signupKind,
+            email: fresh.email,
+            workspaceId: workspace.id,
+            workspaceName: workspace.name,
+            signupSource: fresh.signupSource,
+            wantsSharing: fresh.wantsSharing,
+            createdAt: new Date(),
+          }
+        : null,
+    };
   });
 
+  // After commit, once per user: only the sign-in that gave them their first workspace queues the alert.
+  if (signup) queueSignupAlert(signup);
   return { token, user };
 }
 

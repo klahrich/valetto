@@ -1,7 +1,7 @@
 import { sql, type SQL } from 'drizzle-orm';
 import { getDb } from '@/db';
 import { safeEqualString } from './crypto';
-import { excludedWorkspaceIds } from './first-agent-alert';
+import { externalUserSql, internalWorkspaceIdsSql } from './internal-accounts';
 
 const DAY_MS = 86_400_000;
 const NONE_SOURCE = 'none';
@@ -25,7 +25,7 @@ export type UsageStats = {
   to: string;
   totals: Omit<UsageDay, 'date'>;
   series: UsageDay[];
-  /** All-time count of users outside excluded workspaces who asked for agent sharing. Not limited to the window. */
+  /** All-time count of external users (not internal, not in an excluded workspace) who asked for agent sharing. Not limited to the window. */
   wants_sharing: number;
   /** Subset of `wants_sharing` whose workspace has ever registered an agent, revoked or not. All-time. */
   wants_sharing_with_agent: number;
@@ -61,13 +61,9 @@ function startOfUtcDay(date: Date): Date {
   return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
 }
 
+/** Leaves out internal workspaces: STATS_EXCLUDE_WORKSPACE_IDS plus any workspace with an internal user (lib/internal-accounts). */
 function notExcluded(column: SQL): SQL {
-  const ids = excludedWorkspaceIds();
-  if (ids.length === 0) return sql`true`;
-  return sql`${column} not in (${sql.join(
-    ids.map((id) => sql`${id}::uuid`),
-    sql`, `,
-  )})`;
+  return sql`${column} not in ${internalWorkspaceIdsSql()}`;
 }
 
 function dayOf(column: SQL): SQL {
@@ -98,7 +94,7 @@ export async function loadUsageStats(options: { days: number; now?: Date }): Pro
   const until = new Date(end.getTime() + DAY_MS);
   const startIso = start.toISOString();
   const untilIso = until.toISOString();
-  const userWorkspace = sql`(workspace_id is null or ${notExcluded(sql`workspace_id`)})`;
+  const userWorkspace = externalUserSql(sql`users`);
   const inWindow = (column: SQL) => sql`${column} >= ${startIso}::timestamptz and ${column} < ${untilIso}::timestamptz`;
 
   const [signupRows, workspaceRows, agentRows, activeRows, activeTotalRows, createdRows, completedRows, failedRows, messageRows, wantsSharingRows, wantsSharingAgentRows] =
@@ -183,7 +179,7 @@ export async function loadUsageStats(options: { days: number; now?: Date }): Pro
         select count(*)::int as n
         from users u
         where u.wants_sharing
-          and ${notExcluded(sql`u.workspace_id`)}
+          and ${externalUserSql(sql`u`)}
           and exists (select 1 from agents a where a.workspace_id = u.workspace_id)
       `),
     ]);

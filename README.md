@@ -323,8 +323,8 @@ Names only. Real values stay in `.env` or the host. `.env.example` lists the sam
 | `REPLYSLIP_POLL_INTERVAL_MS` | Default poll interval for the CLI. |
 | `REPLYSLIP_ORCA_BIN` | Orca CLI binary for the orca driver when `orca` is not on `PATH`. Default `orca`. Not a server variable. |
 | `STATS_API_KEY` | Bearer token for `GET /api/admin/stats`. When unset, that route is 404. |
-| `STATS_EXCLUDE_WORKSPACE_IDS` | Comma-separated workspace UUIDs left out of `/api/admin/stats` and out of the first-agent alert. |
-| `ALERT_EMAIL` | Inbox for the first-agent alert. When unset, the alert is skipped. |
+| `STATS_EXCLUDE_WORKSPACE_IDS` | Comma-separated workspace UUIDs left out of `/api/admin/stats`, `/admin/usage` and the signup and first-agent alerts. Internal team and bot emails are already left out in code (`lib/internal-accounts.ts`). |
+| `ALERT_EMAIL` | Inbox for the signup alert (an outside person's first sign-in) and the first-agent alert. When unset, both are skipped. |
 
 ## Deployment
 

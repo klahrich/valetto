@@ -317,12 +317,15 @@ describe('admin stats', () => {
 describe('first-agent alert', () => {
   it('defers the alert to the scheduler on both registration paths', async () => {
     process.env.ALERT_EMAIL = 'ops@example.com';
+    // Sign in first: a first sign-in queues its own signup alert on the same scheduler.
+    const session = await signInWithSource('sched-source');
+    const hookSession = await signInWithSource('sched-hook');
+    await flushFirstAgentAlerts();
     const tasks: Array<() => Promise<void>> = [];
     setFirstAgentAlertSchedulerForTests((task) => {
       tasks.push(task);
     });
 
-    const session = await signInWithSource('sched-source');
     const created = await call(createAgentRoute, 'http://localhost/api/v1/agents', {
       cookie: session.cookie,
       body: { name: 'ScheduledBot' },
@@ -341,7 +344,6 @@ describe('first-agent alert', () => {
     expect(second.status).toBe(201);
     expect(tasks).toHaveLength(1);
 
-    const hookSession = await signInWithSource('sched-hook');
     const hookJoin = await createJoinCode(hookSession.cookie);
     const hooked = await call(registerRoute, 'http://localhost/api/v1/agents/register', {
       bearer: hookJoin.secret,
@@ -486,6 +488,7 @@ describe('first-agent alert', () => {
         alerts.push(message);
         throw new Error('smtp down');
       },
+      async sendSignupAlert() {},
       async sendPendingCustomers() {},
       async sendEarlyAccessNotice() {},
       async sendReviewNeeded() {},
