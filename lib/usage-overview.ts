@@ -29,8 +29,8 @@ export type RecentSignup = {
   /** First letter of the local part, then `***@domain`. Never the full address. */
   email: string;
   verified: boolean;
-  workspace: string | null;
-  handle: string | null;
+  /** Whether they have a workspace. Its name and handle are not returned: a default name is built from the email. */
+  has_workspace: boolean;
   agents: number;
   tasks: number;
   messages: number;
@@ -105,8 +105,7 @@ export async function loadUsageOverview(now: Date = new Date()): Promise<UsageOv
     created_at: Date | string;
     email: string;
     verified: boolean;
-    workspace: string | null;
-    handle: string | null;
+    has_workspace: boolean;
     agents: number | string;
     tasks: number | string;
     messages: number | string;
@@ -117,8 +116,7 @@ export async function loadUsageOverview(now: Date = new Date()): Promise<UsageOv
       select u.created_at,
              u.email,
              (u.email_verified_at is not null) as verified,
-             ws.name as workspace,
-             ws.handle as handle,
+             (u.workspace_id is not null) as has_workspace,
              (select count(*)::int from agents a where a.workspace_id = u.workspace_id) as agents,
              (select count(*)::int from tasks t where t.workspace_id = u.workspace_id) as tasks,
              (select count(*)::int from messages m where m.workspace_id = u.workspace_id) as messages,
@@ -127,7 +125,6 @@ export async function loadUsageOverview(now: Date = new Date()): Promise<UsageOv
                (select max(m.created_at) from messages m where m.workspace_id = u.workspace_id)
              ) as last_activity
       from users u
-      left join workspaces ws on ws.id = u.workspace_id
       where ${externalUserSql(sql`u`)}
       order by u.created_at desc
       limit ${RECENT_LIMIT}
@@ -145,8 +142,7 @@ export async function loadUsageOverview(now: Date = new Date()): Promise<UsageOv
       created_at: iso(row.created_at)!,
       email: maskEmail(row.email),
       verified: row.verified === true,
-      workspace: row.workspace,
-      handle: row.handle,
+      has_workspace: row.has_workspace === true,
       agents: Number(row.agents),
       tasks: Number(row.tasks),
       messages: Number(row.messages),

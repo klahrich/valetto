@@ -1,10 +1,16 @@
 import { randomUUID } from 'node:crypto';
+import { existsSync } from 'node:fs';
+import path from 'node:path';
+import { eq } from 'drizzle-orm';
+import { NextRequest } from 'next/server';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { GET as statsRoute } from '@/app/api/admin/stats/route';
 import { POST as requestCode } from '@/app/api/v1/auth/request-code/route';
 import { getDb } from '@/db';
-import { messages } from '@/db/schema';
+import { messages, sessions, users } from '@/db/schema';
+import { sha256 } from '@/lib/crypto';
+import { config as proxyConfig, NOT_FOUND_REWRITE, OWNER_HEADERS, OWNER_ROUTE, proxy, USAGE_PATH } from '@/proxy';
 import { setEmailSenderForTests, signupAlertText } from '@/lib/email';
 import { flushFirstAgentAlerts } from '@/lib/first-agent-alert';
 import {
@@ -36,12 +42,13 @@ const savedEnv = {
 
 // Stand-ins for the hashed personal addresses in lib/internal-accounts (real ones are not committed).
 const TEAMMATE = 'teammate@internal-test.example.org';
-const OWNER = 'karim@valetto.tech';
+// The owner is added by hash for the test only; no real owner address appears here.
+const OWNER = `owner-${randomUUID().slice(0, 8)}@owner-test.example.net`;
 
 beforeEach(() => {
   jar.token = null;
   setExtraInternalAddressesForTests([TEAMMATE]);
-  setExtraUsageOwnersForTests(null);
+  setExtraUsageOwnersForTests([OWNER]);
 });
 
 afterEach(() => {
@@ -103,10 +110,13 @@ describe('internal accounts', () => {
 
   it('owner allowlist is exact, with no +alias or lookalike', () => {
     expect(isUsageOwnerEmail(OWNER)).toBe(true);
-    expect(isUsageOwnerEmail(' Karim@Valetto.Tech ')).toBe(true);
-    for (const email of ['karim+x@valetto.tech', 'someone@valetto.tech', 'karim@valetto.tech.evil', TEAMMATE, '', null, undefined]) {
+    expect(isUsageOwnerEmail(` ${OWNER.toUpperCase()} `)).toBe(true);
+    const [local, domain] = OWNER.split('@') as [string, string];
+    for (const email of [`${local}+x@${domain}`, `${local}@${domain}.evil`, `x${OWNER}`, 'someone@valetto.tech', TEAMMATE, '', null, undefined]) {
       expect(isUsageOwnerEmail(email as string | null | undefined)).toBe(false);
     }
+    setExtraUsageOwnersForTests(null);
+    expect(isUsageOwnerEmail(OWNER)).toBe(false);
   });
 
   it('masks emails to the first letter and domain', () => {
@@ -293,61 +303,138 @@ describe('usage overview', () => {
   });
 });
 
-describe('/admin/usage gate', () => {
-  async function renderPage(): Promise<string> {
-    const { default: UsagePage } = await import('@/app/admin/usage/page');
-    return renderToStaticMarkup(await UsagePage());
-  }
+async function renderPage(): Promise<string> {
+  const { default: UsagePage } = await import('@/app/internal-usage/page');
+  return renderToStaticMarkup(await UsagePage());
+}
 
-  async function expectNotFound(): Promise<void> {
+async function pageTitle(): Promise<unknown> {
+  const { generateMetadata } = await import('@/app/internal-usage/page');
+  return (await generateMetadata()).title;
+}
+
+/** Every kind of visitor who must not see the page, as a session token (null = no cookie). */
+async function nonOwnerTokens(): Promise<Record<string, string | null>> {
+  const stranger = await signIn();
+  const teammate = await signIn(`someone-${tag()}@valetto.tech`);
+  const [local, domain] = OWNER.split('@') as [string, string];
+  const alias = await signIn(`${local}+${tag()}@${domain}`);
+
+  // An owner session that has expired.
+  const expiredOwner = `expired-${tag()}@owner-test.example.net`;
+  const expired = await signIn(expiredOwner);
+  await getDb()
+    .update(sessions)
+    .set({ expiresAt: new Date(Date.now() - 60_000) })
+    .where(eq(sessions.tokenHash, sha256(tokenFrom(expired.cookie))));
+
+  // An owner address whose email is not verified.
+  const unverifiedOwner = `unverified-${tag()}@owner-test.example.net`;
+  const unverified = await signIn(unverifiedOwner);
+  await getDb().update(users).set({ emailVerifiedAt: null }).where(eq(users.email, unverifiedOwner));
+
+  setExtraUsageOwnersForTests([OWNER, expiredOwner, unverifiedOwner]);
+  return {
+    signed_out: null,
+    bad_token: `rs_${randomUUID().replace(/-/g, '')}`,
+    expired_session: tokenFrom(expired.cookie),
+    unverified_email: tokenFrom(unverified.cookie),
+    non_owner: tokenFrom(stranger.cookie),
+    owner_alias: tokenFrom(alias.cookie),
+    teammate_valetto_tech: tokenFrom(teammate.cookie),
+  };
+}
+
+function usageRequest(path: string, token: string | null): NextRequest {
+  const headers = new Headers({ host: 'valetto.tech' });
+  if (token) headers.set('cookie', `${SESSION_COOKIE}=${encodeURIComponent(token)}`);
+  return new NextRequest(`https://valetto.tech${path}`, { headers });
+}
+
+describe('/admin/usage proxy gate', () => {
+  it('has no route at /admin/usage, so a pass-through is the ordinary 404', () => {
+    expect(existsSync(path.join(process.cwd(), 'app/admin'))).toBe(false);
+    expect(existsSync(path.join(process.cwd(), 'app/internal-usage/page.tsx'))).toBe(true);
+    expect(proxyConfig.matcher).toEqual([USAGE_PATH, OWNER_ROUTE, `${OWNER_ROUTE}/:path*`]);
+  });
+
+  it('passes every non-owner through untouched: no rewrite, no extra headers', async () => {
+    const cases = await nonOwnerTokens();
+    for (const [label, token] of Object.entries(cases)) {
+      const res = await proxy(usageRequest(USAGE_PATH, token));
+      expect(res.headers.get('x-middleware-rewrite'), label).toBeNull();
+      expect(res.headers.get('x-middleware-next'), label).toBe('1');
+      for (const name of Object.keys(OWNER_HEADERS)) expect(res.headers.get(name), label).toBeNull();
+      expect(res.status, label).toBe(200);
+    }
+  });
+
+  it('rewrites only the owner to the real page, with private headers', async () => {
+    const owner = await signIn(OWNER);
+    const res = await proxy(usageRequest(USAGE_PATH, tokenFrom(owner.cookie)));
+    expect(new URL(res.headers.get('x-middleware-rewrite')!, 'https://valetto.tech').pathname).toBe(OWNER_ROUTE);
+    for (const [name, value] of Object.entries(OWNER_HEADERS)) expect(res.headers.get(name)).toBe(value);
+  });
+
+  it('never serves the internal route directly, even to the owner', async () => {
+    const owner = await signIn(OWNER);
+    for (const p of [OWNER_ROUTE, `${OWNER_ROUTE}/x`]) {
+      for (const token of [null, tokenFrom(owner.cookie)]) {
+        const res = await proxy(usageRequest(p, token));
+        expect(new URL(res.headers.get('x-middleware-rewrite')!, 'https://valetto.tech').pathname).toBe(NOT_FOUND_REWRITE);
+      }
+    }
+  });
+});
+
+describe('usage page (second check behind the proxy)', () => {
+  async function expectNotFound(label: string): Promise<void> {
     let caught: unknown = null;
     try {
       await renderPage();
     } catch (err) {
       caught = err;
     }
-    expect(isNotFound(caught)).toBe(true);
+    expect(isNotFound(caught), label).toBe(true);
+    expect(await pageTitle(), label).toEqual({ absolute: 'Page not found · Valetto' });
   }
 
-  it('404s when signed out, with a bad token, for a non-owner, and for an owner +alias', async () => {
-    jar.token = null;
-    await expectNotFound();
-
-    jar.token = 'not-a-real-session';
-    await expectNotFound();
-
-    const stranger = await signIn();
-    jar.token = tokenFrom(stranger.cookie);
-    await expectNotFound();
-
-    const teammate = await signIn(`someone-${tag()}@valetto.tech`);
-    jar.token = tokenFrom(teammate.cookie);
-    await expectNotFound();
-
-    const alias = await signIn(`karim+${tag()}@valetto.tech`);
-    jar.token = tokenFrom(alias.cookie);
-    await expectNotFound();
-
-    // An extra owner address set for the test works, and clearing it locks that account out again.
-    const extra = `boss-${tag()}@example.net`;
-    const extraSession = await signIn(extra);
-    jar.token = tokenFrom(extraSession.cookie);
-    setExtraUsageOwnersForTests([extra]);
-    expect(await renderPage()).toContain('Outside usage');
-    setExtraUsageOwnersForTests(null);
-    await expectNotFound();
+  it('404s, with the not-found title, for every non-owner', async () => {
+    const cases = await nonOwnerTokens();
+    for (const [label, token] of Object.entries(cases)) {
+      jar.token = token;
+      await expectNotFound(label);
+    }
   });
 
-  it('renders outside counts for an owner, with no full outside email', async () => {
+  it('renders outside counts for the owner, with no full outside email', async () => {
     const outsideEmail = `visible@u${tag()}.example.com`;
     await signIn(outsideEmail);
     const owner = await signIn(OWNER);
     jar.token = tokenFrom(owner.cookie);
+    expect(await pageTitle()).toEqual({ absolute: 'Usage · Valetto' });
     const html = await renderPage();
     expect(html).toContain('Outside usage');
     expect(html).toContain('Latest outside signups');
     expect(html).toContain('Internal accounts');
     expect(html).toContain(maskEmail(outsideEmail));
     expect(html.toLowerCase()).not.toContain(outsideEmail.toLowerCase());
+  });
+
+  it('does not reveal a name through the default workspace name (jane.doe@example.com)', async () => {
+    const jane = await signIn('jane.doe@example.com');
+    expect(jane.workspace.name.toLowerCase()).toContain('jane');
+    const owner = await signIn(OWNER);
+    jar.token = tokenFrom(owner.cookie);
+    const html = (await renderPage()).toLowerCase();
+    expect(html).toContain('j***@example.com');
+    expect(html).not.toContain('jane');
+    expect(html).not.toContain('doe');
+    // The data the page serializes into its RSC payload.
+    const data = JSON.stringify(await loadUsageOverview()).toLowerCase();
+    expect(data).not.toContain('jane');
+    expect(data).not.toContain('doe');
+    expect(data).not.toContain('"workspace"');
+    expect(data).not.toContain('"handle"');
   });
 });

@@ -3,17 +3,21 @@ import Link from 'next/link';
 import { MarkIcon } from '@/components/site/Mark';
 import { INTERNAL_EMAIL_DOMAINS } from '@/lib/internal-accounts';
 import { loadUsageOverview, type UsageSegment } from '@/lib/usage-overview';
+import { currentUser } from '@/components/dashboard/session';
+import { isUsageOwner } from '@/lib/usage-gate';
 import { requireUsageOwner } from './gate';
 import '@/components/dashboard/dashboard.css';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
-export const metadata: Metadata = {
-  title: { absolute: 'Usage · Valetto' },
-  robots: { index: false, follow: false, nocache: true },
-  referrer: 'no-referrer',
-};
+const PRIVATE = { robots: { index: false, follow: false, nocache: true }, referrer: 'no-referrer' } satisfies Metadata;
+
+/** The real title only for the owner; anyone else sees the not-found title (proxy.ts normally stops them first). */
+export async function generateMetadata(): Promise<Metadata> {
+  const user = await currentUser();
+  return { ...PRIVATE, title: { absolute: isUsageOwner(user) ? 'Usage · Valetto' : 'Page not found · Valetto' } };
+}
 
 const ROWS: { key: keyof UsageSegment; label: string }[] = [
   { key: 'accounts', label: 'Signed-up accounts' },
@@ -114,7 +118,6 @@ export default async function UsagePage() {
                   <tr>
                     <th scope="col">Signed up</th>
                     <th scope="col">Email</th>
-                    <th scope="col">Workspace</th>
                     <th scope="col">Agents</th>
                     <th scope="col">Tasks</th>
                     <th scope="col">Messages</th>
@@ -128,10 +131,6 @@ export default async function UsagePage() {
                       <td>
                         {row.email}
                         {row.verified ? '' : ' (never signed in)'}
-                      </td>
-                      <td>
-                        {row.workspace ?? '—'}
-                        {row.handle ? ` (@${row.handle})` : ''}
                       </td>
                       <td>{row.agents}</td>
                       <td>{row.tasks}</td>
