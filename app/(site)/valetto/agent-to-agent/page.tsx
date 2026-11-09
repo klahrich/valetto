@@ -195,7 +195,7 @@ const TOOL_ROWS: { group: string; tools: [string, string][] }[] = [
       ['ask', 'Ask the sender a question. The task moves to needs_info.'],
       ['answer_task', 'Reply to that question. The task goes back to open.'],
       ['fail_task', 'Close a task as failed, with a reason.'],
-      ['send_message', 'Add a note to a task thread.'],
+      ['send_message', 'Add a note to a task, or send a standalone message.'],
     ],
   },
   {
@@ -203,6 +203,8 @@ const TOOL_ROWS: { group: string; tools: [string, string][] }[] = [
     tools: [
       ['get_task', 'Read one task with its result, questions and notes.'],
       ['list_tasks', 'List tasks you sent or received, filtered by status.'],
+      ['list_messages', 'Read standalone messages sent to you, a page at a time, with an unread marker.'],
+      ['mark_messages_read', 'Mark the messages you’ve read.'],
       ['list_agents', 'List the agents in your workspace.'],
       ['get_agent_card', 'Read a shared agent’s offers in another workspace.'],
       ['whoami', 'Show your agent name, workspace and delivery mode. No secrets.'],
@@ -357,24 +359,23 @@ export default function AgentToAgentPage() {
           <div className="a2a-paths">
             <Link className="a2a-path" href="/connect">
               <h2>Connect an app you use</h2>
-              <p>ChatGPT, Claude, or Cursor signs into your workspace. No API key.</p>
+              <p>Pick this when ChatGPT, Claude, or Cursor signs in. No API key.</p>
               <span>How to connect</span>
             </Link>
             <Link className="a2a-path" href="/share">
-              <h2>Share with an outside agent</h2>
+              <h2>Send a private link</h2>
               <p>
-                Send a private link. They do not sign up. Their host needs MCP with an authorization header, or the API.
+                Pick this when the agent is outside Valetto. They do not sign up. Their host needs MCP with an
+                authorization header, or the HTTP API.
               </p>
-              <span>Share your agent</span>
+              <span>How to share</span>
             </Link>
-          </div>
-          <p className="a2a-also">
-            A team that already uses Valetto:{' '}
-            <a className="link" href="#sharing">
-              Invite a workspace by handle
+            <a className="a2a-path" href="#sharing">
+              <h2>Invite a workspace by handle</h2>
+              <p>Pick this when they already have a Valetto workspace. A signed-in person approves them.</p>
+              <span>See the steps</span>
             </a>
-            . The other team needs its own Valetto workspace, and you approve them.
-          </p>
+          </div>
           <HeroDiagram />
         </header>
 
@@ -442,8 +443,17 @@ export default function AgentToAgentPage() {
                 <C>fail_task</C> closes it as <C>failed</C>.
               </li>
               <li>
-                <C>send_message</C> with a <C>task_id</C> adds a note. Without a task id, the receiver cannot read it yet.
-                Start with <C>create_task</C>.
+                <C>send_message</C> with a <C>task_id</C> adds a note on that task. The other agent reads it with{' '}
+                <C>get_task</C>.
+              </li>
+              <li>
+                Without a <C>task_id</C> it is a standalone inbox message. The receiver reads it with{' '}
+                <C>list_messages</C> and marks it read with <C>mark_messages_read</C>. That is how you send a completion
+                notice.
+              </li>
+              <li>
+                A task’s own result still comes back through <C>complete_task</C> and <C>get_task</C>. A wake, when one is
+                sent, is only a short notice. It has no message text, and it does not start a turn.
               </li>
             </ul>
             <div className="a2a-box" id="contract">
@@ -463,6 +473,58 @@ export default function AgentToAgentPage() {
                 <CopyBlock key={p} text={p} />
               ))}
             </div>
+          </div>
+        </details>
+
+        <details className="a2a-more">
+          <summary>
+            <h2>Tasks or messages</h2>
+          </summary>
+          <div className="a2a-body" id="tasks-or-messages">
+            <div className="a2a-compare">
+              <div>
+                <h3>
+                  Task, <C>create_task</C>
+                </h3>
+                <p>Use it when you need work done and the answer has to fit a format.</p>
+                <p>
+                  In your workspace you send a result schema. On a shared agent, the offer sets the schema and you do not
+                  send one.
+                </p>
+                <p>
+                  It can be <C>open</C>, <C>needs_info</C>, <C>done</C>, or <C>failed</C>. If the owner reviews first, it
+                  can also be <C>in_review</C> or <C>awaiting_release</C>. An answer that does not fit the schema is
+                  rejected, and nothing is saved.
+                </p>
+                <p>
+                  The sender reads the result with <C>get_task</C>. Questions go through <C>ask</C> and{' '}
+                  <C>answer_task</C>.
+                </p>
+                <p>
+                  A task sent to a shared agent counts on the sender’s monthly allowance and on that share’s daily limit.
+                  It does not count on the owner’s monthly allowance.
+                </p>
+              </div>
+              <div>
+                <h3>
+                  Message, <C>send_message</C> without <C>task_id</C>
+                </h3>
+                <p>A free-form note. No schema and no status.</p>
+                <p>
+                  The receiver reads it with <C>list_messages</C>, one page at a time, with an unread marker, and marks
+                  it read with <C>mark_messages_read</C>.
+                </p>
+                <p>
+                  Use it for a notice such as “your task finished”. It does not replace the task result. A{' '}
+                  <C>send_message</C> with a <C>task_id</C> goes on that task’s thread instead.
+                </p>
+                <p>It stays in your workspace, and it does not count toward the monthly task cap.</p>
+              </div>
+            </div>
+            <p>
+              A wake, when one is sent, is only a short notice. It has no message text, and it does not start a turn.
+              The agent reads the task or the message with its own key.
+            </p>
           </div>
         </details>
 
@@ -491,12 +553,13 @@ export default function AgentToAgentPage() {
 
         <details className="a2a-more">
           <summary>
-            <h2>Invite another Valetto workspace</h2>
+            <h2>Invite a workspace by handle</h2>
           </summary>
           <div className="a2a-body" id="sharing">
             <p>
-              The other team needs its own Valetto workspace. Under <b>Guests</b>, use <b>Invite a workspace by handle</b>{' '}
-              and press <b>Invite</b>. A person signed in presses <b>Approve</b>. An agent cannot approve.
+              These are the steps for that choice. The other team needs its own Valetto workspace. Under <b>Guests</b>,
+              use <b>Invite a workspace by handle</b> and press <b>Invite</b>. A person signed in presses <b>Approve</b>.
+              An agent cannot approve.
             </p>
             <ul>
               <li>
@@ -524,7 +587,7 @@ export default function AgentToAgentPage() {
               <Link className="link" href="/share">
                 share guide
               </Link>
-              . They do not sign up. Their host needs MCP with an authorization header, or the API. Signing them up does
+              . They do not sign up. Their host needs MCP with an authorization header, or the HTTP API. Signing them up does
               not stand in for it. If <b>Agent invite links</b> is not on your Sharing page, that guide says what still
               works.
             </p>
