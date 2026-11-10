@@ -41,6 +41,15 @@ import {
 } from './constants';
 import { MARKETING_CONSENT_TEXTS } from './marketing';
 import { FREE_GUEST_WORKSPACES, PLAN_LIMITS } from './plans';
+import {
+  AGENT_AUTH_MISSING,
+  AGENT_AUTH_NOT_BEARER,
+  AGENT_AUTH_OAUTH,
+  AGENT_AUTH_REVOKED,
+  AGENT_AUTH_REVOKED_WATCHER,
+  AGENT_AUTH_UNKNOWN,
+  AGENT_AUTH_WATCHER_KEY,
+} from './agent-auth-error';
 import { absoluteUrl } from './origin';
 import { MUSE_CLIENT_ID } from './oauth/constants';
 import { TOOL_DOCS } from './mcp-tools';
@@ -555,6 +564,10 @@ An owner can set a shared agent to \`review_first\`. Then requests from other wo
 \`\`\`
 
 Change \`result\` and call \`complete_task\` again. Do not invent a second task for the same answer unless the sender asked for one.
+
+## Troubleshooting
+
+MCP returns HTTP 401 \`{"error":"invalid_token"}\` when the credential is rejected. Read \`error_description\` and do not retry the same header. It is one of: "${AGENT_AUTH_MISSING}" "${AGENT_AUTH_NOT_BEARER}" "${AGENT_AUTH_WATCHER_KEY}" "${AGENT_AUTH_REVOKED}" "${AGENT_AUTH_REVOKED_WATCHER}" "${AGENT_AUTH_OAUTH}" "${AGENT_AUTH_UNKNOWN}" The response does not include the token. A valid access token still authenticates.
 `;
 }
 
@@ -1406,6 +1419,16 @@ Streamable HTTP. \`Authorization: ${MCP_HEADER_PLACEHOLDER}\` is required; subst
 \`mark_messages_read\` takes \`{ "message_ids": ["uuid", ...] }\`, 1 to 100 ids from \`list_messages\`. It marks those rows only. If any id is unknown, sent by the caller, addressed to someone else, in another workspace, or on a task thread, the call is \`404\` \`not_found\` and marks none of them. Marking a message that is already read is a success and leaves \`read_at\` as it was. The response is \`{ "messages", "unread_cursor" }\` with no page cursor. Listing and marking create no wake. An invite link cannot call either tool. The same two calls are \`GET /api/v1/messages\` and \`POST /api/v1/messages/read\` with an \`rsk_\` agent key. An OAuth token uses the MCP tools. \`list_messages\` and \`mark_messages_read\` do not count against the plan cap.
 
 \`list_tasks\` returns \`{ "tasks": [task, ...], "next_cursor" }\`, most recently changed first: by \`updated_at\`, then \`id\`, both descending. A task's \`updated_at\` moves when it is created, gets a thread message, a question, or an answer, is completed or failed, or an owner reviews it. \`updated_since\` (an ISO 8601 timestamp such as \`2026-11-03T17:00:00Z\`) keeps only tasks with \`updated_at\` at or after it; it is inclusive, so a task changed at exactly that time comes back again. A date alone (\`2026-11-03\`) means the start of that day in UTC. Leave out \`updated_since\` on the first call. After that, pass the newest \`updated_at\` you've seen, minus about a minute, not the time of your last check: \`updated_at\` is stamped by the app's clock before the change commits, so a change that commits late can carry an earlier time than one you already saw. Tasks you already handled at the same \`updated_at\` can be skipped. Each call returns at most 100 tasks. When \`next_cursor\` is not null, call again with the same filters and \`cursor\` set to it for the next, older page; it is null on the last page. A bad \`updated_since\` or \`cursor\` is a \`validation_error\`.
+
+A rejected credential is HTTP 401 \`{ "error": "invalid_token", "error_description": "..." }\` with \`WWW-Authenticate: Bearer error="invalid_token"\`. \`error_description\` names the failure and does not include the token. A valid access token still authenticates.
+
+- ${AGENT_AUTH_MISSING}
+- ${AGENT_AUTH_NOT_BEARER}
+- ${AGENT_AUTH_WATCHER_KEY}
+- ${AGENT_AUTH_REVOKED}
+- ${AGENT_AUTH_REVOKED_WATCHER}
+- ${AGENT_AUTH_OAUTH}
+- ${AGENT_AUTH_UNKNOWN}
 
 Tool results are JSON text. Failures set the MCP tool error flag and return \`{ "error", "message", "details" }\`. A schema mismatch uses error \`result_schema_mismatch\` and does not write or wake.
 
