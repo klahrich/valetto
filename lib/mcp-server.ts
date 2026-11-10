@@ -3,7 +3,7 @@ import { eq } from 'drizzle-orm';
 import { createMcpHandler, withMcpAuth } from 'mcp-handler';
 import { getDb } from '@/db';
 import { workspaces } from '@/db/schema';
-import { authenticateAgentKey, getAgent, listTeammates, serializeAgent, watcherPresence, workspaceWatcherLastSeen, type AgentPrincipal } from './agents';
+import { authenticateAgentKey, getAgent, listTeammates, renameAgent, serializeAgent, watcherPresence, workspaceWatcherLastSeen, type AgentPrincipal } from './agents';
 import { whoamiDelivery } from './delivery';
 import { HttpError } from './errors';
 import { PlanLimitError, workspacePlanUsage } from './plans';
@@ -425,6 +425,25 @@ export const mcpHandler = createMcpHandler(
           const principal = principalFrom(ctx as ToolCtx);
           if (principal.externalGuest) return ok({ agents: [] });
           return ok({ agents: await listTeammates(principal) });
+        } catch (err) {
+          return fail(err);
+        }
+      },
+    );
+
+    server.registerTool(
+      'rename_agent',
+      {
+        title: docsByName.get('rename_agent')!.title,
+        description: docsByName.get('rename_agent')!.description,
+        inputSchema: toolInputs.rename_agent,
+      },
+      async (args, ctx) => {
+        try {
+          requireToolScope(ctx as ToolCtx, 'rename_agent');
+          const principal = principalFrom(ctx as ToolCtx);
+          const agent = await renameAgent(principal.workspaceId, principal.agentId, args.name);
+          return ok({ agent: serializeAgent(agent) });
         } catch (err) {
           return fail(err);
         }

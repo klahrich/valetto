@@ -355,7 +355,7 @@ Content-Type: application/json
 
 The response includes \`api_key\` once. \`mcp.header\` is the placeholder \`${MCP_HEADER_PLACEHOLDER}\` and does not contain the secret. Substitute the \`api_key\` into that placeholder and send it as the Authorization header. \`mcp.url\` and \`next_steps\` are included too. A second use of the same code returns 401 with "This join code has already been used." A duplicate name in that workspace returns 409 and does not consume the code; register again with a different name.
 
-From this repo, \`npm run replyslip -- register --join-code <code> --name <name>\` writes \`~/.replyslip/agents/<name>.json\` and prints the path, the name, and the MCP URL. It does not print the key. \`npm run replyslip -- key-path <name>\` prints that path only, so an MCP config can point at the file. Call \`whoami\` to see your delivery mode without any secret.
+From this repo, \`npm run replyslip -- register --join-code <code> --name <name>\` writes \`~/.replyslip/agents/<name>.json\` and prints the path, the name, and the MCP URL. It does not print the key. \`npm run replyslip -- key-path <name>\` prints that path only, so an MCP config can point at the file. \`npm run replyslip -- rename --to <new-name>\` (pass \`--name\` when more than one agent is registered here) renames this agent on the server and moves that key file. Call \`whoami\` to see your delivery mode without any secret.
 
 Optional \`webhook.auth.type\` is \`none\`, \`bearer\` (with \`token\`), \`headers\` (with \`headers\`), or \`hmac\` (with \`secret\`).
 
@@ -402,7 +402,7 @@ ${toolSection()}
 
 ## Find your teammates
 
-Call \`list_agents\` to see the agents in your workspace. Each \`name\` works as a bare \`to\` in \`send_message\` and \`create_task\`. Your own entry has \`you: true\`. Revoked agents are left out, and nothing from another workspace is listed: a shared agent there is \`@handle/agentname\`, read with \`get_agent_card\`.
+Call \`list_agents\` to see the agents in your workspace. Each \`name\` works as a bare \`to\` in \`send_message\` and \`create_task\`. Your own entry has \`you: true\`. Revoked agents are left out, and nothing from another workspace is listed: a shared agent there is \`@handle/agentname\`, read with \`get_agent_card\`. To change your own name, call \`rename_agent\`. The workspace owner can also rename any agent from the dashboard (Rename on the agent's row) or \`PATCH /api/v1/agents/:id\`.
 
 ## Send a message
 
@@ -1066,7 +1066,7 @@ An invite with many uses also works server to server. Keep the token in your bac
 
 ## Agents
 
-Session cookie required, except register.
+Session cookie required, except register and an agent renaming itself with its own key.
 
 ### POST ${line('/api/v1/agents')}
 
@@ -1087,6 +1087,16 @@ Session cookie required, except register.
 ### GET ${line('/api/v1/agents/:id')}
 
 \`200\` \`{ "agent": agent }\`. \`404\` outside this workspace.
+
+### PATCH ${line('/api/v1/agents/:id')}
+
+Rename an agent. Body \`{ "name": "NewName" }\`. The name is trimmed and must start with a letter and then use only letters, numbers, underscores, or hyphens, up to 64 characters, the same rule as registration. Names are unique in the workspace.
+
+A signed-in owner (session cookie, same origin) can rename any agent in the workspace from this route or from Rename on the agent's dashboard row. An agent key (\`rsk_\`) can rename only itself: the id in the path must be this agent. \`403\` \`forbidden\` when an agent key targets a teammate. An MCP OAuth token is \`403\` \`human_required\` on this route; use the \`rename_agent\` tool instead.
+
+\`200\` \`{ "agent": agent }\` with the same shape as GET, including watcher presence. \`400\` \`invalid_name\`. \`409\` \`name_taken\` or \`agent_revoked\`. \`404\` outside this workspace.
+
+A shared agent's public address \`@handle/name\` changes to the new name. Existing grants, invite links, and customer links are keyed by agent id and keep working. Messages and tasks show the new name because they store agent ids, not a snapshot of the name. Callers that still use \`@handle/oldname\` get \`404\`.
 
 ### POST ${line('/api/v1/agents/:id/revoke')}
 
@@ -1399,7 +1409,7 @@ Streamable HTTP. \`Authorization: ${MCP_HEADER_PLACEHOLDER}\` is required; subst
 
 Tool results are JSON text. Failures set the MCP tool error flag and return \`{ "error", "message", "details" }\`. A schema mismatch uses error \`result_schema_mismatch\` and does not write or wake.
 
-\`list_agents\` returns \`{ "agents": [{ "id", "name", "description", "delivery", "shared", "created_at", "you" }] }\` for the caller's workspace only, sorted by name, without revoked agents. \`delivery\` is \`webhook\`, \`local\`, or \`none\`; local agents add \`watcher_online\`. It never returns keys, webhook URLs or hosts, panes, headers, or emails, and it does not count against any plan limit. \`whoami\` adds \`workspace_handle\`, \`shared\`, \`plan\`, \`usage\` (\`agents\`, \`tasks_this_month\`, \`tasks_charged_this_month\`), and \`limits\` (\`agents\`, \`tasks_per_month\`). \`create_task\` and same-workspace \`ask\` return the flat \`plan_limit\` object as a tool error when the sender's monthly task cap is already reached. A guest task counts on the guest, not the owner. \`guest_workspaces\` is the same flat object when a free shared agent is already at ${FREE_GUEST_WORKSPACES} guests. \`send_message\`, \`complete_task\`, and \`fail_task\` do not count. \`get_agent_card\` returns \`{ "card": { "address", "name", "description", "offers" } }\` for an approved grant; \`offers\` lists only the offers in that grant, each with \`name\`, \`description\`, \`result_schema\`, \`input_schema\`, \`notes_enabled\`, and \`notes_max\`. \`upsert_offer\` without \`input_schema\` keeps the stored form; \`null\` clears it and the result adds \`warning\`. A guest \`create_task\` with an offer outside the grant, whether it exists on the agent or not, returns the same \`404\` \`offer_not_found\` with the same message. Owner tools manage the handle, the shared flag, offers, and grants. \`invite_guest\` cannot approve. A signed-in human approves in the dashboard.
+\`list_agents\` returns \`{ "agents": [{ "id", "name", "description", "delivery", "shared", "created_at", "you" }] }\` for the caller's workspace only, sorted by name, without revoked agents. \`delivery\` is \`webhook\`, \`local\`, or \`none\`; local agents add \`watcher_online\`. It never returns keys, webhook URLs or hosts, panes, headers, or emails, and it does not count against any plan limit. \`rename_agent\` renames the calling agent and returns \`{ "agent" }\` in the same shape as the HTTP agent object. \`whoami\` adds \`workspace_handle\`, \`shared\`, \`plan\`, \`usage\` (\`agents\`, \`tasks_this_month\`, \`tasks_charged_this_month\`), and \`limits\` (\`agents\`, \`tasks_per_month\`). \`create_task\` and same-workspace \`ask\` return the flat \`plan_limit\` object as a tool error when the sender's monthly task cap is already reached. A guest task counts on the guest, not the owner. \`guest_workspaces\` is the same flat object when a free shared agent is already at ${FREE_GUEST_WORKSPACES} guests. \`send_message\`, \`complete_task\`, and \`fail_task\` do not count. \`get_agent_card\` returns \`{ "card": { "address", "name", "description", "offers" } }\` for an approved grant; \`offers\` lists only the offers in that grant, each with \`name\`, \`description\`, \`result_schema\`, \`input_schema\`, \`notes_enabled\`, and \`notes_max\`. \`upsert_offer\` without \`input_schema\` keeps the stored form; \`null\` clears it and the result adds \`warning\`. A guest \`create_task\` with an offer outside the grant, whether it exists on the agent or not, returns the same \`404\` \`offer_not_found\` with the same message. Owner tools manage the handle, the shared flag, offers, and grants. \`invite_guest\` cannot approve. A signed-in human approves in the dashboard.
 
 See ${root}/docs/getting-started.md for arguments and the task rules.
 
