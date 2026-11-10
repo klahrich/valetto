@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { registerAgentWithJoinCode, serializeAgent } from '@/lib/agents';
-import { webhookAuthSchema } from '@/lib/delivery';
+import { deliveryInputSchema, webhookAuthSchema, type DeliveryInput } from '@/lib/delivery';
 import { HttpError } from '@/lib/errors';
 import { bearerToken, handle, json, parseBody, readJson } from '@/lib/http';
 import { MCP_HEADER_PLACEHOLDER, registrationNextSteps } from '@/lib/agent-docs';
@@ -9,16 +9,29 @@ import { publicOrigin } from '@/lib/origin';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-const bodySchema = z.object({
-  name: z.string(),
-  description: z.string().max(2000).optional(),
-  webhook: z
-    .object({
-      url: z.string().min(1).max(2000),
-      auth: webhookAuthSchema,
-    })
-    .optional(),
-});
+const bodySchema = z
+  .object({
+    name: z.string(),
+    description: z.string().max(2000).optional(),
+    webhook: z
+      .object({
+        url: z.string().min(1).max(2000),
+        auth: webhookAuthSchema,
+      })
+      .optional(),
+    delivery: deliveryInputSchema.optional(),
+  })
+  .superRefine((value, ctx) => {
+    if (value.webhook && value.delivery) {
+      ctx.addIssue({ code: 'custom', message: 'Send delivery or webhook, not both.', path: ['delivery'] });
+    }
+  });
+
+function registerDelivery(body: z.infer<typeof bodySchema>): DeliveryInput | undefined {
+  if (body.delivery) return body.delivery;
+  if (body.webhook) return { mode: 'webhook', url: body.webhook.url, auth: body.webhook.auth };
+  return undefined;
+}
 
 export function POST(req: Request) {
   return handle(async () => {
@@ -32,7 +45,7 @@ export function POST(req: Request) {
       token,
       name: body.name,
       description: body.description,
-      delivery: body.webhook ? { mode: 'webhook', url: body.webhook.url, auth: body.webhook.auth } : undefined,
+      delivery: registerDelivery(body),
       req,
     });
     return json(

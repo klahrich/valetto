@@ -3,7 +3,7 @@
 import { homedir } from 'node:os';
 import { readFile, stat } from 'node:fs/promises';
 import { AGENT_NAME_PATTERN } from '../../../lib/constants.ts';
-import { agentKeyPath, joinCodeEnvName, listRegisteredAgents, readAgentCredentials, registerAgent, renameRegisteredAgent, resolveJoinCode } from './register.ts';
+import { agentKeyPath, callWhoami, joinCodeEnvName, listRegisteredAgents, readAgentCredentials, registerAgent, renameRegisteredAgent, resolveJoinCode } from './register.ts';
 import {
   appendSuperviseLog,
   installSupervision,
@@ -32,7 +32,7 @@ export const REPLYSLIP_VERSION = typeof __REPLYSLIP_VERSION__ === 'string' ? __R
 const HELP = `replyslip ${REPLYSLIP_VERSION}: watcher and register CLI for Valetto (https://valetto.tech)
 
 Usage:
-  replyslip register --join-code <code> --name <name> [--url <origin>] [--description <text>] [--force]
+  replyslip register --join-code <code> --name <name> [--driver orca|herdr --target <pane>] [--url <origin>] [--description <text>] [--force]
   replyslip watch [--name <name>] [--url <origin>] [--interval <ms>] [--once] [--force]
   replyslip watch --status
   replyslip watch --stop --name <name>
@@ -43,14 +43,15 @@ Usage:
   replyslip supervise --uninstall (--name <name> | --all)
   replyslip rename --to <new-name> [--name <current-name>] [--url <origin>] [--force]
   replyslip key-path <name>
+  replyslip whoami --name <name>
   replyslip --help | --version
 
 watch runs one agent's own watcher with the key register saved in ~/.replyslip/agents/<name>.json.
 It wakes only that agent's pane. --name is needed only when more than one agent is registered here.
+Each agent starts its own watcher. You can set local delivery at register with --driver and --target. After that, only the signed-in human can change it.
 rename changes this agent's name on the server and moves that key file. --name is needed only when
 more than one agent is registered here. If a watcher or supervisor was installed under the old name,
 stop it and install again with the new name.
-Each agent starts its own watcher. Delivery (herdr or Orca, and the pane) is set by the human on the dashboard.
 supervise --install uses this same script. It checks replyslip.mjs.sha256 beside it, installs an OS timer
 (macOS LaunchAgent, Linux systemd --user, or Windows Task Scheduler) that runs supervise --once every 120 seconds,
 and starts the watcher detached. It does not type into a herdr or Orca pane.
@@ -139,6 +140,24 @@ export async function runReplyslip(argv: string[], io: CliIo = {}): Promise<numb
     return 0;
   }
 
+  if (command === 'whoami') {
+    const name = flag(argv, '--name') ?? rest[0];
+    if (!name || !AGENT_NAME_PATTERN.test(name)) {
+      stderr('Usage: replyslip whoami --name <name>');
+      return 1;
+    }
+    try {
+      const me = await callWhoami({ name, home: io.home, fetchImpl: io.fetchImpl });
+      stdout(me.name);
+      if (me.workspace) stdout(`workspace ${me.workspace}`);
+      stdout(`delivery ${JSON.stringify(me.delivery)}`);
+      return 0;
+    } catch (err) {
+      stderr(err instanceof Error ? err.message : 'whoami failed.');
+      return 1;
+    }
+  }
+
   if ((command === 'register' || command === 'watch' || command === 'rename') && !argv.includes('--status') && urlFlagMissingValue(argv)) {
     stderr(URL_MISSING_MESSAGE);
     return 1;
@@ -147,7 +166,13 @@ export async function runReplyslip(argv: string[], io: CliIo = {}): Promise<numb
   if (command === 'register') {
     const name = flag(argv, '--name');
     if (!name || !AGENT_NAME_PATTERN.test(name)) {
-      stderr('Usage: replyslip register --join-code <code> --name <name> [--url <origin>] [--description <text>] [--force]');
+      stderr('Usage: replyslip register --join-code <code> --name <name> [--driver orca|herdr --target <pane>] [--url <origin>] [--description <text>] [--force]');
+      return 1;
+    }
+    const driver = flag(argv, '--driver');
+    const target = flag(argv, '--target');
+    if (Boolean(driver) !== Boolean(target)) {
+      stderr('Pass both --driver and --target to set local delivery, or omit both and register with delivery unset.');
       return 1;
     }
     const joinCode = resolveJoinCode(name, flag(argv, '--join-code'), env);
@@ -164,6 +189,7 @@ export async function runReplyslip(argv: string[], io: CliIo = {}): Promise<numb
         description: flag(argv, '--description'),
         joinCode,
         relayUrl,
+        delivery: driver && target ? { mode: 'local', driver, target } : undefined,
         home: io.home,
         force: argv.includes('--force'),
         fetchImpl: io.fetchImpl,
@@ -171,6 +197,8 @@ export async function runReplyslip(argv: string[], io: CliIo = {}): Promise<numb
       stdout(saved.name);
       stdout(saved.mcpUrl);
       stdout(`key saved to ${saved.path}`);
+      if (driver && target) stdout(`delivery set to ${driver} ${target}`);
+      else stdout('delivery unset; the owner can set it in the dashboard');
       return 0;
     } catch (err) {
       stderr(err instanceof Error ? err.message : 'Registration failed.');
@@ -243,7 +271,7 @@ export async function runReplyslip(argv: string[], io: CliIo = {}): Promise<numb
   if (command === 'supervise') return runSupervise(argv, io, stdout, stderr);
 
   if (command !== 'watch') {
-    stderr('Usage: replyslip watch | register | key-path | rename | supervise');
+    stderr('Usage: replyslip watch | register | key-path | whoami | rename | supervise');
     return 1;
   }
 
