@@ -122,7 +122,8 @@ async function registerAgent(options) {
     },
     body: JSON.stringify({
       name: options.name,
-      ...options.description ? { description: options.description } : {}
+      ...options.description ? { description: options.description } : {},
+      ...options.delivery ? { delivery: options.delivery } : {}
     })
   });
   let payload = null;
@@ -187,6 +188,59 @@ async function readAgentCredentials(name, options = {}) {
   }
   const relayUrl = typeof parsed.relay_url === "string" && parsed.relay_url.trim() ? parsed.relay_url.trim() : null;
   return { name, apiKey: parsed.api_key.trim(), relayUrl, path: file };
+}
+function parseMcpJson(text) {
+  const trimmed = text.trim();
+  if (trimmed.startsWith("{") || trimmed.startsWith("[")) return JSON.parse(trimmed);
+  const dataLines = trimmed.split("\n").filter((line) => line.startsWith("data:")).map((line) => line.slice(5).trim()).filter(Boolean);
+  if (dataLines.length === 0) throw new Error("whoami failed: the server did not return JSON.");
+  return JSON.parse(dataLines[dataLines.length - 1]);
+}
+async function callWhoami(options) {
+  const creds = await readAgentCredentials(options.name, { home: options.home });
+  const raw = JSON.parse(await readFile(creds.path, "utf8"));
+  const mcpUrl = typeof raw.mcp_url === "string" && raw.mcp_url.trim() ? raw.mcp_url.trim() : `${creds.relayUrl ?? "https://valetto.tech"}/api/mcp`;
+  const fetchImpl = options.fetchImpl ?? fetch;
+  const response = await fetchImpl(mcpUrl, {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${creds.apiKey}`,
+      "content-type": "application/json",
+      accept: "application/json, text/event-stream"
+    },
+    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "whoami", arguments: {} } })
+  });
+  let body = "";
+  try {
+    body = await response.text();
+  } catch {
+    body = "";
+  }
+  if (!response.ok) {
+    throw new Error(`whoami failed (HTTP ${response.status}). Check the MCP URL and the key file, and do not print the key.`);
+  }
+  let rpc;
+  try {
+    rpc = parseMcpJson(body);
+  } catch {
+    throw new Error("whoami failed: the server did not return JSON.");
+  }
+  if (rpc.error) {
+    throw new Error(typeof rpc.error.message === "string" ? rpc.error.message : "whoami failed.");
+  }
+  const content = rpc.result?.content?.find((item) => item.type === "text");
+  if (!content?.text) throw new Error("whoami failed: the tool returned no text.");
+  let payload;
+  try {
+    payload = JSON.parse(content.text);
+  } catch {
+    throw new Error("whoami failed: the tool result was not JSON.");
+  }
+  if (typeof payload.name !== "string" || !payload.name) {
+    throw new Error("whoami failed: the result had no agent name.");
+  }
+  const workspace = typeof payload.workspace === "string" ? payload.workspace : typeof payload.workspace_name === "string" ? payload.workspace_name : void 0;
+  return { name: payload.name, delivery: payload.delivery ?? null, workspace };
 }
 
 // packages/cli/src/supervise.ts
@@ -3132,7 +3186,7 @@ var REPLYSLIP_VERSION = true ? "0.1.3" : "dev";
 var HELP = `replyslip ${REPLYSLIP_VERSION}: watcher and register CLI for Valetto (https://valetto.tech)
 
 Usage:
-  replyslip register --join-code <code> --name <name> [--url <origin>] [--description <text>] [--force]
+  replyslip register --join-code <code> --name <name> [--driver orca|herdr --target <pane>] [--url <origin>] [--description <text>] [--force]
   replyslip watch [--name <name>] [--url <origin>] [--interval <ms>] [--once] [--force]
   replyslip watch --status
   replyslip watch --stop --name <name>
@@ -3142,11 +3196,12 @@ Usage:
   replyslip supervise --stop --name <name>
   replyslip supervise --uninstall (--name <name> | --all)
   replyslip key-path <name>
+  replyslip whoami --name <name>
   replyslip --help | --version
 
 watch runs one agent's own watcher with the key register saved in ~/.replyslip/agents/<name>.json.
 It wakes only that agent's pane. --name is needed only when more than one agent is registered here.
-Each agent starts its own watcher. Delivery (herdr or Orca, and the pane) is set by the human on the dashboard.
+Each agent starts its own watcher. You can set local delivery at register with --driver and --target. After that, only the signed-in human can change it.
 supervise --install uses this same script. It checks replyslip.mjs.sha256 beside it, installs an OS timer
 (macOS LaunchAgent, Linux systemd --user, or Windows Task Scheduler) that runs supervise --once every 120 seconds,
 and starts the watcher detached. It does not type into a herdr or Orca pane.
@@ -3215,6 +3270,23 @@ async function runReplyslip(argv, io = {}) {
     stdout(agentKeyPath(name2, io.home));
     return 0;
   }
+  if (command === "whoami") {
+    const name2 = flag(argv, "--name") ?? rest[0];
+    if (!name2 || !AGENT_NAME_PATTERN.test(name2)) {
+      stderr("Usage: replyslip whoami --name <name>");
+      return 1;
+    }
+    try {
+      const me = await callWhoami({ name: name2, home: io.home, fetchImpl: io.fetchImpl });
+      stdout(me.name);
+      if (me.workspace) stdout(`workspace ${me.workspace}`);
+      stdout(`delivery ${JSON.stringify(me.delivery)}`);
+      return 0;
+    } catch (err) {
+      stderr(err instanceof Error ? err.message : "whoami failed.");
+      return 1;
+    }
+  }
   if ((command === "register" || command === "watch") && !argv.includes("--status") && urlFlagMissingValue(argv)) {
     stderr(URL_MISSING_MESSAGE);
     return 1;
@@ -3222,7 +3294,13 @@ async function runReplyslip(argv, io = {}) {
   if (command === "register") {
     const name2 = flag(argv, "--name");
     if (!name2 || !AGENT_NAME_PATTERN.test(name2)) {
-      stderr("Usage: replyslip register --join-code <code> --name <name> [--url <origin>] [--description <text>] [--force]");
+      stderr("Usage: replyslip register --join-code <code> --name <name> [--driver orca|herdr --target <pane>] [--url <origin>] [--description <text>] [--force]");
+      return 1;
+    }
+    const driver = flag(argv, "--driver");
+    const target = flag(argv, "--target");
+    if (Boolean(driver) !== Boolean(target)) {
+      stderr("Pass both --driver and --target to set local delivery, or omit both and register with delivery unset.");
       return 1;
     }
     const joinCode = resolveJoinCode(name2, flag(argv, "--join-code"), env);
@@ -3239,6 +3317,7 @@ async function runReplyslip(argv, io = {}) {
         description: flag(argv, "--description"),
         joinCode,
         relayUrl,
+        delivery: driver && target ? { mode: "local", driver, target } : void 0,
         home: io.home,
         force: argv.includes("--force"),
         fetchImpl: io.fetchImpl
@@ -3246,6 +3325,8 @@ async function runReplyslip(argv, io = {}) {
       stdout(saved.name);
       stdout(saved.mcpUrl);
       stdout(`key saved to ${saved.path}`);
+      if (driver && target) stdout(`delivery set to ${driver} ${target}`);
+      else stdout("delivery unset; the owner can set it in the dashboard");
       return 0;
     } catch (err) {
       stderr(err instanceof Error ? err.message : "Registration failed.");
@@ -3254,7 +3335,7 @@ async function runReplyslip(argv, io = {}) {
   }
   if (command === "supervise") return runSupervise(argv, io, stdout, stderr);
   if (command !== "watch") {
-    stderr("Usage: replyslip watch | register | key-path | supervise");
+    stderr("Usage: replyslip watch | register | key-path | whoami | supervise");
     return 1;
   }
   if (argv.includes("--stop")) {
