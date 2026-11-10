@@ -9,6 +9,7 @@ import { OAUTH_SCOPE, SCOPE_OWNER, SCOPE_RESPOND } from './config';
 export const TOOL_SCOPES = {
   whoami: OAUTH_SCOPE,
   list_agents: OAUTH_SCOPE,
+  rename_agent: OAUTH_SCOPE,
   get_agent_card: OAUTH_SCOPE,
   create_task: OAUTH_SCOPE,
   // Per-task check inside: OAuth apps may only message on tasks they created (ownTasksOnly).

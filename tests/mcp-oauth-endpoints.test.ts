@@ -330,20 +330,20 @@ describe('MCP_OAUTH_ENABLED off', () => {
           params: { id: '00000000-0000-4000-8000-000000000000' },
         })
       ).res,
-      (
-        await call(renameRoute, `${ISSUER}/api/v1/agents/${agent.id}`, {
-          method: 'PATCH',
-          body: { name: 'renamed' },
-          cookie: owner.cookie,
-          params: { id: agent.id },
-        })
-      ).res,
     ];
     for (const res of responses) {
       expect(res.status).toBe(404);
       expect(res.headers.get('x-robots-tag')).toBe('noindex, nofollow');
       expect(res.headers.get('referrer-policy')).toBe('no-referrer');
     }
-    expect((await mcpTool(key, 'whoami')).payload.name).toBe('bot');
+    const renamed = await call(renameRoute, `${ISSUER}/api/v1/agents/${agent.id}`, {
+      method: 'PATCH',
+      body: { name: 'renamed' },
+      cookie: owner.cookie,
+      params: { id: agent.id },
+    });
+    expect(renamed.status).toBe(200);
+    expect(renamed.data.agent.name).toBe('renamed');
+    expect((await mcpTool(key, 'whoami')).payload.name).toBe('renamed');
   });
 });

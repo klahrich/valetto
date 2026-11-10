@@ -3,7 +3,7 @@
 import { homedir } from 'node:os';
 import { readFile, stat } from 'node:fs/promises';
 import { AGENT_NAME_PATTERN } from '../../../lib/constants.ts';
-import { agentKeyPath, callWhoami, joinCodeEnvName, listRegisteredAgents, readAgentCredentials, registerAgent, resolveJoinCode } from './register.ts';
+import { agentKeyPath, callWhoami, joinCodeEnvName, listRegisteredAgents, readAgentCredentials, registerAgent, renameRegisteredAgent, resolveJoinCode } from './register.ts';
 import {
   appendSuperviseLog,
   installSupervision,
@@ -41,6 +41,7 @@ Usage:
   replyslip supervise --status
   replyslip supervise --stop --name <name>
   replyslip supervise --uninstall (--name <name> | --all)
+  replyslip rename --to <new-name> [--name <current-name>] [--url <origin>] [--force]
   replyslip key-path <name>
   replyslip whoami --name <name>
   replyslip --help | --version
@@ -48,6 +49,9 @@ Usage:
 watch runs one agent's own watcher with the key register saved in ~/.replyslip/agents/<name>.json.
 It wakes only that agent's pane. --name is needed only when more than one agent is registered here.
 Each agent starts its own watcher. You can set local delivery at register with --driver and --target. After that, only the signed-in human can change it.
+rename changes this agent's name on the server and moves that key file. --name is needed only when
+more than one agent is registered here. If a watcher or supervisor was installed under the old name,
+stop it and install again with the new name.
 supervise --install uses this same script. It checks replyslip.mjs.sha256 beside it, installs an OS timer
 (macOS LaunchAgent, Linux systemd --user, or Windows Task Scheduler) that runs supervise --once every 120 seconds,
 and starts the watcher detached. It does not type into a herdr or Orca pane.
@@ -154,7 +158,7 @@ export async function runReplyslip(argv: string[], io: CliIo = {}): Promise<numb
     }
   }
 
-  if ((command === 'register' || command === 'watch') && !argv.includes('--status') && urlFlagMissingValue(argv)) {
+  if ((command === 'register' || command === 'watch' || command === 'rename') && !argv.includes('--status') && urlFlagMissingValue(argv)) {
     stderr(URL_MISSING_MESSAGE);
     return 1;
   }
@@ -202,10 +206,72 @@ export async function runReplyslip(argv: string[], io: CliIo = {}): Promise<numb
     }
   }
 
+  if (command === 'rename') {
+    const newName = flag(argv, '--to');
+    if (!newName || !AGENT_NAME_PATTERN.test(newName.trim())) {
+      stderr('Usage: replyslip rename --to <new-name> [--name <current-name>] [--url <origin>] [--force]');
+      return 1;
+    }
+    let currentName = flag(argv, '--name');
+    if (currentName !== undefined && !AGENT_NAME_PATTERN.test(currentName)) {
+      stderr('Usage: replyslip rename --to <new-name> [--name <current-name>] [--url <origin>] [--force]');
+      return 1;
+    }
+    if (!currentName) {
+      const registered = await listRegisteredAgents(io.home);
+      if (registered.length === 0) {
+        stderr(
+          `No agent is registered on this machine (${agentKeyPath('<name>', io.home)}). Register first: replyslip register --join-code <code> --name <name>.`,
+        );
+        return 1;
+      }
+      if (registered.length > 1) {
+        stderr(`More than one agent is registered on this machine (${registered.join(', ')}). Pass --name <current-name>.`);
+        return 1;
+      }
+      currentName = registered[0]!;
+    }
+    let credentials;
+    try {
+      credentials = await readAgentCredentials(currentName, { home: io.home, warn: stderr });
+    } catch (err) {
+      stderr(err instanceof Error ? err.message : 'Could not read the agent key file.');
+      return 1;
+    }
+    const relayUrl = flag(argv, '--url')?.trim() || env.REPLYSLIP_URL?.trim() || credentials.relayUrl || DEFAULT_RELAY_URL;
+    try {
+      const saved = await renameRegisteredAgent({
+        currentName,
+        newName,
+        relayUrl,
+        home: io.home,
+        force: argv.includes('--force'),
+        fetchImpl: io.fetchImpl,
+      });
+      stdout(saved.name);
+      stdout(`key saved to ${saved.path}`);
+      if (saved.previousPath !== saved.path) {
+        stdout(`moved ${saved.previousPath}`);
+      }
+      if (saved.shared) {
+        stdout('This agent is shared: its public address is now @handle/' + saved.name + '. Existing grants stay valid.');
+      }
+      if (currentName !== saved.name) {
+        stdout(
+          `If a watcher or supervisor was installed for ${currentName}, run: replyslip supervise --stop --name ${currentName} && replyslip supervise --install --name ${saved.name}`,
+        );
+      }
+      return 0;
+    } catch (err) {
+      stderr(err instanceof Error ? err.message : 'Rename failed.');
+      return 1;
+    }
+  }
+
   if (command === 'supervise') return runSupervise(argv, io, stdout, stderr);
 
   if (command !== 'watch') {
-    stderr('Usage: replyslip watch | register | key-path | whoami | supervise');
+    stderr('Usage: replyslip watch | register | key-path | whoami | rename | supervise');
     return 1;
   }
 

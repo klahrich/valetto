@@ -3,7 +3,8 @@ import { eq } from 'drizzle-orm';
 import { createMcpHandler, withMcpAuth } from 'mcp-handler';
 import { getDb } from '@/db';
 import { workspaces } from '@/db/schema';
-import { authenticateAgentKey, getAgent, listTeammates, serializeAgent, watcherPresence, workspaceWatcherLastSeen, type AgentPrincipal } from './agents';
+import { agentAuthErrorDescription, replaceWwwAuthenticateDescription } from './agent-auth-error';
+import { authenticateAgentKey, getAgent, listTeammates, renameAgent, revokedCredentialFlags, serializeAgent, watcherPresence, workspaceWatcherLastSeen, type AgentPrincipal } from './agents';
 import { whoamiDelivery } from './delivery';
 import { HttpError } from './errors';
 import { PlanLimitError, workspacePlanUsage } from './plans';
@@ -432,6 +433,25 @@ export const mcpHandler = createMcpHandler(
     );
 
     server.registerTool(
+      'rename_agent',
+      {
+        title: docsByName.get('rename_agent')!.title,
+        description: docsByName.get('rename_agent')!.description,
+        inputSchema: toolInputs.rename_agent,
+      },
+      async (args, ctx) => {
+        try {
+          requireToolScope(ctx as ToolCtx, 'rename_agent');
+          const principal = principalFrom(ctx as ToolCtx);
+          const agent = await renameAgent(principal.workspaceId, principal.agentId, args.name);
+          return ok({ agent: serializeAgent(agent) });
+        } catch (err) {
+          return fail(err);
+        }
+      },
+    );
+
+    server.registerTool(
       'get_agent_card',
       {
         title: docsByName.get('get_agent_card')!.title,
@@ -686,8 +706,9 @@ export async function verifyMcpToken(_req: Request, bearerToken?: string): Promi
 /**
  * The 401 challenge's resource_metadata URL is built from the fixed issuer, never from X-Forwarded-Host (§5). The
  * wrapper is built per request because its options are fixed at construction and the env is read at runtime.
+ * A rejected credential keeps that challenge and only replaces error_description.
  */
-export function mcpAuthHandler(req: Request): Promise<Response> {
+export async function mcpAuthHandler(req: Request): Promise<Response> {
   const wrapped = oauthEnabled()
     ? withMcpAuth(mcpHandler, verifyMcpToken, {
         required: true,
@@ -696,5 +717,40 @@ export function mcpAuthHandler(req: Request): Promise<Response> {
         requiredScopes: [OAUTH_SCOPE],
       })
     : withMcpAuth(mcpHandler, verifyMcpToken, { required: true, resourceUrl: oauthIssuer() });
-  return wrapped(req);
+  const res = await wrapped(req);
+  return describeRejectedAgentAuth(res, req.headers.get('authorization'));
+}
+
+/**
+ * mcp-handler reports every missing AuthInfo as "No authorization provided".
+ * Keep its 401, invalid_token code, and WWW-Authenticate challenge, and replace
+ * only error_description. Revoked keys are recognized by hash. An rsoa_ access
+ * token keeps its own description. The description never includes the token.
+ */
+async function describeRejectedAgentAuth(res: Response, authorization: string | null): Promise<Response> {
+  if (res.status !== 401) return res;
+  let body: { error?: unknown } | null = null;
+  try {
+    body = (await res.clone().json()) as { error?: unknown };
+  } catch {
+    return res;
+  }
+  if (!body || body.error !== 'invalid_token') return res;
+  const token = bearerTokenFrom(authorization);
+  const stored = token ? await revokedCredentialFlags(token) : null;
+  const description = agentAuthErrorDescription(authorization, stored);
+  const headers = new Headers(res.headers);
+  headers.delete('content-length');
+  headers.delete('content-type');
+  const challenge = headers.get('www-authenticate');
+  if (challenge) headers.set('www-authenticate', replaceWwwAuthenticateDescription(challenge, description));
+  return Response.json({ error: 'invalid_token', error_description: description }, { status: 401, headers });
+}
+
+/** The same second field mcp-handler treats as the bearer token. Not logged. */
+function bearerTokenFrom(authorization: string | null): string | null {
+  if (!authorization) return null;
+  const [scheme, token] = authorization.split(' ');
+  if (!scheme || scheme.toLowerCase() !== 'bearer' || !token) return null;
+  return token;
 }

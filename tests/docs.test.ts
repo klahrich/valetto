@@ -57,6 +57,12 @@ describe('agent docs', () => {
     expect(skillBody).not.toContain('Stop here.');
     expect(skillBody).not.toContain('Register cannot');
     expect(skillBody).toContain('Send test wake');
+    expect(skillBody).toContain("check that the dashboard Pane value equals this pane's `ORCA_PANE_KEY`");
+    const checklist = skillBody.slice(skillBody.indexOf('## Setup checklist'), skillBody.indexOf('## Set yourself up as a local agent'));
+    expect(checklist).not.toContain('rename_agent');
+    expect(checklist).not.toContain('replyslip -- rename');
+    expect(skillBody).toContain('rename_agent');
+    expect(skillBody).toContain('npm run replyslip -- rename --to <new-name>');
     expect(skillBody).toContain('/replyslip.mjs.sha256');
     expect(llmsBody).toContain('Setup checklist');
     expect(llmsBody).toContain('Delivery never blocks registration');

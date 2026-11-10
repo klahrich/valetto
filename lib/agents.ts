@@ -164,29 +164,36 @@ export async function getAgent(workspaceId: string, agentId: string): Promise<Ag
   return agent;
 }
 
-/** PATCH /api/v1/agents/:id (docs/design/mcp-oauth.md §6.6): rename any agent in the workspace. */
-export async function renameAgent(workspaceId: string, agentId: string, name: string): Promise<AgentRow> {
-  if (!AGENT_NAME_PATTERN.test(name)) {
+/** Same name rule as registration: trim, then a letter followed by letters, numbers, underscores, or hyphens, max 64. */
+export function assertAgentName(name: string): string {
+  const trimmed = name.trim();
+  if (!AGENT_NAME_PATTERN.test(trimmed)) {
     throw new HttpError(
       400,
       'invalid_name',
       'Agent name must start with a letter and contain only letters, numbers, underscores, or hyphens (max 64).',
     );
   }
+  return trimmed;
+}
+
+/** PATCH /api/v1/agents/:id: the owner can rename any agent in the workspace; an agent key can rename only itself. */
+export async function renameAgent(workspaceId: string, agentId: string, name: string): Promise<AgentRow> {
+  const next = assertAgentName(name);
   const agent = await getAgent(workspaceId, agentId);
   if (agent.revokedAt) throw new HttpError(409, 'agent_revoked', 'This agent has been revoked.');
-  if (agent.name === name) return agent;
+  if (agent.name === next) return agent;
   try {
     const [updated] = await getDb()
       .update(agents)
-      .set({ name })
+      .set({ name: next })
       .where(and(eq(agents.id, agent.id), eq(agents.workspaceId, workspaceId)))
       .returning();
     if (!updated) throw new HttpError(404, 'not_found', 'No agent was found.');
     return updated;
   } catch (err) {
     if (isUniqueViolation(err)) {
-      throw new HttpError(409, 'name_taken', `An agent named ${name} already exists in this workspace.`);
+      throw new HttpError(409, 'name_taken', `An agent named ${next} already exists in this workspace.`);
     }
     throw err;
   }
@@ -642,6 +649,31 @@ export async function authenticateWakePoller(token: string): Promise<WakePoller 
   const agent = await authenticateAgentKey(token, { recordUse: false });
   if (!agent) return null;
   return { kind: 'agent', workspaceId: agent.workspaceId, agentId: agent.agentId, agentName: agent.agentName };
+}
+
+/**
+ * Whether this token's hash is a revoked agent key or a revoked watcher key.
+ * The lookup is the hash only, the same as authentication. The token, the hash,
+ * and the stored prefix are not returned. A live key is not reported here.
+ */
+export async function revokedCredentialFlags(token: string): Promise<{ agentKeyRevoked: boolean; watcherKeyRevoked: boolean }> {
+  const hash = sha256(token);
+  const db = getDb();
+  const [agentKey] = await db
+    .select({ keyRevokedAt: agentKeys.revokedAt, agentRevokedAt: agents.revokedAt })
+    .from(agentKeys)
+    .innerJoin(agents, eq(agents.id, agentKeys.agentId))
+    .where(eq(agentKeys.tokenHash, hash))
+    .limit(1);
+  const [watcherKey] = await db
+    .select({ revokedAt: watcherKeys.revokedAt })
+    .from(watcherKeys)
+    .where(eq(watcherKeys.tokenHash, hash))
+    .limit(1);
+  return {
+    agentKeyRevoked: Boolean(agentKey && (agentKey.keyRevokedAt || agentKey.agentRevokedAt)),
+    watcherKeyRevoked: Boolean(watcherKey?.revokedAt),
+  };
 }
 
 export async function authenticateWatcherKey(token: string): Promise<{ workspaceId: string; keyId: string } | null> {
