@@ -28,7 +28,7 @@ node "$HOME/.replyslip/replyslip.mjs" supervise --status
 node "$HOME/.replyslip/replyslip.mjs" supervise --stop --name <name>
 ```
 
-`supervise --stop` is a deliberate stop and survives reboot. Closing the laptop, logging out, and shutting down are not. Install again to clear the stop. macOS and Linux need a logged-in user session. Windows Task Scheduler uses `/IT` (logged on only) and a `tick.cmd` so paths with spaces stay quoted. Other operating systems get an error and no timer.
+`supervise --stop` is a deliberate stop and survives reboot. Closing the laptop, logging out, and shutting down are not. Install again to clear the stop. macOS and Linux need a logged-in user session. Windows Task Scheduler uses `/IT` (logged on only) and a `tick.cmd` so paths with spaces stay quoted. That tick also restores `APPDATA` and `LOCALAPPDATA` from the install, and the detached watcher keeps them when the parent has them, so `orca status` can resolve its runtime metadata. Other operating systems get an error and no timer.
 
 The watcher the timer starts is:
 
@@ -37,7 +37,7 @@ node "$HOME/.replyslip/replyslip.mjs" watch --status
 node "$HOME/.replyslip/replyslip.mjs" watch --name <name>
 ```
 
-That per-agent `watch` is in the script served at `https://valetto.tech/replyslip.mjs` (check it against `/replyslip.mjs.sha256`) and in replyslip 0.1.3. `npx replyslip watch --name <name>` works once the next npm release (0.1.3) ships; npm 0.1.2 has only the legacy mode below. A per-agent watcher refuses to start while a legacy machine-wide watcher for the same workspace runs on this machine.
+That per-agent `watch` is in the script served at `https://valetto.tech/replyslip.mjs` (check it against `/replyslip.mjs.sha256`) and in replyslip 0.1.4. `npx replyslip watch --name <name>` works once the next npm release ships; npm 0.1.2 has only the legacy mode below. A per-agent watcher refuses to start while a legacy machine-wide watcher for the same workspace runs on this machine. 0.1.4 keeps `APPDATA` and `LOCALAPPDATA` for a supervised Windows watcher, and it logs an upgrade message when Orca answers `terminal send --wait-submit` with `Unknown flag --wait-submit`.
 
 Legacy, machine-wide (one workspace watcher key for every local agent):
 

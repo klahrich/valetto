@@ -12,7 +12,7 @@ import { killLockAllowed, killSpawnAllowed, linuxStartMs, parseWindowsIdentity }
 import { redactSecrets } from '../packages/cli/src/redact';
 import { decideSupervision } from '../packages/cli/src/supervise-decide';
 import { buildInstallPlan, windowsCmd } from '../packages/cli/src/supervise-os';
-import { appendSuperviseLog, installSupervision, runSupervisionTick, stopSupervision, supervisedEnv, uninstallSupervision, verifyDistributedScript } from '../packages/cli/src/supervise';
+import { appendSuperviseLog, installSupervision, runSupervisionTick, spawnDetachedWatcher, stopSupervision, supervisedEnv, uninstallSupervision, verifyDistributedScript } from '../packages/cli/src/supervise';
 import { watch } from '../packages/cli/src/watch';
 import { acquireAgentWatcherLock, agentWatcherScopeId, machineBootId, watcherLockPath } from '../packages/cli/src/watcher-lock';
 import { emptySuperviseState, enrollAgent, isStopped, readEnrolled, readHold, readProgress, readSuperviseState, writeProgress, writeSuperviseState } from '../packages/cli/src/watcher-progress';
@@ -839,6 +839,8 @@ describe('supervision install and tick', () => {
     const cmd = plan.files[0]?.contents ?? '';
     expect(cmd).toContain('"C:\\Program Files\\nodejs\\node.exe"');
     expect(cmd).toContain('supervise --once');
+    expect(cmd).not.toContain('APPDATA');
+    expect(cmd).not.toContain('LOCALAPPDATA');
     const percent = windowsCmd({
       platform: 'win32',
       home: 'C:\\Users\\Ada%PATH%',
@@ -846,9 +848,13 @@ describe('supervision install and tick', () => {
       scriptPath: 'C:\\Users\\Ada%PATH%\\.replyslip\\replyslip.mjs',
       pathEnv: 'C:\\Windows\\System32',
       orcaBin: 'C:\\orca%PATH%\\orca.exe',
+      appData: 'C:\\Users\\Ada%PATH%\\AppData\\Roaming',
+      localAppData: 'C:\\Users\\Ada\\AppData\\Local',
     });
     expect(percent).toContain('set "HOME=C:\\Users\\Ada%%PATH%%"');
     expect(percent).toContain('set "USERPROFILE=C:\\Users\\Ada%%PATH%%"');
+    expect(percent).toContain('set "APPDATA=C:\\Users\\Ada%%PATH%%\\AppData\\Roaming"');
+    expect(percent).toContain('set "LOCALAPPDATA=C:\\Users\\Ada\\AppData\\Local"');
     expect(percent).toContain('set "REPLYSLIP_ORCA_BIN=C:\\orca%%PATH%%\\orca.exe"');
     expect(percent).toContain('"C:\\Users\\Ada%%PATH%%\\.replyslip\\replyslip.mjs"');
     expect(percent).not.toMatch(/(?<!%)%PATH%/);
@@ -875,11 +881,145 @@ describe('supervision install and tick', () => {
 
     const env = supervisedEnv(
       { nodePath: '/usr/bin/node', scriptPath: '/s', name: 'Bot', home: '/home/ada', pathEnv: '/usr/bin', orcaBin: '/opt/orca' },
-      { REPLYSLIP_WATCHER_KEY: KEY, PATH: '/evil', LANG: 'C' },
+      {
+        REPLYSLIP_WATCHER_KEY: KEY,
+        PATH: '/evil',
+        LANG: 'C',
+        APPDATA: 'C:\\Users\\Ada\\AppData\\Roaming',
+        LOCALAPPDATA: 'C:\\Users\\Ada\\AppData\\Local',
+      },
     );
     expect(env.REPLYSLIP_WATCHER_KEY).toBeUndefined();
     expect(env.PATH).toBe('/usr/bin');
     expect(env.REPLYSLIP_ORCA_BIN).toBe('/opt/orca');
+    expect(env.APPDATA).toBe('C:\\Users\\Ada\\AppData\\Roaming');
+    expect(env.LOCALAPPDATA).toBe('C:\\Users\\Ada\\AppData\\Local');
     expect(JSON.stringify(env)).not.toContain(KEY);
+
+    const absent = supervisedEnv(
+      { nodePath: '/usr/bin/node', scriptPath: '/s', name: 'Bot', home: '/home/ada', pathEnv: '/usr/bin' },
+      { LANG: 'C' },
+    );
+    expect(absent.APPDATA).toBeUndefined();
+    expect(absent.LOCALAPPDATA).toBeUndefined();
+  });
+
+  it('gives the spawned watcher APPDATA and LOCALAPPDATA, and writes them into the Windows tick', async () => {
+    const home = await tempHome();
+    const out = path.join(home, 'env.json');
+    const script = path.join(home, 'dump.mjs');
+    writeFileSync(
+      script,
+      `import { writeFileSync } from 'node:fs';\nwriteFileSync(${JSON.stringify(out)}, JSON.stringify({\n  APPDATA: process.env.APPDATA ?? null,\n  LOCALAPPDATA: process.env.LOCALAPPDATA ?? null,\n  PATH: process.env.PATH ?? null,\n  REPLYSLIP_WATCHER_KEY: process.env.REPLYSLIP_WATCHER_KEY ?? null,\n}));\n`,
+    );
+    const saved = {
+      APPDATA: process.env.APPDATA,
+      LOCALAPPDATA: process.env.LOCALAPPDATA,
+      PATH: process.env.PATH,
+      REPLYSLIP_WATCHER_KEY: process.env.REPLYSLIP_WATCHER_KEY,
+    };
+    const restore = () => {
+      for (const key of Object.keys(saved) as (keyof typeof saved)[]) {
+        if (saved[key] === undefined) delete process.env[key];
+        else process.env[key] = saved[key];
+      }
+    };
+    process.env.APPDATA = 'C:\\Users\\Ada\\AppData\\Roaming';
+    process.env.LOCALAPPDATA = 'C:\\Users\\Ada\\AppData\\Local';
+    process.env.PATH = '/parent/bin';
+    process.env.REPLYSLIP_WATCHER_KEY = KEY;
+    let pid = 0;
+    try {
+      pid = spawnDetachedWatcher({
+        nodePath: process.execPath,
+        scriptPath: script,
+        name: 'Bot',
+        home,
+        pathEnv: '/supervised/bin',
+      }).pid;
+      const dumped = JSON.parse(await waitForText(out)) as {
+        APPDATA: string | null;
+        LOCALAPPDATA: string | null;
+        PATH: string | null;
+        REPLYSLIP_WATCHER_KEY: string | null;
+      };
+      expect(dumped.APPDATA).toBe('C:\\Users\\Ada\\AppData\\Roaming');
+      expect(dumped.LOCALAPPDATA).toBe('C:\\Users\\Ada\\AppData\\Local');
+      expect(dumped.PATH).toBe('/supervised/bin');
+      expect(dumped.REPLYSLIP_WATCHER_KEY).toBeNull();
+    } finally {
+      if (pid) {
+        try {
+          process.kill(pid);
+        } catch {
+          // The dump script has already exited.
+        }
+      }
+      restore();
+    }
+
+    delete process.env.APPDATA;
+    delete process.env.LOCALAPPDATA;
+    const missingHome = await tempHome();
+    const missingOut = path.join(missingHome, 'env.json');
+    const missingScript = path.join(missingHome, 'dump.mjs');
+    writeFileSync(
+      missingScript,
+      `import { writeFileSync } from 'node:fs';\nwriteFileSync(${JSON.stringify(missingOut)}, JSON.stringify({\n  APPDATA: process.env.APPDATA ?? null,\n  LOCALAPPDATA: process.env.LOCALAPPDATA ?? null,\n}));\n`,
+    );
+    let missingPid = 0;
+    try {
+      missingPid = spawnDetachedWatcher({
+        nodePath: process.execPath,
+        scriptPath: missingScript,
+        name: 'Bot',
+        home: missingHome,
+        pathEnv: '/supervised/bin',
+      }).pid;
+      const dumped = JSON.parse(await waitForText(missingOut)) as { APPDATA: string | null; LOCALAPPDATA: string | null };
+      expect(dumped.APPDATA).toBeNull();
+      expect(dumped.LOCALAPPDATA).toBeNull();
+    } finally {
+      if (missingPid) {
+        try {
+          process.kill(missingPid);
+        } catch {
+          // already exited
+        }
+      }
+      restore();
+    }
+
+    const installHome = await tempHome();
+    const installed = writeScript(installHome);
+    writeKey(installHome, 'Bot');
+    const appData = 'C:\\Users\\Ada\\AppData\\Roaming';
+    const localAppData = 'C:\\Users\\Ada\\AppData\\Local';
+    const result = await installSupervision('Bot', {
+      home: installHome,
+      platform: 'win32',
+      scriptPath: installed,
+      nodePath: 'C:\\Program Files\\nodejs\\node.exe',
+      env: { PATH: 'C:\\Windows\\System32', APPDATA: appData, LOCALAPPDATA: localAppData, REPLYSLIP_WATCHER_KEY: KEY },
+      run: async () => ({ code: 0, stdout: '', stderr: '' }),
+      spawnWatcher: () => ({ pid: 42 }),
+    });
+    expect(result.ok).toBe(true);
+    const cmd = readFileSync(path.join(installHome, '.replyslip', 'supervise', 'tick.cmd'), 'utf8');
+    expect(cmd).toContain(`set "APPDATA=${appData}"`);
+    expect(cmd).toContain(`set "LOCALAPPDATA=${localAppData}"`);
+    expect(cmd).not.toContain(KEY);
   });
 });
+
+async function waitForText(file: string): Promise<string> {
+  const start = Date.now();
+  while (Date.now() - start < 5_000) {
+    try {
+      return readFileSync(file, 'utf8');
+    } catch {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+  }
+  throw new Error(`timed out waiting for ${file}`);
+}

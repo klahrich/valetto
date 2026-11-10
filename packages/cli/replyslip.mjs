@@ -1156,8 +1156,14 @@ function validatePlanInputs(input) {
   if (input.orcaBin && /[\r\n\0]/.test(input.orcaBin)) {
     return { error: "REPLYSLIP_ORCA_BIN contains a newline. Supervision was not installed." };
   }
+  for (const [label, value] of [
+    ["APPDATA", input.appData],
+    ["LOCALAPPDATA", input.localAppData]
+  ]) {
+    if (value && /[\r\n\0]/.test(value)) return { error: `${label} contains a newline. Supervision was not installed.` };
+  }
   if (input.platform === "win32") {
-    for (const value of [input.nodePath, input.scriptPath, input.home, input.orcaBin ?? ""]) {
+    for (const value of [input.nodePath, input.scriptPath, input.home, input.orcaBin ?? "", input.appData ?? "", input.localAppData ?? ""]) {
       if (value.includes('"')) return { error: "A path contains a double quote. Supervision was not installed." };
     }
   }
@@ -1324,9 +1330,11 @@ function windowsCmd(input) {
     "setlocal",
     `set "PATH=${cmdPercent(input.pathEnv)}"`,
     `set "HOME=${cmdPercent(input.home)}"`,
-    `set "USERPROFILE=${cmdPercent(input.home)}"`,
-    'set "REPLYSLIP_SUPERVISED=1"'
+    `set "USERPROFILE=${cmdPercent(input.home)}"`
   ];
+  if (input.appData) lines.push(`set "APPDATA=${cmdPercent(input.appData)}"`);
+  if (input.localAppData) lines.push(`set "LOCALAPPDATA=${cmdPercent(input.localAppData)}"`);
+  lines.push('set "REPLYSLIP_SUPERVISED=1"');
   if (input.orcaBin) lines.push(`set "REPLYSLIP_ORCA_BIN=${cmdPercent(input.orcaBin)}"`);
   lines.push(`"${cmdPercent(input.nodePath)}" "${cmdPercent(input.scriptPath)}" supervise --once`);
   lines.push("");
@@ -1875,7 +1883,7 @@ function supervisedEnv(request, base = {}) {
     REPLYSLIP_SUPERVISED: "1"
   };
   if (request.orcaBin) env.REPLYSLIP_ORCA_BIN = request.orcaBin;
-  for (const key of ["SystemRoot", "WINDIR", "COMSPEC", "TEMP", "TMP", "LANG", "TMPDIR"]) {
+  for (const key of ["SystemRoot", "WINDIR", "COMSPEC", "TEMP", "TMP", "APPDATA", "LOCALAPPDATA", "LANG", "TMPDIR"]) {
     const value = base[key];
     if (value) env[key] = value;
   }
@@ -2355,6 +2363,8 @@ function planInput(io, scriptPath, nodePath) {
     scriptPath,
     pathEnv: io.env?.PATH ?? process.env.PATH ?? "",
     ...io.env?.REPLYSLIP_ORCA_BIN ? { orcaBin: io.env.REPLYSLIP_ORCA_BIN } : {},
+    ...io.env?.APPDATA ? { appData: io.env.APPDATA } : {},
+    ...io.env?.LOCALAPPDATA ? { localAppData: io.env.LOCALAPPDATA } : {},
     ...typeof (io.uid ?? process.getuid?.()) === "number" ? { uid: io.uid ?? process.getuid?.() } : {},
     ...io.label ? { label: io.label } : {},
     ...io.taskName ? { taskName: io.taskName } : {},
@@ -2610,6 +2620,14 @@ var ORCA_NOT_RUNNING = "Orca isn't running or its CLI isn't enabled (Settings \u
 var MIN_ORCA_VERSION = "1.4.199";
 var ORCA_WAIT_SUBMIT_SECONDS = "10";
 var ORCA_OLD_HOST_WARNING = `[replyslip] orca: this host refused --wait-submit (old-host). Fell back to a plain send and treated input_accepted as delivered. Orca ${MIN_ORCA_VERSION} or newer is the recommended minimum.`;
+var ORCA_UNKNOWN_FLAG_MESSAGE = `Orca rejected --wait-submit with "Unknown flag --wait-submit". Upgrade to Orca ${MIN_ORCA_VERSION} or newer. No input was sent.`;
+var ORCA_UNKNOWN_FLAG_WARNING = `[replyslip] orca: ${ORCA_UNKNOWN_FLAG_MESSAGE}`;
+function orcaTooOldMessage(version) {
+  return `Orca ${version} is older than ${MIN_ORCA_VERSION}. Upgrade to Orca ${MIN_ORCA_VERSION} or newer. --wait-submit was added in that release.`;
+}
+function parseOrcaVersion(text) {
+  return text.match(/(\d+\.\d+\.\d+)/)?.[1] ?? null;
+}
 var SEND_TIMEOUT_MS = 2e4;
 var QUICK_TIMEOUT_MS = 5e3;
 function orcaBinary(env = process.env) {
@@ -2690,9 +2708,16 @@ function createOrcaDriver(options) {
     if (receipt.down) return { ok: false, error: ORCA_NOT_RUNNING };
     return { ok: false, error: receipt.error };
   }
+  function rejectUnknownFlag(result) {
+    if (!isUnknownWaitSubmitFlag(result)) return null;
+    log(ORCA_UNKNOWN_FLAG_WARNING);
+    return { ok: false, error: ORCA_UNKNOWN_FLAG_MESSAGE };
+  }
   async function submit(handle, target, notice, allowRelist, waitSubmit = true) {
     const raw = await send(handle, notice, void 0, waitSubmit);
     if (!waitSubmit) return finishLegacy(raw, handle, target, notice, allowRelist);
+    const unknown = rejectUnknownFlag(raw);
+    if (unknown) return unknown;
     if (isOldHostReceipt(raw)) {
       log(ORCA_OLD_HOST_WARNING);
       return { ok: true };
@@ -2703,6 +2728,8 @@ function createOrcaDriver(options) {
     if (first.stale && allowRelist) return submitReplacement(target, notice, handle, true);
     if (first.ambiguous && first.retryRequest) {
       const retriedRaw = await send(handle, notice, first.retryRequest, true);
+      const retriedUnknown = rejectUnknownFlag(retriedRaw);
+      if (retriedUnknown) return retriedUnknown;
       if (isOldHostRefusal(retriedRaw)) {
         return finishLegacy(await send(handle, notice, void 0, false), handle, target, notice, allowRelist);
       }
@@ -2733,12 +2760,18 @@ function createOrcaDriver(options) {
     id: "orca",
     async check() {
       const result = await run(["status", "--json"], QUICK_TIMEOUT_MS);
-      if (isDown(result) || result.code !== 0 || result.timedOut) {
+      if (isDown(result)) return { ok: false, message: ORCA_NOT_RUNNING };
+      const payload = parseJson(result.stdout) ?? parseJson(result.stderr);
+      const root = record(payload);
+      const unavailable = root ? runtimeUnavailableDetail(root) : null;
+      if (unavailable) return { ok: false, message: `${ORCA_NOT_RUNNING}. ${unavailable}` };
+      const reported = typeof root?.version === "string" ? parseOrcaVersion(root.version) : null;
+      if (reported && !versionAtLeast(reported, MIN_ORCA_VERSION)) {
+        return { ok: false, version: reported, message: orcaTooOldMessage(reported) };
+      }
+      if (result.code !== 0 || result.timedOut || root?.ok === false) {
         return { ok: false, message: ORCA_NOT_RUNNING };
       }
-      const payload = parseJson(result.stdout);
-      const root = record(payload);
-      if (root && root.ok === false) return { ok: false, message: ORCA_NOT_RUNNING };
       const version = typeof root?.version === "string" ? root.version : void 0;
       return { ok: true, version };
     },
@@ -2792,6 +2825,17 @@ function errorText(payload, result) {
   if (typeof error?.message === "string" && error.message.trim()) return error.message.trim();
   if (result.timedOut) return "orca terminal send timed out";
   return `orca terminal send exited ${result.code}`;
+}
+function isUnknownWaitSubmitFlag(result) {
+  const text = `${result.stdout}
+${result.stderr}`;
+  return /unknown flag:?\s+['"]?--wait-submit(?![\w-])/i.test(text);
+}
+function runtimeUnavailableDetail(root) {
+  const error = record(root.error);
+  if (error?.code !== "runtime_unavailable") return null;
+  const message = typeof error.message === "string" ? error.message.trim() : "";
+  return message || null;
 }
 function isOldHostRefusal(result) {
   const text = `${result.stdout}
@@ -3257,7 +3301,7 @@ async function watch(options) {
 }
 
 // packages/cli/src/cli.ts
-var REPLYSLIP_VERSION = true ? "0.1.3" : "dev";
+var REPLYSLIP_VERSION = true ? "0.1.4" : "dev";
 var HELP = `replyslip ${REPLYSLIP_VERSION}: watcher and register CLI for Valetto (https://valetto.tech)
 
 Usage:
