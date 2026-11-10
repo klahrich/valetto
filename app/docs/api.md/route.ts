@@ -1,4 +1,4 @@
-import { apiReferenceMarkdown } from '@/lib/agent-docs';
+import { AGENT_DOC_CONTENT_TYPE, apiReferenceMarkdown } from '@/lib/agent-docs';
 import { publicOrigin } from '@/lib/origin';
 
 export const runtime = 'nodejs';
@@ -7,7 +7,7 @@ export const dynamic = 'force-dynamic';
 export function GET(req: Request) {
   return new Response(apiReferenceMarkdown(publicOrigin(req)), {
     headers: {
-      'content-type': 'text/markdown; charset=utf-8',
+      'content-type': AGENT_DOC_CONTENT_TYPE,
       'cache-control': 'no-store',
     },
   });

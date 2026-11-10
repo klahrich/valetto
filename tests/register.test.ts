@@ -90,4 +90,63 @@ describe('agent self-registration', () => {
     });
     expect(renamed.status).toBe(201);
   });
+
+  it('sets local delivery at register and rejects webhook plus delivery', async () => {
+    const session = await signIn();
+    const code = await createJoinCode(session.cookie);
+    const registered = await call(register, 'https://preview.example/api/v1/agents/register', {
+      bearer: code.secret,
+      headers: { 'x-forwarded-host': 'preview.example', 'x-forwarded-proto': 'https' },
+      body: {
+        name: 'OrcaBot',
+        delivery: { mode: 'local', driver: 'orca', target: 'tab1:leaf-uuid' },
+      },
+    });
+    expect(registered.status).toBe(201);
+    expect(registered.data.agent.delivery.mode).toBe('local');
+    expect(registered.data.agent.delivery.driver).toBe('orca');
+    expect(registered.data.agent.delivery.target).toBe('tab1:leaf-uuid');
+
+    const me = await mcpTool(registered.data.api_key, 'whoami', {});
+    expect(me.isError).toBe(false);
+    expect(me.payload.delivery.mode).toBe('local');
+    expect(me.payload.delivery.driver).toBe('orca');
+    expect(me.payload.delivery.target).toBe('tab1:leaf-uuid');
+
+    const secondCode = await createJoinCode(session.cookie);
+    const both = await call(register, 'http://localhost/api/v1/agents/register', {
+      bearer: secondCode.secret,
+      body: {
+        name: 'BothBot',
+        webhook: { url: 'https://example.com/hook', auth: { type: 'none' } },
+        delivery: { mode: 'local', driver: 'orca', target: 'tab1:leaf-uuid' },
+      },
+    });
+    expect(both.status).toBe(400);
+    expect(both.data.error.code).toBe('validation_error');
+
+    const still = await call(register, 'http://localhost/api/v1/agents/register', {
+      bearer: secondCode.secret,
+      body: { name: 'BothBot' },
+    });
+    expect(still.status).toBe(201);
+  });
+
+  it('rejects an invalid Orca pane key at register and leaves the code usable', async () => {
+    const session = await signIn();
+    const code = await createJoinCode(session.cookie);
+    const bad = await call(register, 'http://localhost/api/v1/agents/register', {
+      bearer: code.secret,
+      body: { name: 'BadPane', delivery: { mode: 'local', driver: 'orca', target: 'not-a-pane' } },
+    });
+    expect(bad.status).toBe(400);
+    const ok = await call(register, 'http://localhost/api/v1/agents/register', {
+      bearer: code.secret,
+      body: { name: 'BadPane', delivery: { mode: 'local', driver: 'herdr', target: 'dev-bot' } },
+    });
+    expect(ok.status).toBe(201);
+    expect(ok.data.agent.delivery.mode).toBe('local');
+    expect(ok.data.agent.delivery.driver).toBe('herdr');
+    expect(ok.data.agent.delivery.target).toBe('dev-bot');
+  });
 });

@@ -84,11 +84,14 @@ async function refuseExistingKeyFile(name: string, home: string | undefined, for
   throw new Error(`Refusing to overwrite ${target}. Pass --force to replace it.`);
 }
 
+export type LocalRegisterDelivery = { mode: 'local'; driver: string; target: string };
+
 export async function registerAgent(options: {
   name: string;
   description?: string;
   joinCode: string;
   relayUrl: string;
+  delivery?: LocalRegisterDelivery;
   home?: string;
   force?: boolean;
   fetchImpl?: typeof fetch;
@@ -108,6 +111,7 @@ export async function registerAgent(options: {
     body: JSON.stringify({
       name: options.name,
       ...(options.description ? { description: options.description } : {}),
+      ...(options.delivery ? { delivery: options.delivery } : {}),
     }),
   });
   let payload: unknown = null;
@@ -292,4 +296,74 @@ export async function renameRegisteredAgent(options: {
     }
   }
   return { name: savedName, path: nextPath, previousPath, shared };
+}
+
+function parseMcpJson(text: string): unknown {
+  const trimmed = text.trim();
+  if (trimmed.startsWith('{') || trimmed.startsWith('[')) return JSON.parse(trimmed) as unknown;
+  const dataLines = trimmed
+    .split('\n')
+    .filter((line) => line.startsWith('data:'))
+    .map((line) => line.slice(5).trim())
+    .filter(Boolean);
+  if (dataLines.length === 0) throw new Error('whoami failed: the server did not return JSON.');
+  return JSON.parse(dataLines[dataLines.length - 1]!) as unknown;
+}
+
+/** Calls the MCP whoami tool with the saved key. Errors never include the key. */
+export async function callWhoami(options: {
+  name: string;
+  home?: string;
+  fetchImpl?: typeof fetch;
+}): Promise<{ name: string; delivery: unknown; workspace?: string }> {
+  const creds = await readAgentCredentials(options.name, { home: options.home });
+  const raw = JSON.parse(await readFile(creds.path, 'utf8')) as { mcp_url?: unknown };
+  const mcpUrl = typeof raw.mcp_url === 'string' && raw.mcp_url.trim()
+    ? raw.mcp_url.trim()
+    : `${creds.relayUrl ?? 'https://valetto.tech'}/api/mcp`;
+  const fetchImpl = options.fetchImpl ?? fetch;
+  const response = await fetchImpl(mcpUrl, {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${creds.apiKey}`,
+      'content-type': 'application/json',
+      accept: 'application/json, text/event-stream',
+    },
+    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'whoami', arguments: {} } }),
+  });
+  let body = '';
+  try {
+    body = await response.text();
+  } catch {
+    body = '';
+  }
+  if (!response.ok) {
+    throw new Error(`whoami failed (HTTP ${response.status}). Check the MCP URL and the key file, and do not print the key.`);
+  }
+  let rpc: { error?: { message?: unknown }; result?: { isError?: unknown; content?: { type: string; text?: string }[] } };
+  try {
+    rpc = parseMcpJson(body) as typeof rpc;
+  } catch {
+    throw new Error('whoami failed: the server did not return JSON.');
+  }
+  if (rpc.error) {
+    throw new Error(typeof rpc.error.message === 'string' ? rpc.error.message : 'whoami failed.');
+  }
+  const content = rpc.result?.content?.find((item) => item.type === 'text');
+  if (!content?.text) throw new Error('whoami failed: the tool returned no text.');
+  let payload: { name?: unknown; delivery?: unknown; workspace?: unknown; workspace_name?: unknown };
+  try {
+    payload = JSON.parse(content.text) as typeof payload;
+  } catch {
+    throw new Error('whoami failed: the tool result was not JSON.');
+  }
+  if (typeof payload.name !== 'string' || !payload.name) {
+    throw new Error('whoami failed: the result had no agent name.');
+  }
+  const workspace = typeof payload.workspace === 'string'
+    ? payload.workspace
+    : typeof payload.workspace_name === 'string'
+      ? payload.workspace_name
+      : undefined;
+  return { name: payload.name, delivery: payload.delivery ?? null, workspace };
 }

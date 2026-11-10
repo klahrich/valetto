@@ -138,6 +138,88 @@ describe('replyslip register', () => {
     expect(shared.err.join('\n')).toMatch(/REPLYSLIP_JOIN_CODE/);
     expect([...shared.out, ...shared.err].join('\n')).not.toContain('rjc_shared_burned');
   });
+
+  it('sends local delivery when --driver and --target are set', async () => {
+    const home = await mkdtemp(path.join(tmpdir(), 'replyslip-'));
+    const io = capture();
+    const bodies: string[] = [];
+    const fetchImpl: typeof fetch = async (_input, init) => {
+      bodies.push(typeof init?.body === 'string' ? init.body : '');
+      return new Response(
+        JSON.stringify({
+          api_key: KEY,
+          agent: { id: '11111111-1111-4111-8111-111111111111', created_at: '2026-10-24T00:00:00.000Z' },
+          mcp: { url: 'https://valetto.tech/api/mcp' },
+        }),
+        { status: 201, headers: { 'content-type': 'application/json' } },
+      );
+    };
+    const code = await runReplyslip(
+      ['register', '--join-code', 'rjc_x', '--name', 'OrcaBot', '--driver', 'orca', '--target', 'tab1:leaf-uuid'],
+      { home, env: {}, fetchImpl, stdout: io.stdout, stderr: io.stderr },
+    );
+    expect(code).toBe(0);
+    expect(JSON.parse(bodies[0] as string)).toEqual({
+      name: 'OrcaBot',
+      delivery: { mode: 'local', driver: 'orca', target: 'tab1:leaf-uuid' },
+    });
+    expect(io.out.join('\n')).toContain('delivery set to orca tab1:leaf-uuid');
+    expect([...io.out, ...io.err].join('\n')).not.toContain(KEY);
+  });
+
+  it('refuses --driver without --target', async () => {
+    const home = await mkdtemp(path.join(tmpdir(), 'replyslip-'));
+    const io = capture();
+    let fetched = false;
+    const code = await runReplyslip(['register', '--join-code', 'rjc_x', '--name', 'OrcaBot', '--driver', 'orca'], {
+      home,
+      env: {},
+      fetchImpl: async () => {
+        fetched = true;
+        return new Response('{}', { status: 500 });
+      },
+      stdout: io.stdout,
+      stderr: io.stderr,
+    });
+    expect(code).toBe(1);
+    expect(fetched).toBe(false);
+    expect(io.err.join('\n')).toMatch(/--driver and --target/);
+  });
+
+  it('prints whoami without the key', async () => {
+    const home = await mkdtemp(path.join(tmpdir(), 'replyslip-'));
+    const io = capture();
+    const fetchImpl: typeof fetch = async () =>
+      new Response(
+        JSON.stringify({
+          api_key: KEY,
+          agent: { id: '11111111-1111-4111-8111-111111111111', created_at: '2026-10-24T00:00:00.000Z' },
+          mcp: { url: 'https://valetto.tech/api/mcp' },
+        }),
+        { status: 201, headers: { 'content-type': 'application/json' } },
+      );
+    expect(await runReplyslip(['register', '--join-code', 'rjc_x', '--name', 'OrcaBot'], {
+      home, env: {}, fetchImpl, stdout: io.stdout, stderr: io.stderr,
+    })).toBe(0);
+    const who = capture();
+    const whoFetch: typeof fetch = async (_input, init) => {
+      const auth = new Headers(init?.headers).get('authorization');
+      expect(auth).toBe(`Bearer ${KEY}`);
+      return new Response(
+        JSON.stringify({
+          jsonrpc: '2.0',
+          id: 1,
+          result: { content: [{ type: 'text', text: JSON.stringify({ name: 'OrcaBot', workspace: 'Acme', delivery: { mode: 'none' } }) }] },
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
+    };
+    expect(await runReplyslip(['whoami', '--name', 'OrcaBot'], {
+      home, env: {}, fetchImpl: whoFetch, stdout: who.stdout, stderr: who.stderr,
+    })).toBe(0);
+    expect(who.out).toEqual(['OrcaBot', 'workspace Acme', 'delivery {"mode":"none"}']);
+    expect([...who.out, ...who.err].join('\n')).not.toContain(KEY);
+  });
 });
 
 describe('replyslip watch --key-file', () => {

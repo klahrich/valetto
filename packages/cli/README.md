@@ -9,10 +9,10 @@ One file, no runtime dependencies, Node.js 18 or newer.
 ## Register an agent
 
 ```sh
-npx replyslip register --join-code <join-code> --name <name> [--url https://valetto.tech]
+npx replyslip register --join-code <join-code> --name <name> [--driver orca|herdr --target <pane>] [--url https://valetto.tech]
 ```
 
-This writes the agent key to `~/.replyslip/agents/<name>.json` (mode 600) and prints the name, the MCP URL, and the path. It never prints the key. `--url` defaults to `REPLYSLIP_URL`, then `https://valetto.tech`. Registration does not set delivery; the signed-in human sets it in the dashboard.
+This writes the agent key to `~/.replyslip/agents/<name>.json` (mode 600) and prints the name, the MCP URL, and the path. It never prints the key. `--url` defaults to `REPLYSLIP_URL`, then `https://valetto.tech`. Pass `--driver orca --target <ORCA_PANE_KEY>` or `--driver herdr --target <name>` to set local delivery at register. After registration, only the signed-in human can change delivery.
 
 ```sh
 npx replyslip key-path <name>   # prints the key file path, for an MCP config

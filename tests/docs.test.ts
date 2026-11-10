@@ -28,7 +28,7 @@ describe('agent docs', () => {
 
     const skillRes = await skill(docsRequest('/skill.md'));
     expect(skillRes.status).toBe(200);
-    expect(skillRes.headers.get('content-type')).toContain('text/markdown');
+    expect(skillRes.headers.get('content-type')).toContain('text/plain');
     const skillBody = await skillRes.text();
     expect(skillBody).toMatch(/^---\nname: replyslip\ndescription: .+\n---/);
     expect(skillBody).toContain('create_task');
@@ -38,25 +38,53 @@ describe('agent docs', () => {
     expect(skillBody).toContain('https://preview.example/api/v1/agents/register');
     expect(skillBody).toContain('Bearer <api_key>');
     expect(skillBody).toContain('Substitute the `api_key`');
+    expect(skillBody).toContain('## Setup checklist');
+    expect(skillBody.indexOf('## Setup checklist')).toBeLessThan(skillBody.indexOf('## Set yourself up as a local agent'));
     expect(skillBody).toContain('## Set yourself up as a local agent');
+    expect(skillBody).toContain('Delivery never blocks registration');
+    expect(skillBody).toContain('### Done when');
+    expect(skillBody).toContain('JOIN_CODE');
+    expect(skillBody).toContain('Call the MCP tool `whoami`');
+    expect(skillBody).toContain('curl.exe -sL');
+    expect(skillBody).toContain('$env:ORCA_PANE_KEY');
+    expect(skillBody).toContain('--driver orca --target');
+    expect(skillBody).toContain('register --join-code JOIN_CODE --name AGENT_NAME --url https://preview.example');
+    expect(skillBody).toContain('printf \'%s\\n\' "${ORCA_PANE_KEY-}"');
+    expect(skillBody).not.toContain('${origin}');
+    expect(skillBody).not.toContain('\r');
+    expect(skillBody).toContain('node "$HOME/.replyslip/replyslip.mjs" register --join-code JOIN_CODE --name AGENT_NAME --url https://preview.example');
+    expect(skillBody).not.toContain('If `ORCA_PANE_KEY` is unset, stop');
+    expect(skillBody).not.toContain('Stop here.');
+    expect(skillBody).not.toContain('Register cannot');
     expect(skillBody).toContain('Send test wake');
+    expect(skillBody).toContain("check that the dashboard Pane value equals this pane's `ORCA_PANE_KEY`");
+    const checklist = skillBody.slice(skillBody.indexOf('## Setup checklist'), skillBody.indexOf('## Set yourself up as a local agent'));
+    expect(checklist).not.toContain('rename_agent');
+    expect(checklist).not.toContain('replyslip -- rename');
+    expect(skillBody).toContain('rename_agent');
+    expect(skillBody).toContain('npm run replyslip -- rename --to <new-name>');
     expect(skillBody).toContain('/replyslip.mjs.sha256');
-    expect(llmsBody).toContain('Set yourself up as a local agent');
+    expect(llmsBody).toContain('Setup checklist');
+    expect(llmsBody).toContain('Delivery never blocks registration');
+    expect(llmsBody).toContain('--url https://preview.example');
 
     const guide = await gettingStarted(docsRequest('/docs/getting-started.md'));
     expect(guide.status).toBe(200);
-    expect(guide.headers.get('content-type')).toContain('text/markdown');
+    expect(guide.headers.get('content-type')).toContain('text/plain');
     const guideBody = await guide.text();
     for (const word of ['open', 'needs_info', 'done', 'failed', 'join code', 'send_message', 'ask', 'fail_task']) {
       expect(guideBody.toLowerCase()).toContain(word);
     }
     expect(guideBody).toContain('Bearer <api_key>');
     expect(guideBody).toContain('Substitute this value into the Authorization header.');
-    expect(guideBody).toContain('Set yourself up as a local agent');
+    expect(guideBody).toContain('Setup checklist');
+    expect(guideBody).toContain('Delivery never blocks registration');
+    expect(guideBody).toContain('--url https://preview.example');
+    expect(guideBody).toContain('$env:ORCA_PANE_KEY');
 
     const api = await apiDoc(docsRequest('/docs/api.md'));
     expect(api.status).toBe(200);
-    expect(api.headers.get('content-type')).toContain('text/markdown');
+    expect(api.headers.get('content-type')).toContain('text/plain');
     const apiBody = await api.text();
     expect(apiBody).toContain('https://preview.example/api/mcp');
     expect(apiBody).toContain('/api/v1/auth/request-code');

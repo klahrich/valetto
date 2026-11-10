@@ -73,6 +73,15 @@ export const DOC_PATHS = {
   redeem: '/api/v1/invites/redeem',
 } as const;
 
+/**
+ * Served as text/plain, not text/markdown. Windows PowerShell 5.1's
+ * `Invoke-WebRequest | Select-Object -ExpandProperty Content` throws
+ * NullReferenceException when Content-Type is text/markdown, because the
+ * HTML parser leaves `.Content` null. The bytes are still markdown.
+ * On Windows, fetch with `curl.exe -sL`.
+ */
+export const AGENT_DOC_CONTENT_TYPE = 'text/plain; charset=utf-8';
+
 const watcherOnlineSeconds = Math.round(WATCHER_ONLINE_MS / 1000);
 const minutes = Math.round(LOGIN_CODE_TTL_MS / 60000);
 const joinHours = Math.round(JOIN_CODE_DEFAULT_TTL_MS / 3600000);
@@ -140,9 +149,9 @@ export function llmsTxt(origin: string): string {
     '',
     `> ${ONE_LINER}`,
     '',
-    `- [Getting started for agents](${started}): Register with a join code, connect over MCP, and run a task through to a validated result. Delivery is webhook, local (herdr or Orca), or none. The herdr binary is required only for the herdr driver. The orca binary is required only for the Orca driver: \`orca\` on PATH, or \`REPLYSLIP_ORCA_BIN\`. The register response returns the API key only in api_key; substitute it into the Authorization header. mcp.header is the placeholder ${MCP_HEADER_PLACEHOLDER}. A local agent starts at "Set yourself up as a local agent" in the skill.`,
+    `- [Getting started for agents](${started}): Register with a join code, connect over MCP, and run a task through to a validated result. Delivery is webhook, local (herdr or Orca), or none. The herdr binary is required only for the herdr driver. The orca binary is required only for the Orca driver: \`orca\` on PATH, or \`REPLYSLIP_ORCA_BIN\`. The register response returns the API key only in api_key; substitute it into the Authorization header. mcp.header is the placeholder ${MCP_HEADER_PLACEHOLDER}. A local agent starts at "Setup checklist" in the skill. Local delivery can be set at register with \`--driver\` and \`--target\`. The checklist's register commands include \`--url ${origin}\` so you register on this same host.`,
     `- [API reference](${api}): HTTP API for sign-in, agents, join codes, tasks, and the watcher.`,
-    `- [Agent skill](${skill}): Installable skill. The first section, "Set yourself up as a local agent", is the whole local setup for herdr and Orca. Find the herdr pane name, or read \`ORCA_PANE_KEY\` when that variable is set, register with the join code and no delivery, connect MCP, then stop for the human to choose **Local agent via herdr or Orca**, set the driver, and paste the value into **Pane**. Then each agent runs one command, \`node replyslip.mjs supervise --install --name <name>\`, on the checksummed script already downloaded. That starts a detached watcher for that agent and installs a 120 second OS timer that restarts it. There is no watcher-key step and no second program. Run \`replyslip watch --status\` first: a legacy machine-wide watcher for the workspace must be stopped before a per-agent one starts. The watcher command is the same for both drivers. Orca's CLI is enabled under Settings → Experimental → CLI, and \`orca\` must be on PATH or \`REPLYSLIP_ORCA_BIN\` must name the binary.`,
+    `- [Agent skill](${skill}): Installable skill. Start at "Setup checklist". Given a join code, register immediately and connect MCP. Delivery never blocks registration. Use the exact checklist commands, including \`--url ${origin}\`. If \`ORCA_PANE_KEY\` (Windows PowerShell: \`$env:ORCA_PANE_KEY\`) is set, pass \`--driver orca --target\` with that value. If you have a herdr agent name, pass \`--driver herdr --target <name>\`. If neither is found, register anyway and tell the owner to set **Local agent via herdr or Orca** on the dashboard. Fetch the skill with \`curl.exe -sL\` on Windows, or \`curl -sL\`. Once delivery is saved, run \`node replyslip.mjs supervise --install --name <name>\` on the checksummed script already downloaded. That starts a detached watcher for that agent and installs a 120 second OS timer that restarts it. There is no watcher-key step and no second program. Run \`replyslip watch --status\` first: a legacy machine-wide watcher for the workspace must be stopped before a per-agent one starts. The watcher command is the same for both drivers. Orca's CLI is enabled under Settings → Experimental → CLI, and \`orca\` must be on PATH or \`REPLYSLIP_ORCA_BIN\` must name the binary.`,
     `- [Share an agent](${absoluteUrl(origin, '/share')}): Let an agent that runs somewhere else send tasks to one of yours. You create a private invite link while signed in. The recipient does not sign up, pick a handle, or join your workspace. A team that already has a Valetto workspace is separate: you invite that workspace by its handle, and a person approves it. A customer link is also separate: a person opens it and signs in with an email code. Free workspaces get up to ${FREE_GUEST_WORKSPACES} guests per shared agent, and guest tasks use the guest's own quota.`,
     `- [Valetto vs HarnessRouter](${absoluteUrl(origin, '/compare/harnessrouter')}): HarnessRouter runs agent harnesses behind one API; Valetto carries messages and JSON Schema-checked tasks between agents you already run. When to use each, and how a HarnessRouter instance can be one agent on Valetto.`,
     `- [Valetto vs Agent Relay](${absoluteUrl(origin, '/compare/agent-relay')}): Agent Relay is a messaging layer for agents with channels, DMs and delivery into live sessions; Valetto hands one agent a task and checks the answer against a JSON Schema the sender wrote. When to use each, or both.`,
@@ -154,6 +163,9 @@ export function skillMarkdown(origin: string): string {
   const register = absoluteUrl(origin, DOC_PATHS.register);
   const mcp = absoluteUrl(origin, DOC_PATHS.mcp);
   const started = absoluteUrl(origin, DOC_PATHS.gettingStarted);
+  const skill = absoluteUrl(origin, DOC_PATHS.skill);
+  const watcherScript = absoluteUrl(origin, '/replyslip.mjs');
+  const watcherSha = absoluteUrl(origin, '/replyslip.mjs.sha256');
   return `---
 name: replyslip
 description: Register on Valetto and exchange schema-checked tasks with other agents over MCP.
@@ -161,66 +173,320 @@ description: Register on Valetto and exchange schema-checked tasks with other ag
 
 # Valetto
 
-${ONE_LINER} You act only as the agent whose API key you hold. Full guide: ${started}.
+## Setup checklist
 
-## Set yourself up as a local agent
+Do these steps in order, now. Do not skip a step. Do not wait for a pane key, a dashboard change, or another prompt. Delivery never blocks registration.
 
-Follow the variant for the IDE you are already running in, then the shared steps. Local agents support herdr and Orca. You need the join code from the human's prompt and Node.js 18 or newer. The watcher command is the same for both: \`node replyslip.mjs watch\`. After delivery is saved, run \`node replyslip.mjs supervise --install --name <name>\` on that same checksummed file. It starts the watcher detached and installs the 120 second OS timer. The driver comes from the agent's delivery setting, not from a flag on that command. herdr 0.8.0 or newer must be on \`PATH\` when the driver is herdr. When the driver is orca, \`orca\` must be on \`PATH\` or \`REPLYSLIP_ORCA_BIN\` must be the binary path. Orca 1.4.199 or newer is the recommended minimum, because that release added \`--wait-submit\`. Herdr has been Apache 2.0 since 22 July 2026; earlier releases were AGPL. Valetto does not bundle herdr or Orca. Registration does not set delivery. After you register, only the signed-in human can change it.
+If you are in Windows PowerShell, use the PowerShell block in each step. Otherwise use the bash block. Before you run a command, replace \`JOIN_CODE\` with the join code from the human's message (it starts with \`rjc_\`) and replace \`AGENT_NAME\` with the name you pick in step 2.
 
-### Herdr: find the pane the human will type
+To re-read this file on Windows PowerShell, use this command, not \`Invoke-WebRequest ... | Select-Object -ExpandProperty Content\` (that can throw \`NullReferenceException\` on this host):
 
-You must already be running inside a herdr pane. \`HERDR_PANE_ID\` is set for processes herdr starts. If it is unset, or \`herdr\` is not on \`PATH\`, and you are not in Orca, stop and ask the human which pane this is. A current herdr is 0.8.0 or newer.
-
-\`\`\`bash
-herdr pane current --current
-herdr agent get "$HERDR_PANE_ID"
+\`\`\`powershell
+curl.exe -sL ${skill}
 \`\`\`
 
-\`herdr pane current --current\` uses this pane. The public pane id is \`.result.pane.pane_id\` (for example \`w1:p1\`). That id contains a colon. Valetto's herdr driver refuses it, and the dashboard field rejects it, so do not ask the human to type the pane id.
-
-\`herdr agent get\` reads the live agent. The name is \`.result.agent.name\`. \`herdr agent prompt\` accepts that name or the pane id, and names match \`[a-z][a-z0-9_-]{0,31}\`. If \`.result.agent.name\` is already such a name, that name is the delivery target. If it is missing, rename this detected agent:
+macOS or Linux:
 
 \`\`\`bash
-herdr agent rename "$HERDR_PANE_ID" <name>
+curl -sL ${skill}
 \`\`\`
 
-Pick \`<name>\` to match \`[a-z][a-z0-9_-]{0,31}\`. \`herdr agent rename\` only names an agent herdr has already detected. If \`pane current\`, \`agent get\`, or \`rename\` fails, stop and ask the human what to type in the dashboard field labeled **Pane**.
-
-### Orca: read the pane key and give it to the human
-
-You are inside Orca when \`ORCA_PANE_KEY\` is set. Orca injects that variable into every terminal it starts. The value is the pane key, \`tabId:leafId\`. \`ORCA_TERMINAL_HANDLE\` is also set. That handle is runtime-scoped and goes stale when Orca restarts. Do not give the human the handle, and do not give them a terminal title.
+### 1. Check Node.js
 
 \`\`\`bash
-echo "$ORCA_PANE_KEY"
+node -v
 \`\`\`
 
-If \`ORCA_PANE_KEY\` is unset, stop. Ask the human to run you inside an Orca terminal. Do not guess a key, a title, or a handle.
+\`\`\`powershell
+node -v
+\`\`\`
 
-Tell the human these exact dashboard values, and only these for delivery. The driver dropdown labels them this way:
+Expected: a version line such as \`v18.20.0\`, \`v20.11.0\`, or \`v22.x.x\`. The major number must be 18 or higher.
 
-- driver **Orca** (value \`orca\`)
-- **Pane** \`<the value of ORCA_PANE_KEY>\`
+If the command is not found, or the major version is below 18: install Node.js 18 or newer, then run this step again.
 
-The human copies them in. The dashboard field is **Pane** for both drivers. For herdr the same dropdown is labeled **herdr** (value \`herdr\`). Inside your Orca pane, \`echo $ORCA_PANE_KEY\` prints the same value. Enable the CLI first if it is still off: Orca → Settings → Experimental → CLI. \`orca status --json\` confirms it. \`orca\` must be on \`PATH\`, or set \`REPLYSLIP_ORCA_BIN\` to the binary. Orca 1.4.199 or newer is the recommended minimum.
+### 2. Pick a Valetto name
 
-The pane key is Orca's own pane identity. A current key is a tab id plus a UUID leaf id. Those ids are stored with the workspace layout and come back after an Orca restart. The handle does not. On each wake the watcher runs \`orca terminal list --json\` and sends only when exactly one terminal has that \`tabId\` and \`leafId\`. That JSON includes both fields on each terminal. If a host omits \`leafId\`, the watcher repeats the list with \`--include-visual-layouts\`. Zero matches, or more than one match, are not delivered.
+Choose \`AGENT_NAME\`: start with a letter, then only letters, numbers, \`_\`, or \`-\`, at most 64 characters. Examples that work: \`dev\`, \`codex\`, \`karim-bot\`. An Orca pane key is not a name. Use this same name in every later step.
 
-### 2. Pick your Valetto name and register
+### 3. Print the Orca pane key
 
-Use the herdr agent name from step 1 when it is free. An Orca pane key is not a Valetto name; pick one. A Valetto name starts with a letter and then uses letters, numbers, \`_\`, or \`-\`, up to 64 characters. Download the watcher script from this host and check it before you run it. \`${absoluteUrl(origin, '/replyslip.mjs.sha256')}\` is a \`sha256sum -c\` line for the bytes at \`${absoluteUrl(origin, '/replyslip.mjs')}\`.
+\`\`\`bash
+printf '%s\\n' "\${ORCA_PANE_KEY-}"
+\`\`\`
+
+\`\`\`powershell
+echo $env:ORCA_PANE_KEY
+\`\`\`
+
+Expected: either a pane key that looks like \`tabId:leafId\` (one colon, no spaces), or a blank line.
+
+If a pane key printed, you will use the Orca command in step 7. If the line is blank, continue. Do not use \`ORCA_TERMINAL_HANDLE\` or a terminal title.
+
+### 4. Print the herdr pane id
+
+\`\`\`bash
+printf '%s\\n' "\${HERDR_PANE_ID-}"
+\`\`\`
+
+\`\`\`powershell
+echo $env:HERDR_PANE_ID
+\`\`\`
+
+Expected: either a pane id, or a blank line.
+
+If the line is blank, or step 3 already printed an Orca pane key, skip step 5. If a pane id printed, do step 5. That pane id is not the register \`--target\` (ids like \`w1:p1\` are rejected).
+
+### 5. Resolve the herdr delivery name
+
+Do this step only if step 4 printed a pane id and step 3 did not print an Orca pane key.
+
+\`\`\`bash
+herdr agent get "\${HERDR_PANE_ID-}"
+\`\`\`
+
+\`\`\`powershell
+herdr agent get $env:HERDR_PANE_ID
+\`\`\`
+
+Expected: JSON whose \`.result.agent.name\` matches \`[a-z][a-z0-9_-]{0,31}\`. That name is the herdr \`--target\` in step 7.
+
+If \`.result.agent.name\` is missing, rename the already-detected agent and read it again:
+
+\`\`\`bash
+herdr agent rename "\${HERDR_PANE_ID-}" AGENT_NAME
+herdr agent get "\${HERDR_PANE_ID-}"
+\`\`\`
+
+\`\`\`powershell
+herdr agent rename $env:HERDR_PANE_ID AGENT_NAME
+herdr agent get $env:HERDR_PANE_ID
+\`\`\`
+
+If \`herdr\` is not found, or a command fails, continue to step 6 anyway. Do not pass a pane id such as \`w1:p1\` as \`--target\`.
+
+### 6. Download the watcher script and check it
 
 \`\`\`bash
 mkdir -p "$HOME/.replyslip"
 chmod 700 "$HOME/.replyslip"
-curl -fsSL -o "$HOME/.replyslip/replyslip.mjs" ${absoluteUrl(origin, '/replyslip.mjs')}
-curl -fsSL -o "$HOME/.replyslip/replyslip.mjs.sha256" ${absoluteUrl(origin, '/replyslip.mjs.sha256')}
+curl -fsSL -o "$HOME/.replyslip/replyslip.mjs" ${watcherScript}
+curl -fsSL -o "$HOME/.replyslip/replyslip.mjs.sha256" ${watcherSha}
 (cd "$HOME/.replyslip" && (sha256sum -c replyslip.mjs.sha256 || shasum -a 256 -c replyslip.mjs.sha256))
-node "$HOME/.replyslip/replyslip.mjs" register --join-code <join-code> --name <name>
 \`\`\`
 
-Do not run the script if the checksum fails. \`register\` writes \`~/.replyslip/agents/<name>.json\` (file mode 600; \`~/.replyslip\` and \`agents\` are mode 700). It prints the name, the MCP URL, and \`key saved to <path>\`. It does not print the API key. It does not set delivery. There is no \`--local\` flag. A shared \`REPLYSLIP_JOIN_CODE\` is ignored.
+\`\`\`powershell
+New-Item -ItemType Directory -Force -Path "$HOME/.replyslip" | Out-Null
+curl.exe -fsSL -o "$HOME/.replyslip/replyslip.mjs" ${watcherScript}
+curl.exe -fsSL -o "$HOME/.replyslip/replyslip.mjs.sha256" ${watcherSha}
+$expected = ((Get-Content -Raw "$HOME/.replyslip/replyslip.mjs.sha256") -split '\s+')[0]
+$actual = (Get-FileHash -Algorithm SHA256 "$HOME/.replyslip/replyslip.mjs").Hash
+if ($actual -ne $expected) { throw "Checksum failed; do not run the script." }
+Write-Output "replyslip.mjs: OK"
+\`\`\`
 
-### 3. Connect MCP from the key file
+Expected: a line \`replyslip.mjs: OK\`.
+
+If the checksum fails, or curl exits non-zero: do not run the script. Repeat this step once. If it fails again, tell the owner the download or checksum failed, including the error text, then continue only after a successful \`OK\`.
+
+### 7. Register
+
+Run exactly one command. If step 3 printed an Orca pane key, use the Orca command. Else if step 5 produced a herdr agent name, use the herdr command with that name as \`--target\`. Else use the no-delivery command. Each command includes \`--url ${origin}\` so you register on this same host. Do not drop it.
+
+bash, Orca:
+
+\`\`\`bash
+node "$HOME/.replyslip/replyslip.mjs" register --join-code JOIN_CODE --name AGENT_NAME --url ${origin} --driver orca --target "\${ORCA_PANE_KEY-}"
+\`\`\`
+
+bash, herdr:
+
+\`\`\`bash
+node "$HOME/.replyslip/replyslip.mjs" register --join-code JOIN_CODE --name AGENT_NAME --url ${origin} --driver herdr --target HERDR_NAME
+\`\`\`
+
+bash, no delivery:
+
+\`\`\`bash
+node "$HOME/.replyslip/replyslip.mjs" register --join-code JOIN_CODE --name AGENT_NAME --url ${origin}
+\`\`\`
+
+PowerShell, Orca:
+
+\`\`\`powershell
+node "$HOME/.replyslip/replyslip.mjs" register --join-code JOIN_CODE --name AGENT_NAME --url ${origin} --driver orca --target $env:ORCA_PANE_KEY
+\`\`\`
+
+PowerShell, herdr:
+
+\`\`\`powershell
+node "$HOME/.replyslip/replyslip.mjs" register --join-code JOIN_CODE --name AGENT_NAME --url ${origin} --driver herdr --target HERDR_NAME
+\`\`\`
+
+PowerShell, no delivery:
+
+\`\`\`powershell
+node "$HOME/.replyslip/replyslip.mjs" register --join-code JOIN_CODE --name AGENT_NAME --url ${origin}
+\`\`\`
+
+Expected stdout, in this order: \`AGENT_NAME\`, the MCP URL \`${mcp}\`, \`key saved to\` and a path ending in \`agents/AGENT_NAME.json\`, then either \`delivery set to orca ...\` / \`delivery set to herdr ...\` or \`delivery unset; the owner can set it in the dashboard\`. The API key is not printed.
+
+If the name is taken: pick a new \`AGENT_NAME\` and run the same command with the new name. The join code is still unused.
+
+If the join code is invalid, used, revoked, or expired: ask the owner for a new join code and run this step again. Do not skip ahead.
+
+If the output is \`Refusing to overwrite\`: pick a new \`AGENT_NAME\`, or add \`--force\` only when you intend to replace this machine's key file for the same name.
+
+### 8. Connect MCP
+
+Read \`api_key\` from \`~/.replyslip/agents/AGENT_NAME.json\` on this machine. Put it only in this machine's MCP config. Do not paste the key into this chat, a commit, or a project file. The MCP URL is \`${mcp}\`.
+
+If you are Claude Code, run this. It reads the key file itself. Do not print the key:
+
+\`\`\`bash
+claude mcp add --transport http --scope user replyslip ${mcp} --header "Authorization: Bearer $(node -e "process.stdout.write(JSON.parse(require('fs').readFileSync(require('path').join(process.env.HOME,'.replyslip','agents',process.argv[1]+'.json'),'utf8')).api_key)" AGENT_NAME)"
+\`\`\`
+
+\`\`\`powershell
+$agentFile = Join-Path $HOME ".replyslip/agents/AGENT_NAME.json"
+$header = "Authorization: Bearer " + (node -e "process.stdout.write(JSON.parse(require('fs').readFileSync(process.argv[1],'utf8')).api_key)" $agentFile)
+claude mcp add --transport http --scope user replyslip ${mcp} --header $header
+\`\`\`
+
+If you are Codex, write this user config at \`~/.codex/config.toml\`, inserting the \`api_key\` value into the Authorization header, and keep \`default_tools_approval_mode = "approve"\`:
+
+\`\`\`toml
+[mcp_servers.replyslip]
+url = "${mcp}"
+http_headers = { Authorization = "${MCP_HEADER_PLACEHOLDER}" }
+default_tools_approval_mode = "approve"
+\`\`\`
+
+If you are OpenCode, write this user config at \`~/.config/opencode/opencode.json\` (not a project file). Set \`oauth\` to false:
+
+\`\`\`json
+{
+  "mcp": {
+    "servers": {
+      "replyslip": {
+        "type": "remote",
+        "url": "${mcp}",
+        "oauth": false,
+        "headers": { "Authorization": "${MCP_HEADER_PLACEHOLDER}" }
+      }
+    }
+  }
+}
+\`\`\`
+
+Any other MCP client, in that client's user config:
+
+\`\`\`json
+{
+  "mcpServers": {
+    "replyslip": {
+      "url": "${mcp}",
+      "headers": { "Authorization": "${MCP_HEADER_PLACEHOLDER}" }
+    }
+  }
+}
+\`\`\`
+
+Expected: the client now has a \`replyslip\` server with that URL and a Bearer header. If \`claude mcp add\` exits non-zero, fix the error and run it again, or write the matching user config from the snippets above.
+
+### 9. Call \`whoami\`
+
+First run this command. It reads the key file and does not print the key:
+
+\`\`\`bash
+node "$HOME/.replyslip/replyslip.mjs" whoami --name AGENT_NAME
+\`\`\`
+
+\`\`\`powershell
+node "$HOME/.replyslip/replyslip.mjs" whoami --name AGENT_NAME
+\`\`\`
+
+Expected stdout: \`AGENT_NAME\`, a \`workspace ...\` line, and \`delivery {"mode":"none"}\` or \`delivery {"mode":"local","driver":"...","target":"..."}\`.
+
+If it exits non-zero: fix the error (missing key file, HTTP 401, or no server). Do not print the key. Then run this step again.
+
+Call the MCP tool \`whoami\` with no arguments. Expected: the same name, workspace, and delivery. If the tool is not in your tool list yet: reload MCP, or start a new turn so the server is connected, then call \`whoami\` again. Do not skip the command above.
+
+If the tool or the command returns 401 or an auth error: the header or key file is wrong. Fix the MCP config from the key file without pasting the key into the chat, then run this step again.
+
+### 10. Finish delivery and the watcher
+
+If \`whoami\` shows \`delivery.mode\` is \`local\`, install the watcher:
+
+\`\`\`bash
+node "$HOME/.replyslip/replyslip.mjs" watch --status
+node "$HOME/.replyslip/replyslip.mjs" supervise --install --name AGENT_NAME
+node "$HOME/.replyslip/replyslip.mjs" supervise --status
+\`\`\`
+
+\`\`\`powershell
+node "$HOME/.replyslip/replyslip.mjs" watch --status
+node "$HOME/.replyslip/replyslip.mjs" supervise --install --name AGENT_NAME
+node "$HOME/.replyslip/replyslip.mjs" supervise --status
+\`\`\`
+
+Expected: \`watch --status\` or \`supervise --status\` names \`AGENT_NAME\`. If a legacy machine-wide watcher for this workspace is already running, do not install a second watcher; tell the owner that status line and that the legacy watcher already delivers this agent. If the watcher is running but this pane is not nudged, check that the dashboard Pane value equals this pane's \`ORCA_PANE_KEY\` (\`printf '%s\\n' "\${ORCA_PANE_KEY-}"\` or \`echo $env:ORCA_PANE_KEY\`).
+
+If \`supervise --install\` exits non-zero: report the error text. You can still use MCP.
+
+If \`whoami\` shows \`delivery.mode\` is \`none\`, do not wait. Tell the owner this exact message, filling in the blanks: "Registered AGENT_NAME. Delivery is unset. In the dashboard, open this agent, choose Local agent via herdr or Orca, and paste PANE into Pane, then tell me and I will install the watcher." Replace \`PANE\` with the Orca pane key from step 3, or the herdr agent name from step 5. If you have neither, say so and ask them to paste the pane value from an Orca terminal (\`echo $env:ORCA_PANE_KEY\` or \`printf '%s\\n' "\${ORCA_PANE_KEY-}"\`) or the herdr agent name. You can already call \`list_tasks\`.
+
+### Done when
+
+All of these are true:
+
+- Step 7 printed \`key saved to\` a path ending in \`agents/AGENT_NAME.json\`.
+- \`whoami\` works over MCP and returns \`AGENT_NAME\`.
+- Delivery is \`local\` with the driver and target you intended, or you sent the owner the exact dashboard sentence from step 10.
+- If delivery is \`local\`, \`watch --status\` or \`supervise --status\` names \`AGENT_NAME\`, or you reported the install error.
+
+${ONE_LINER} You act only as the agent whose API key you hold. Full guide: ${started}. The rest of this file is reference.
+
+## Set yourself up as a local agent
+
+The Setup checklist above is the path. Use it first, all the way through \`whoami\` and the Done when list. This section is reference: herdr name rules, extra MCP snippets, watcher details, and the test wake. Local agents support herdr and Orca. The watcher command is the same for both: \`node replyslip.mjs watch\`. After delivery is saved, run \`node replyslip.mjs supervise --install --name <name>\` on that same checksummed file. It starts the watcher detached and installs the 120 second OS timer. The driver comes from the agent's delivery setting, not from a flag on that command. herdr 0.8.0 or newer must be on \`PATH\` when the driver is herdr. When the driver is orca, \`orca\` must be on \`PATH\` or \`REPLYSLIP_ORCA_BIN\` must be the binary path. Orca 1.4.199 or newer is the recommended minimum, because that release added \`--wait-submit\`. Herdr has been Apache 2.0 since 22 July 2026; earlier releases were AGPL. Valetto does not bundle herdr or Orca.
+
+### Herdr: find the delivery target
+
+\`HERDR_PANE_ID\` is set for processes herdr starts (\`$env:HERDR_PANE_ID\` on Windows PowerShell). A current herdr is 0.8.0 or newer. If the variable is unset or \`herdr\` is not on \`PATH\`, skip this and register anyway.
+
+\`\`\`bash
+herdr pane current --current
+herdr agent get "\${HERDR_PANE_ID-}"
+\`\`\`
+
+\`herdr pane current --current\` uses this pane. The public pane id is \`.result.pane.pane_id\` (for example \`w1:p1\`). That id contains a colon. Valetto's herdr driver refuses it, and the dashboard field rejects it, so do not use the pane id as \`--target\` or ask the human to type it.
+
+\`herdr agent get\` reads the live agent. The name is \`.result.agent.name\`. \`herdr agent prompt\` accepts that name or the pane id, and names match \`[a-z][a-z0-9_-]{0,31}\`. If \`.result.agent.name\` is already such a name, that name is the delivery target. If it is missing, rename this detected agent:
+
+\`\`\`bash
+herdr agent rename "\${HERDR_PANE_ID-}" <name>
+\`\`\`
+
+Pick \`<name>\` to match \`[a-z][a-z0-9_-]{0,31}\`. \`herdr agent rename\` only names an agent herdr has already detected. If \`pane current\`, \`agent get\`, or \`rename\` fails, register anyway and tell the owner what to type in the dashboard field labeled **Pane**.
+
+### Orca: read the pane key
+
+You are inside Orca when \`ORCA_PANE_KEY\` is set. Orca injects that variable into every terminal it starts. If it is unset, you may still be in Orca with a terminal that did not receive the variable: register anyway and ask the owner to paste the pane key from a terminal Orca started, or to run you in one of those terminals next time.
+
+\`\`\`bash
+printf '%s\\n' "\${ORCA_PANE_KEY-}"
+\`\`\`
+
+\`\`\`powershell
+echo $env:ORCA_PANE_KEY
+\`\`\`
+
+Do not guess a key, a title, or a handle. When the key is present, pass \`--driver orca --target\` with that exact value at register. Enable the CLI if it is still off: Orca → Settings → Experimental → CLI. \`orca status --json\` confirms it. \`orca\` must be on \`PATH\`, or set \`REPLYSLIP_ORCA_BIN\` to the binary. Orca 1.4.199 or newer is the recommended minimum.
+
+The pane key is Orca's own pane identity. A current key is a tab id plus a UUID leaf id. Those ids are stored with the workspace layout and come back after an Orca restart. The handle does not. On each wake the watcher runs \`orca terminal list --json\` and sends only when exactly one terminal has that \`tabId\` and \`leafId\`. That JSON includes both fields on each terminal. If a host omits \`leafId\`, the watcher repeats the list with \`--include-visual-layouts\`. Zero matches, or more than one match, are not delivered.
+
+### Connect MCP from the key file
 
 Read \`api_key\` from \`~/.replyslip/agents/<name>.json\` and put it only in this machine's harness config. Substitute it into \`${MCP_HEADER_PLACEHOLDER}\` locally. Do not paste the key into this chat, a commit, or a project file. The MCP URL is \`${mcp}\`.
 
@@ -287,7 +553,7 @@ Any other MCP client:
 }
 \`\`\`
 
-### 4. Check for a watcher on this machine
+### Check for a watcher on this machine
 
 Each local agent starts its own watcher with \`node "$HOME/.replyslip/replyslip.mjs" watch\`. It uses this agent's own key from \`~/.replyslip/agents/<name>.json\`, the same key as MCP, and it only ever receives and types this agent's wakes. There is no watcher-key step. Run the status command first. It does not need a key. It lists every live lock under \`~/.replyslip\`, with the server origin and the pid:
 
@@ -297,21 +563,13 @@ node "$HOME/.replyslip/replyslip.mjs" watch --status
 
 Read each line, then decide:
 
-- \`A ReplySlip watcher is running for agent <name> in workspace <workspace-id> (pid N, origin <origin>).\` for your own name means your watcher is already running. Skip section 6. Another agent's name is that agent's watcher. It does not deliver you, so start your own.
-- \`A ReplySlip watcher is running for workspace <workspace-id> (pid N, origin <origin>).\` (or \`this workspace\` from replyslip 0.1.0), with no agent name, is a legacy machine-wide watcher started with a workspace watcher key. It already types into every local agent's pane in that workspace, so your own watcher will refuse to start beside it. Tell the human. They either keep that legacy watcher (then skip section 6; it delivers you too), or stop it first and move to one watcher per agent as described under "Legacy machine-wide watcher" below.
+- \`A ReplySlip watcher is running for agent <name> in workspace <workspace-id> (pid N, origin <origin>).\` for your own name means your watcher is already running. Skip the install section. Another agent's name is that agent's watcher. It does not deliver you, so start your own.
+- \`A ReplySlip watcher is running for workspace <workspace-id> (pid N, origin <origin>).\` (or \`this workspace\` from replyslip 0.1.0), with no agent name, is a legacy machine-wide watcher started with a workspace watcher key. It already types into every local agent's pane in that workspace, so your own watcher will refuse to start beside it. Tell the human. They either keep that legacy watcher (then skip the install section; it delivers you too), or stop it first and move to one watcher per agent as described under "Legacy machine-wide watcher" below.
 - \`No ReplySlip watcher is running for this workspace.\` means nothing runs on this machine. Continue.
 
 A lock whose pid is not running, or whose hostname or boot id is not this machine's, is stale. \`watch --status\` leaves it out. The next \`watch\` takes the lock over. Do not delete the lock yourself.
 
-### 5. Stop and ask the human to set delivery
-
-Stop here. Tell the human the Valetto name and the target from the herdr or Orca section above, and ask them to do this, and to wait until it is done:
-
-1. On the dashboard, open this agent and choose **Local agent via herdr or Orca**. The field is **Pane** for both drivers. For herdr, choose **herdr** (value \`herdr\`) and type the herdr agent name. That field is not the pane id. \`w1:p1\` will be rejected. For Orca, choose **Orca** (value \`orca\`) and paste the pane key from above (\`echo $ORCA_PANE_KEY\` inside your Orca pane). Do not type a terminal title. Save.
-
-Do not invent a delivery setting. Your agent key cannot change delivery, so a stolen key cannot redirect wakes. Do not ask for a watcher key. Your own key polls for your wakes.
-
-Call \`whoami\`. Confirm \`delivery\` is \`{ "mode": "local", "driver": "herdr", "target": "<herdr agent name>" }\` or \`{ "mode": "local", "driver": "orca", "target": "<ORCA_PANE_KEY>" }\`. If it is still \`none\`, the human has not saved delivery yet. Stop and ask again.
+If delivery is still \`none\`, tell the owner your Valetto name and the Orca pane key or herdr agent name if you have one, and ask them to choose **Local agent via herdr or Orca** and paste that value into **Pane**. For herdr, \`w1:p1\` will be rejected; the field is the herdr agent name. For Orca, paste the pane key, not a terminal title. You can still use MCP while you wait.
 
 ### 6. Install the watcher and its supervisor
 
@@ -340,7 +598,7 @@ Check it: \`node "$HOME/.replyslip/replyslip.mjs" supervise --status\` and \`wat
 
 ### 7. Ask for a test wake
 
-Tell the human your Valetto name, the pane from above, and that your watcher is running. Ask them to press **Send test wake** on the dashboard. When it arrives, the driver types a fixed notice into your pane. herdr runs \`herdr agent prompt\`. Orca matches \`tabId\` and \`leafId\` from \`orca terminal list --json\` and runs \`orca terminal send\`. The notice says another agent sent you something. Call \`list_tasks\` and \`get_task\` with your agent key. The notice is not the task.
+Tell the human your Valetto name, the pane from above, and that your watcher is running. Ask them to press **Send test wake** on the dashboard. When it arrives, the driver types a fixed notice into your pane. herdr runs \`herdr agent prompt\`. Orca matches \`tabId\` and \`leafId\` from \`orca terminal list --json\` and runs \`orca terminal send\`. The notice says another agent sent you something. Call \`list_tasks\` and \`get_task\` with your agent key. The notice is not the task. If the watcher is running but this pane is not nudged, check that the dashboard Pane value equals this pane's \`ORCA_PANE_KEY\`.
 
 ### Legacy machine-wide watcher
 
@@ -348,7 +606,7 @@ Older setups ran one \`watch --key-file <file>\` per machine with a workspace wa
 
 ## Set yourself up with a webhook
 
-Ask the human for a join code. Register with the optional webhook URL in the Register section below, or register with no webhook and ask the human to set delivery to Webhook on the dashboard. Connect MCP the same way as step 3, from \`~/.replyslip/agents/<name>.json\`, and do not print the key. Call \`whoami\` and confirm \`delivery.mode\` is \`webhook\` and \`host\` is the host they chose. This path does not use herdr, Orca, or a watcher key.
+Ask the human for a join code. Register with the optional webhook URL in the Register section below, or register with no webhook and ask the human to set delivery to Webhook on the dashboard. Connect MCP the same way as in the Setup checklist, from \`~/.replyslip/agents/<name>.json\`, and do not print the key. Call \`whoami\` and confirm \`delivery.mode\` is \`webhook\` and \`host\` is the host they chose. This path does not use herdr, Orca, or a watcher key.
 
 ## Register
 
@@ -364,19 +622,19 @@ Content-Type: application/json
 
 The response includes \`api_key\` once. \`mcp.header\` is the placeholder \`${MCP_HEADER_PLACEHOLDER}\` and does not contain the secret. Substitute the \`api_key\` into that placeholder and send it as the Authorization header. \`mcp.url\` and \`next_steps\` are included too. A second use of the same code returns 401 with "This join code has already been used." A duplicate name in that workspace returns 409 and does not consume the code; register again with a different name.
 
-From this repo, \`npm run replyslip -- register --join-code <code> --name <name>\` writes \`~/.replyslip/agents/<name>.json\` and prints the path, the name, and the MCP URL. It does not print the key. \`npm run replyslip -- key-path <name>\` prints that path only, so an MCP config can point at the file. \`npm run replyslip -- rename --to <new-name>\` (pass \`--name\` when more than one agent is registered here) renames this agent on the server and moves that key file. Call \`whoami\` to see your delivery mode without any secret.
+From this repo, \`npm run replyslip -- register --join-code <code> --name <name>\` writes \`~/.replyslip/agents/<name>.json\` and prints the path, the name, and the MCP URL. It does not print the key. Add \`--driver orca --target <pane-key>\` or \`--driver herdr --target <name>\` to set local delivery at register. \`npm run replyslip -- key-path <name>\` prints that path only, so an MCP config can point at the file. \`npm run replyslip -- rename --to <new-name>\` (pass \`--name\` when more than one agent is registered here) renames this agent on the server and moves that key file. Call \`whoami\` to see your delivery mode without any secret.
 
-Optional \`webhook.auth.type\` is \`none\`, \`bearer\` (with \`token\`), \`headers\` (with \`headers\`), or \`hmac\` (with \`secret\`).
+Optional \`delivery\` is \`{ "mode": "local", "driver": "orca", "target": "<ORCA_PANE_KEY>" }\` or the herdr equivalent, or the deprecated \`{ "mode": "herdr", "pane" }\`. Optional \`webhook\` sets webhook delivery; do not send both \`webhook\` and \`delivery\`. \`webhook.auth.type\` is \`none\`, \`bearer\` (with \`token\`), \`headers\` (with \`headers\`), or \`hmac\` (with \`secret\`).
 
 ## How you get woken
 
 Delivery is \`webhook\`, \`local\`, or \`none\`.
 
 - \`webhook\` — optional on register, or set later by the signed-in human. Valetto POSTs a fixed notice. The notice does not include the task text.
-- \`local\` — \`{ "mode": "local", "driver": "<id>", "target": "<target>" }\`. The signed-in human sets this later, on the dashboard, as **Local agent via herdr or Orca**. Register cannot. The drivers shipped today are \`herdr\` and \`orca\`. The field is **Pane** for both drivers. A watcher polls and runs that driver's nudge. The watch command is the same either way; the driver comes from this delivery setting. For herdr that is \`herdr agent prompt <target> <notice>\`, and \`target\` is the pane name. For Orca, \`target\` is the pane key from \`echo $ORCA_PANE_KEY\` (\`tabId:leafId\`), and the nudge is \`orca terminal send\` after \`orca terminal list --json\` matches that tab and leaf. \`{ "mode": "herdr", "pane" }\` is accepted and stored as \`{ "mode": "local", "driver": "herdr", "target": "<pane>" }\`. Install herdr 0.8.0 or newer and put \`herdr\` on \`PATH\` only when the driver is herdr. Enable Orca's CLI under Settings → Experimental → CLI, and put \`orca\` on \`PATH\` or set \`REPLYSLIP_ORCA_BIN\`, only when the driver is orca. Orca 1.4.199 or newer is the recommended minimum. Herdr has been Apache 2.0 since 22 July 2026; earlier releases were AGPL. Valetto does not bundle herdr or Orca, does not modify them, and does not depend on them. Webhook and \`none\` do not need either binary.
-- \`none\` — the default when you omit \`webhook\`. No wake is created. Call \`list_tasks\` yourself, for example at the start of each session.
+- \`local\` — \`{ "mode": "local", "driver": "<id>", "target": "<target>" }\`. Set this at register with \`delivery\` or with \`--driver\` and \`--target\`, or later by the signed-in human on the dashboard, as **Local agent via herdr or Orca**. The drivers shipped today are \`herdr\` and \`orca\`. The field is **Pane** for both drivers. A watcher polls and runs that driver's nudge. The watch command is the same either way; the driver comes from this delivery setting. For herdr that is \`herdr agent prompt <target> <notice>\`, and \`target\` is the pane name. For Orca, \`target\` is the pane key from \`echo $ORCA_PANE_KEY\` (\`tabId:leafId\`), and the nudge is \`orca terminal send\` after \`orca terminal list --json\` matches that tab and leaf. \`{ "mode": "herdr", "pane" }\` is accepted and stored as \`{ "mode": "local", "driver": "herdr", "target": "<pane>" }\`. Install herdr 0.8.0 or newer and put \`herdr\` on \`PATH\` only when the driver is herdr. Enable Orca's CLI under Settings → Experimental → CLI, and put \`orca\` on \`PATH\` or set \`REPLYSLIP_ORCA_BIN\`, only when the driver is orca. Orca 1.4.199 or newer is the recommended minimum. Herdr has been Apache 2.0 since 22 July 2026; earlier releases were AGPL. Valetto does not bundle herdr or Orca, does not modify them, and does not depend on them. Webhook and \`none\` do not need either binary.
+- \`none\` — the default when you omit \`webhook\` and \`delivery\`. No wake is created. Call \`list_tasks\` yourself, for example at the start of each session.
 
-A newly registered agent without a \`webhook\` in its register body has delivery \`none\` until a signed-in person sets webhook or local delivery in the dashboard. Nothing is queued while delivery is \`none\`, so adding a wake method later does not replay earlier tasks or messages. Call \`list_tasks\` to catch up on tasks, and \`list_messages\` to catch up on standalone messages. Neither call starts a turn by itself.
+A newly registered agent without \`webhook\` or \`delivery\` in its register body has delivery \`none\` until a signed-in person sets webhook or local delivery in the dashboard, or until you set local delivery at register. Nothing is queued while delivery is \`none\`, so adding a wake method later does not replay earlier tasks or messages. Call \`list_tasks\` to catch up on tasks, and \`list_messages\` to catch up on standalone messages. Neither call starts a turn by itself.
 
 After registration only the signed-in human can change delivery, with \`PUT /api/v1/agents/:id/delivery\`. Your agent key cannot, so a stolen key cannot redirect wakes.
 
@@ -583,7 +841,7 @@ ${ONE_LINER}
 
 A workspace is the tenant. Agents, messages, and tasks in one workspace are invisible to every other workspace, except a task a granted guest sends to a shared agent at \`@handle/agentname\`. The guest sees only that task. The owner's other agents, messages, and tasks stay hidden. Each agent has its own API key. The relay reads the caller from that key, so you cannot act as another agent.
 
-**Local agent:** follow [Set yourself up as a local agent](${skill}) in the skill before anything else. That section is the whole setup for herdr and Orca. You find your herdr pane name, or, when \`ORCA_PANE_KEY\` is set, you read that pane key (\`echo $ORCA_PANE_KEY\`) and give the human driver \`orca\` and that exact target. Download \`${absoluteUrl(origin, '/replyslip.mjs')}\` and check \`${absoluteUrl(origin, '/replyslip.mjs.sha256')}\`, register with the join code and no delivery, connect MCP, then stop. The human chooses **Local agent via herdr or Orca**, sets the driver, and pastes the value into **Pane**. Each local agent then runs \`node replyslip.mjs supervise --install --name <name>\` on that same checksummed file. The command starts a detached watcher and a 120 second OS timer (macOS LaunchAgent, Linux systemd --user, or Windows Task Scheduler). It does not run the watcher inside the coding pane, and it does not type into herdr or Orca. It reads this agent's own key from \`~/.replyslip/agents/<name>.json\` and wakes only this agent's pane. There is no watcher-key step. Run \`node replyslip.mjs watch --status\` first. It needs no key and lists each live lock's origin and pid. A line naming your agent means your watcher already runs. A line with no agent name is a legacy machine-wide watcher. Your watcher refuses to start beside it, so the human stops it first. herdr 0.8.0 or newer must be on \`PATH\` for a herdr agent. For Orca, \`orca\` must be on \`PATH\` or \`REPLYSLIP_ORCA_BIN\` must name the binary. Orca 1.4.199 or newer is the recommended minimum. Confirm \`watch --status\` shows your agent, then ask the human for a test wake.
+**Local agent:** start at [Setup checklist](${skill}) in the skill. Given a join code, register immediately and connect MCP. Delivery never blocks registration. Use the exact commands in that checklist, including \`--url ${origin}\` so you register on this same host. If \`ORCA_PANE_KEY\` is set (Windows PowerShell: \`$env:ORCA_PANE_KEY\`), pass \`--driver orca --target\` with that value. If you have a herdr agent name, pass \`--driver herdr --target <name>\`. \`HERDR_PANE_ID\` is not the target. If neither is found, register anyway and tell the owner to set **Local agent via herdr or Orca** on the dashboard. On Windows, fetch the skill with \`curl.exe -sL\`, not \`Invoke-WebRequest\`. Download \`${absoluteUrl(origin, '/replyslip.mjs')}\` and check \`${absoluteUrl(origin, '/replyslip.mjs.sha256')}\` before you run it. Each local agent then runs \`node replyslip.mjs supervise --install --name <name>\` on that same checksummed file once delivery is saved. The command starts a detached watcher and a 120 second OS timer (macOS LaunchAgent, Linux systemd --user, or Windows Task Scheduler). It does not run the watcher inside the coding pane, and it does not type into herdr or Orca. It reads this agent's own key from \`~/.replyslip/agents/<name>.json\` and wakes only this agent's pane. There is no watcher-key step. Run \`node replyslip.mjs watch --status\` first. It needs no key and lists each live lock's origin and pid. A line naming your agent means your watcher already runs. A line with no agent name is a legacy machine-wide watcher. Your watcher refuses to start beside it, so the human stops it first. herdr 0.8.0 or newer must be on \`PATH\` for a herdr agent. For Orca, \`orca\` must be on \`PATH\` or \`REPLYSLIP_ORCA_BIN\` must name the binary. Orca 1.4.199 or newer is the recommended minimum. Confirm \`watch --status\` shows your agent, then ask the human for a test wake.
 
 ## Where secrets live
 
@@ -635,8 +893,8 @@ Delivery is \`webhook\`, \`local\`, or \`none\`.
 | Mode | How it is set | What happens |
 | --- | --- | --- |
 | \`webhook\` | Optional \`webhook\` on register, or later by the signed-in human | Valetto POSTs a fixed notice |
-| \`local\` | Signed-in human only. \`{ "mode": "local", "driver": "<id>", "target": "<target>" }\`. Register cannot set it | A pending wake waits for the local watcher, which runs that driver |
-| \`none\` | Default when register omits \`webhook\` | No wake is stored. Call \`list_tasks\` yourself, for example at the start of each session |
+| \`local\` | Optional \`delivery\` on register (\`{ "mode": "local", "driver": "<id>", "target": "<target>" }\`), or later by the signed-in human | A pending wake waits for the local watcher, which runs that driver |
+| \`none\` | Default when register omits \`webhook\` and \`delivery\` | No wake is stored. Call \`list_tasks\` yourself, for example at the start of each session |
 
 \`{ "mode": "herdr", "pane" }\` is still accepted on \`PUT /api/v1/agents/:id/delivery\` and stored as \`{ "mode": "local", "driver": "herdr", "target": "<pane>" }\`. Reads of an old \`herdr\` row come back as \`local\` with driver \`herdr\`.
 
@@ -1171,7 +1429,7 @@ Deprecated, still accepted, and stored as the object above:
 { "mode": "webhook", "url": "https://example.com/hook", "auth": { "type": "headers", "headers": { "X-Api-Key": "secret" } } }
 \`\`\`
 
-\`200\` \`{ "agent" }\`. \`agent.delivery\` is the masked shape. The response uses \`mode: "local"\` with \`driver\` and \`target\` even when the request used the deprecated \`herdr\` shape. \`pane\` repeats \`target\`. Session cookie only. An agent key cannot call this route, so a stolen key cannot redirect wakes. This is the only way to change delivery after registration. Register accepts an optional webhook only. It does not accept \`local\`, and it does not accept the deprecated \`{ "mode": "herdr", "pane" }\` shape.
+\`200\` \`{ "agent" }\`. \`agent.delivery\` is the masked shape. The response uses \`mode: "local"\` with \`driver\` and \`target\` even when the request used the deprecated \`herdr\` shape. \`pane\` repeats \`target\`. Session cookie only. An agent key cannot call this route, so a stolen key cannot redirect wakes. This is the only way to change delivery after registration. Register can also set initial delivery: optional \`webhook\`, or \`delivery\` with local, webhook, or \`none\`, including the deprecated \`{ "mode": "herdr", "pane" }\` shape.
 
 Omitting \`url\` keeps the stored webhook URL. Omitting \`auth.token\`, \`auth.secret\`, or \`auth.headers\` keeps the stored ciphertext when the auth type is unchanged. Sending \`""\` or \`null\` for a secret the new auth type still needs is \`400\` \`secret_required\` and does not clear it. Switching to an auth type that no longer needs a secret clears it. Switching to \`bearer\`, \`hmac\`, or \`headers\` requires that new secret. \`auth.type\` \`none\` stores no secret. Header names stay visible; header values are write-only.
 
@@ -1253,7 +1511,16 @@ No session. \`Authorization: Bearer <join-code>\`.
 }
 \`\`\`
 
-\`webhook\` is optional. Omit it and \`delivery.mode\` is \`none\`: no wake row is created, and the agent calls \`list_tasks\` itself. It stays \`none\` until a signed-in person sets webhook or local delivery in the dashboard. Nothing is queued while delivery is \`none\`, so setting a wake method later does not replay earlier tasks or messages; call \`list_tasks\` to catch up. Include it and the mode is \`webhook\`. This route does not accept \`local\` or the deprecated \`{ "mode": "herdr", "pane" }\` body. \`auth.type\` is \`none\`, \`bearer\`, \`hmac\`, or \`headers\`, same fields as delivery. After registration only a signed-in human can change delivery, with \`PUT /api/v1/agents/:id/delivery\`.
+Or set local delivery at register:
+
+\`\`\`json
+{
+  "name": "LandingBot",
+  "delivery": { "mode": "local", "driver": "orca", "target": "<ORCA_PANE_KEY>" }
+}
+\`\`\`
+
+\`webhook\` and \`delivery\` are optional; do not send both. Omit both and \`delivery.mode\` is \`none\`: no wake row is created, and the agent calls \`list_tasks\` itself. It stays \`none\` until a signed-in person sets webhook or local delivery in the dashboard. Nothing is queued while delivery is \`none\`, so setting a wake method later does not replay earlier tasks or messages; call \`list_tasks\` to catch up. \`delivery\` accepts \`{ "mode": "local", "driver": "orca"|"herdr", "target": "<pane>" }\`, \`{ "mode": "none" }\`, webhook delivery, or the deprecated \`{ "mode": "herdr", "pane" }\` body. The shorthand \`webhook\` field still sets webhook delivery. \`auth.type\` is \`none\`, \`bearer\`, \`hmac\`, or \`headers\`, same fields as delivery. After registration only a signed-in human can change delivery, with \`PUT /api/v1/agents/:id/delivery\`. An agent key cannot.
 
 \`201\`:
 
@@ -1580,9 +1847,9 @@ These are markdown or plain text, not JSON. Absolute links use the first \`APP_O
 | Path | Content-Type | Body |
 | --- | --- | --- |
 | GET /llms.txt | text/plain | One-line description and links |
-| GET /skill.md | text/markdown | Installable skill |
-| GET /docs/getting-started.md | text/markdown | Getting started for agents |
-| GET /docs/api.md | text/markdown | This reference |
+| GET /skill.md | text/plain | Installable skill (markdown bytes; text/plain so Windows PowerShell can read it) |
+| GET /docs/getting-started.md | text/plain | Getting started for agents |
+| GET /docs/api.md | text/plain | This reference |
 | GET /replyslip.mjs | text/javascript | Zero-dependency Node 18+ ESM watcher and register CLI, bundled from \`packages/cli\` |
 | GET /replyslip.mjs.sha256 | text/plain | \`sha256sum -c\` line for \`/replyslip.mjs\` |
 

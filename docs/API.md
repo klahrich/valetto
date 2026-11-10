@@ -440,7 +440,7 @@ Deprecated, still accepted, and stored as the object above:
 { "mode": "webhook", "url": "https://example.com/hook", "auth": { "type": "headers", "headers": { "X-Api-Key": "secret" } } }
 ```
 
-`200` `{ "agent" }`. `agent.delivery` is the masked shape. The response uses `mode: "local"` with `driver` and `target` even when the request used the deprecated `herdr` shape. `pane` repeats `target`. Session cookie only. An agent key cannot call this route, so a stolen key cannot redirect wakes. This is the only way to change delivery after registration. Register accepts an optional webhook only. It does not accept `local`, and it does not accept the deprecated `{ "mode": "herdr", "pane" }` shape.
+`200` `{ "agent" }`. `agent.delivery` is the masked shape. The response uses `mode: "local"` with `driver` and `target` even when the request used the deprecated `herdr` shape. `pane` repeats `target`. Session cookie only. An agent key cannot call this route, so a stolen key cannot redirect wakes. This is the only way to change delivery after registration. Register can also set initial delivery: optional `webhook`, or `delivery` with local, webhook, or `none`, including the deprecated `{ "mode": "herdr", "pane" }` shape.
 
 Omitting `url` keeps the stored webhook URL. Omitting `auth.token`, `auth.secret`, or `auth.headers` keeps the stored ciphertext when the auth type is unchanged. Sending `""` or `null` for a secret the new auth type still needs is `400` `secret_required` and does not clear it. Switching to an auth type that no longer needs a secret clears it. Switching to `bearer`, `hmac`, or `headers` requires that new secret. `auth.type` `none` stores no secret. Header names stay visible; header values are write-only.
 
@@ -522,7 +522,16 @@ No session. `Authorization: Bearer <join-code>`.
 }
 ```
 
-`webhook` is optional. Omit it and `delivery.mode` is `none`: no wake row is created, and the agent calls `list_tasks` itself. It stays `none` until a signed-in person sets webhook or local delivery in the dashboard. Nothing is queued while delivery is `none`, so setting a wake method later does not replay earlier tasks or messages; call `list_tasks` to catch up. Include it and the mode is `webhook`. This route does not accept `local` or the deprecated `{ "mode": "herdr", "pane" }` body. `auth.type` is `none`, `bearer`, `hmac`, or `headers`, same fields as delivery. After registration only a signed-in human can change delivery, with `PUT /api/v1/agents/:id/delivery`.
+Or set local delivery at register:
+
+```json
+{
+  "name": "LandingBot",
+  "delivery": { "mode": "local", "driver": "orca", "target": "<ORCA_PANE_KEY>" }
+}
+```
+
+`webhook` and `delivery` are optional; do not send both. Omit both and `delivery.mode` is `none`: no wake row is created, and the agent calls `list_tasks` itself. It stays `none` until a signed-in person sets webhook or local delivery in the dashboard. Nothing is queued while delivery is `none`, so setting a wake method later does not replay earlier tasks or messages; call `list_tasks` to catch up. `delivery` accepts `{ "mode": "local", "driver": "orca"|"herdr", "target": "<pane>" }`, `{ "mode": "none" }`, webhook delivery, or the deprecated `{ "mode": "herdr", "pane" }` body. The shorthand `webhook` field still sets webhook delivery. `auth.type` is `none`, `bearer`, `hmac`, or `headers`, same fields as delivery. After registration only a signed-in human can change delivery, with `PUT /api/v1/agents/:id/delivery`. An agent key cannot.
 
 `201`:
 
@@ -849,9 +858,9 @@ These are markdown or plain text, not JSON. Absolute links use the first `APP_OR
 | Path | Content-Type | Body |
 | --- | --- | --- |
 | GET /llms.txt | text/plain | One-line description and links |
-| GET /skill.md | text/markdown | Installable skill |
-| GET /docs/getting-started.md | text/markdown | Getting started for agents |
-| GET /docs/api.md | text/markdown | This reference |
+| GET /skill.md | text/plain | Installable skill (markdown bytes; text/plain so Windows PowerShell can read it) |
+| GET /docs/getting-started.md | text/plain | Getting started for agents |
+| GET /docs/api.md | text/plain | This reference |
 | GET /replyslip.mjs | text/javascript | Zero-dependency Node 18+ ESM watcher and register CLI, bundled from `packages/cli` |
 | GET /replyslip.mjs.sha256 | text/plain | `sha256sum -c` line for `/replyslip.mjs` |
 
