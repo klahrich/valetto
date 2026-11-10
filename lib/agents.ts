@@ -164,29 +164,36 @@ export async function getAgent(workspaceId: string, agentId: string): Promise<Ag
   return agent;
 }
 
-/** PATCH /api/v1/agents/:id (docs/design/mcp-oauth.md §6.6): rename any agent in the workspace. */
-export async function renameAgent(workspaceId: string, agentId: string, name: string): Promise<AgentRow> {
-  if (!AGENT_NAME_PATTERN.test(name)) {
+/** Same name rule as registration: trim, then a letter followed by letters, numbers, underscores, or hyphens, max 64. */
+export function assertAgentName(name: string): string {
+  const trimmed = name.trim();
+  if (!AGENT_NAME_PATTERN.test(trimmed)) {
     throw new HttpError(
       400,
       'invalid_name',
       'Agent name must start with a letter and contain only letters, numbers, underscores, or hyphens (max 64).',
     );
   }
+  return trimmed;
+}
+
+/** PATCH /api/v1/agents/:id: the owner can rename any agent in the workspace; an agent key can rename only itself. */
+export async function renameAgent(workspaceId: string, agentId: string, name: string): Promise<AgentRow> {
+  const next = assertAgentName(name);
   const agent = await getAgent(workspaceId, agentId);
   if (agent.revokedAt) throw new HttpError(409, 'agent_revoked', 'This agent has been revoked.');
-  if (agent.name === name) return agent;
+  if (agent.name === next) return agent;
   try {
     const [updated] = await getDb()
       .update(agents)
-      .set({ name })
+      .set({ name: next })
       .where(and(eq(agents.id, agent.id), eq(agents.workspaceId, workspaceId)))
       .returning();
     if (!updated) throw new HttpError(404, 'not_found', 'No agent was found.');
     return updated;
   } catch (err) {
     if (isUniqueViolation(err)) {
-      throw new HttpError(409, 'name_taken', `An agent named ${name} already exists in this workspace.`);
+      throw new HttpError(409, 'name_taken', `An agent named ${next} already exists in this workspace.`);
     }
     throw err;
   }

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
-import { chmod, mkdir, readdir, readFile, stat, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, readdir, readFile, stat, unlink, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import path from 'node:path';
 import { AGENT_NAME_PATTERN } from '../../../lib/constants.ts';
@@ -163,7 +163,7 @@ export async function listRegisteredAgents(home = homedir()): Promise<string[]> 
     .sort();
 }
 
-export type AgentCredentials = { name: string; apiKey: string; relayUrl: string | null; path: string };
+export type AgentCredentials = { name: string; apiKey: string; agentId: string | null; relayUrl: string | null; path: string };
 
 /**
  * The agent's own key, from the file `register` wrote (the same key the agent's MCP config uses). Errors never
@@ -196,5 +196,100 @@ export async function readAgentCredentials(
     // The read already succeeded.
   }
   const relayUrl = typeof parsed.relay_url === 'string' && parsed.relay_url.trim() ? parsed.relay_url.trim() : null;
-  return { name, apiKey: parsed.api_key.trim(), relayUrl, path: file };
+  const agentId = typeof parsed.agent_id === 'string' && parsed.agent_id.trim() ? parsed.agent_id.trim() : null;
+  return { name, apiKey: parsed.api_key.trim(), agentId, relayUrl, path: file };
+}
+
+function httpErrorMessage(payload: unknown, status: number, fallback: string): string {
+  if (
+    payload &&
+    typeof payload === 'object' &&
+    'error' in payload &&
+    typeof (payload as { error?: { message?: unknown } }).error?.message === 'string'
+  ) {
+    return (payload as { error: { message: string } }).error.message;
+  }
+  return `${fallback} (HTTP ${status}).`;
+}
+
+/**
+ * Rename this agent on the server, then move ~/.replyslip/agents/<old>.json to the new name.
+ * The key itself does not change. The local file is only moved after the server accepts the name.
+ */
+export async function renameRegisteredAgent(options: {
+  currentName: string;
+  newName: string;
+  relayUrl: string;
+  home?: string;
+  force?: boolean;
+  fetchImpl?: typeof fetch;
+}): Promise<{ name: string; path: string; previousPath: string; shared: boolean }> {
+  if (!AGENT_NAME_PATTERN.test(options.currentName) || !AGENT_NAME_PATTERN.test(options.newName.trim())) {
+    throw new Error('Agent name must start with a letter and then use only letters, numbers, underscores, or hyphens.');
+  }
+  const newName = options.newName.trim();
+  const home = options.home ?? homedir();
+  const credentials = await readAgentCredentials(options.currentName, { home });
+  if (!credentials.agentId) {
+    throw new Error(`Agent key file ${credentials.path} has no agent_id, so it cannot be renamed from the CLI.`);
+  }
+  const previousPath = credentials.path;
+  const nextPath = agentKeyPath(newName, home);
+  if (previousPath !== nextPath) {
+    try {
+      const existing = JSON.parse(await readFile(nextPath, 'utf8')) as Partial<AgentKeyFile>;
+      const sameAgent = existing.agent_id === credentials.agentId;
+      if (!options.force && !sameAgent) {
+        throw new Error(`Refusing to overwrite ${nextPath}. Pass --force to replace it.`);
+      }
+      if (!options.force && sameAgent) {
+        throw new Error(`Refusing to overwrite ${nextPath}. Pass --force to replace it.`);
+      }
+    } catch (err) {
+      if (err instanceof Error && err.message.startsWith('Refusing to overwrite')) throw err;
+      const code = err && typeof err === 'object' && 'code' in err ? (err as { code?: string }).code : '';
+      if (code && code !== 'ENOENT') throw err;
+    }
+  }
+
+  const fetchImpl = options.fetchImpl ?? fetch;
+  const response = await fetchImpl(`${options.relayUrl.replace(/\/$/, '')}/api/v1/agents/${credentials.agentId}`, {
+    method: 'PATCH',
+    headers: {
+      authorization: `Bearer ${credentials.apiKey}`,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({ name: newName }),
+  });
+  let payload: unknown = null;
+  try {
+    payload = await response.json();
+  } catch {
+    payload = null;
+  }
+  if (!response.ok) {
+    throw new Error(httpErrorMessage(payload, response.status, 'Rename failed'));
+  }
+  const record = payload as { agent?: { name?: unknown; shared?: unknown } };
+  const savedName = typeof record.agent?.name === 'string' ? record.agent.name : newName;
+  const shared = record.agent?.shared === true;
+
+  const raw = JSON.parse(await readFile(previousPath, 'utf8')) as AgentKeyFile;
+  const updated: AgentKeyFile = { ...raw, name: savedName };
+  if (previousPath === nextPath) {
+    await writeAgentKeyFile(updated, { home, force: true });
+    return { name: savedName, path: nextPath, previousPath, shared };
+  }
+  await writeAgentKeyFile(updated, { home, force: true });
+  try {
+    await unlink(previousPath);
+  } catch (err) {
+    const code = err && typeof err === 'object' && 'code' in err ? (err as { code?: string }).code : '';
+    if (code !== 'ENOENT') {
+      throw new Error(
+        `Renamed ${savedName} on the server and saved ${nextPath}, but could not remove ${previousPath}. Delete the old file so watch and supervise use the new name.`,
+      );
+    }
+  }
+  return { name: savedName, path: nextPath, previousPath, shared };
 }

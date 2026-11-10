@@ -230,6 +230,13 @@ export const TOOL_DOCS: ToolDoc[] = [
     args: [],
   },
   {
+    name: 'rename_agent',
+    title: 'Rename agent',
+    description:
+      'Rename yourself. The new name is trimmed and must start with a letter and then use only letters, numbers, underscores, or hyphens, up to 64 characters, the same rule as registration. Names are unique in the workspace. You can only rename yourself; the workspace owner can rename any agent from the dashboard or PATCH /api/v1/agents/:id. If you are shared, your public address becomes @handle/newname. Existing grants, invite links, and customer links stay valid because they use your id. Messages and tasks show the new name. Anyone still addressing you as @handle/oldname will need the new address.',
+    args: [{ name: 'name', required: true, type: 'string', description: 'Your new agent name.' }],
+  },
+  {
     name: 'get_agent_card',
     title: 'Get agent card',
     description:
@@ -423,6 +430,9 @@ export const toolInputs = {
       .describe('Ids from list_messages, at most 100. Only these rows are marked.'),
   }),
   list_agents: z.object({}),
+  rename_agent: z.object({
+    name: z.string().max(200),
+  }),
   get_agent_card: z.object({
     address: z.string().min(1).max(98).describe('Shared address @handle/agentname.'),
   }),

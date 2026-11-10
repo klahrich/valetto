@@ -61,11 +61,11 @@ async function snapshot(workspaceId: string) {
 }
 
 describe('tool scopes', () => {
-  it('every registered tool has a scope entry, and the 21 tools are all listed for rsk_', async () => {
+  it('every registered tool has a scope entry, and the 22 tools are all listed for rsk_', async () => {
     const { appKey } = await setup();
     const listed = (await mcpListTools(appKey)).map((tool) => tool.name).sort();
     expect(listed).toEqual(Object.keys(TOOL_SCOPES).sort());
-    expect(listed).toHaveLength(21);
+    expect(listed).toHaveLength(22);
     expect(DENIED_TOOLS).toHaveLength(11);
   });
 
@@ -84,6 +84,7 @@ describe('tool scopes', () => {
         'list_messages',
         'list_tasks',
         'mark_messages_read',
+        'rename_agent',
         'send_message',
         'whoami',
       ].sort(),
@@ -98,9 +99,9 @@ describe('tool scopes', () => {
     const { appKey, oauth } = await setup();
     vi.stubEnv('VALETTO_AGENT_GUESTS', '');
     const rsk = (await mcpListTools(appKey)).map((tool) => tool.name);
-    expect(rsk).toHaveLength(20);
+    expect(rsk).toHaveLength(21);
     expect(rsk).not.toContain('redeem_invite');
-    expect((await mcpListTools(oauth)).map((tool) => tool.name)).toHaveLength(10);
+    expect((await mcpListTools(oauth)).map((tool) => tool.name)).toHaveLength(11);
   });
 
   it('toolAllowed is the shared predicate: rsk_ scopes allow everything, unknown names never pass', () => {
