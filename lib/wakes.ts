@@ -1,14 +1,26 @@
 import { and, eq, inArray, sql } from 'drizzle-orm';
-import { getDb, type DbTx } from '@/db';
-import { agents, wakes, type AgentRow } from '@/db/schema';
+import { getDb, type Db } from '@/db';
+import { agents, tasks, wakes, type AgentRow } from '@/db/schema';
 import { WAKE_MAX_ATTEMPTS, WEBHOOK_TIMEOUT_MS } from './constants';
-import { HttpError } from './errors';
+import { HttpError, isUndefinedTable } from './errors';
 import { safeEqualString } from './crypto';
 import { buildWebhookCall, localNudgeOf } from './delivery';
 import { assertPublicWebhookUrl } from './webhook-url';
-import { WAKE_NOTICE } from './wake-notice';
+import { absoluteUrl, canonicalOrigin } from './origin';
+import { GUEST_WAKE_NOTICE, REVIEW_NEEDED_NOTICE, WAKE_NOTICE, reviewPath } from './wake-notice';
 
-export type WakeReason = 'message' | 'task' | 'result' | 'question' | 'failure' | 'test';
+export type WakeReason =
+  | 'message'
+  | 'task'
+  | 'result'
+  | 'question'
+  | 'failure'
+  | 'test'
+  | 'answer'
+  /** To a review_first bot: a request waits for its owner. Carries no task content; the bot cannot open the task. */
+  | 'review_needed'
+  /** To the target bot: the owner sent its held answer back with a note. */
+  | 'sent_back';
 
 export type WebhookAttempt = {
   outcome: 'delivered' | 'pending' | 'skipped';
@@ -24,20 +36,48 @@ type WakeInsert = {
   messageId?: string | null;
 };
 
-export async function enqueueWake(tx: DbTx, input: WakeInsert): Promise<string | null> {
+/**
+ * Records a wake for the agent and returns its id when there is something to push (webhook or local delivery).
+ * A delivery-none agent gets a row only while it has an active wake URL, already `cancelled` so nothing dispatches
+ * it: that row is the change marker the URL's polls read (lib/wake-urls.ts). Insert only: no row lock beyond the
+ * new row.
+ */
+export async function enqueueWake(tx: Db, input: WakeInsert): Promise<string | null> {
   const [agent] = await tx.select().from(agents).where(eq(agents.id, input.agentId)).limit(1);
-  if (!agent || agent.revokedAt || agent.deliveryMode === 'none') return null;
+  if (!agent || agent.revokedAt) return null;
+  const pushes = agent.deliveryMode !== 'none';
+  if (!pushes && !(await hasActiveWakeUrl(tx, input.agentId))) return null;
   const [wake] = await tx
     .insert(wakes)
     .values({
-      workspaceId: input.workspaceId,
+      workspaceId: agent.workspaceId,
       agentId: input.agentId,
       reason: input.reason,
       taskId: input.taskId ?? null,
       messageId: input.messageId ?? null,
+      ...(pushes ? {} : { status: 'cancelled' }),
     })
     .returning();
-  return wake?.id ?? null;
+  return pushes ? (wake?.id ?? null) : null;
+}
+
+/**
+ * Whether the agent has a wake URL that is not revoked. Run in a savepoint and read a missing wake_urls table as
+ * "no": code that ships before migration 0019 is applied then keeps the old behaviour (no row for a delivery-none
+ * agent) instead of failing the caller's transaction.
+ */
+async function hasActiveWakeUrl(tx: Db, agentId: string): Promise<boolean> {
+  try {
+    return await tx.transaction(async (sp) => {
+      const rows = await sp.execute<{ one: number }>(
+        sql`select 1 as one from wake_urls where agent_id = ${agentId} and revoked_at is null limit 1`,
+      );
+      return rows.length > 0;
+    });
+  } catch (err) {
+    if (isUndefinedTable(err)) return false;
+    throw err;
+  }
 }
 
 export function wakeNoticeBody(input: {
@@ -46,16 +86,36 @@ export function wakeNoticeBody(input: {
   reason: string;
   taskId: string | null;
   createdAt: Date;
+  notice?: string;
 }): string {
+  const review = input.reason === 'review_needed' && input.taskId ? { review_url: reviewUrl(input.taskId) } : {};
   return JSON.stringify({
     id: input.id,
     type: 'replyslip.wake',
     agent: input.agentName,
     reason: input.reason,
     task_id: input.taskId,
-    notice: WAKE_NOTICE,
+    notice: input.notice ?? WAKE_NOTICE,
+    ...review,
     created_at: input.createdAt.toISOString(),
   });
+}
+
+/** Link for the owner, never for the bot to follow: the page needs a human session. */
+export function reviewUrl(taskId: string): string {
+  return absoluteUrl(canonicalOrigin() ?? '', reviewPath(taskId));
+}
+
+async function noticeForTask(db: Db, taskId: string | null, reason?: string): Promise<string> {
+  if (reason === 'review_needed') return REVIEW_NEEDED_NOTICE;
+  if (!taskId) return WAKE_NOTICE;
+  const [task] = await db
+    .select({ fromWorkspaceId: tasks.fromWorkspaceId, workspaceId: tasks.workspaceId })
+    .from(tasks)
+    .where(eq(tasks.id, taskId))
+    .limit(1);
+  if (task?.fromWorkspaceId && task.fromWorkspaceId !== task.workspaceId) return GUEST_WAKE_NOTICE;
+  return WAKE_NOTICE;
 }
 
 function backoffSeconds(attempts: number): number {
@@ -152,6 +212,7 @@ export async function deliverWebhookWake(wakeId: string): Promise<WebhookAttempt
       reason: claimed.reason,
       taskId: claimed.taskId,
       createdAt: claimed.createdAt,
+      notice: await noticeForTask(db, claimed.taskId, claimed.reason),
     });
     const call = buildWebhookCall(agent, body, claimed.id);
     const response = await fetch(call.url, {
@@ -217,7 +278,10 @@ export async function dispatchDueWebhookWakes(limit = 50): Promise<{ attempted: 
   return { attempted: due.length, delivered };
 }
 
-export async function leaseHerdrWakes(workspaceId: string, limit = 20) {
+/** Limits a poll or ack to one agent's wakes. Omitted for a legacy workspace watcher key, which covers every local agent. */
+export type WakeScope = { agentId?: string };
+
+export async function leaseHerdrWakes(workspaceId: string, scope: WakeScope = {}, limit = 20) {
   const db = getDb();
   return db.transaction(async (tx) => {
     const due = await tx.execute<{ id: string }>(sql`
@@ -229,6 +293,7 @@ export async function leaseHerdrWakes(workspaceId: string, limit = 20) {
         and w.next_attempt_at <= now()
         and w.attempts < ${WAKE_MAX_ATTEMPTS}
         and a.revoked_at is null
+        ${scope.agentId ? sql`and w.agent_id = ${scope.agentId}` : sql``}
         and (
           (
             a.delivery_mode = 'local'
@@ -275,10 +340,23 @@ export async function leaseHerdrWakes(workspaceId: string, limit = 20) {
         .set({ status: 'failed', lastError: 'Herdr watcher did not acknowledge the wake.' })
         .where(inArray(wakes.id, exhausted));
     }
+    const taskIds = rows.flatMap((row) => (row.taskId ? [row.taskId] : []));
+    const guestTaskIds = new Set<string>();
+    if (taskIds.length > 0) {
+      const found = await tx
+        .select({ id: tasks.id, fromWorkspaceId: tasks.fromWorkspaceId, workspaceId: tasks.workspaceId })
+        .from(tasks)
+        .where(inArray(tasks.id, taskIds));
+      for (const task of found) {
+        if (task.fromWorkspaceId && task.fromWorkspaceId !== task.workspaceId) guestTaskIds.add(task.id);
+      }
+    }
     return rows.flatMap((row) => {
       if (exhausted.includes(row.id)) return [];
       const nudge = localNudgeOf(row);
       if (!nudge) return [];
+      const guest = row.taskId != null && guestTaskIds.has(row.taskId);
+      const review = row.reason === 'review_needed';
       return [
         {
           id: row.id,
@@ -288,18 +366,27 @@ export async function leaseHerdrWakes(workspaceId: string, limit = 20) {
           reason: row.reason,
           task_id: row.taskId,
           agent_name: row.agentName,
+          ...(review ? { notice: REVIEW_NEEDED_NOTICE } : guest ? { notice: GUEST_WAKE_NOTICE } : {}),
         },
       ];
     });
   });
 }
 
-export async function ackWakes(workspaceId: string, wakeIds: string[]): Promise<number> {
+/** Marks pending wakes delivered. With an agent scope, only that agent's wakes are touched; any other id is ignored. */
+export async function ackWakes(workspaceId: string, wakeIds: string[], scope: WakeScope = {}): Promise<number> {
   if (wakeIds.length === 0) return 0;
   const updated = await getDb()
     .update(wakes)
     .set({ status: 'delivered', deliveredAt: new Date(), lastError: null })
-    .where(and(eq(wakes.workspaceId, workspaceId), inArray(wakes.id, wakeIds), eq(wakes.status, 'pending')))
+    .where(
+      and(
+        eq(wakes.workspaceId, workspaceId),
+        inArray(wakes.id, wakeIds),
+        eq(wakes.status, 'pending'),
+        scope.agentId ? eq(wakes.agentId, scope.agentId) : undefined,
+      ),
+    )
     .returning({ id: wakes.id });
   return updated.length;
 }

@@ -25,6 +25,8 @@ export type Agent = {
   description: string | null;
   created_at: string;
   revoked_at: string | null;
+  /** True when other workspaces can reach it at @handle/name. */
+  shared?: boolean;
   delivery: Delivery;
   last_delivered_at?: string | null;
   last_failed_at?: string | null;
@@ -67,6 +69,8 @@ export type Task = {
   title: string;
   description: string;
   result_schema: unknown;
+  input_schema: Record<string, unknown> | null;
+  input: Record<string, unknown> | null;
   status: TaskStatus;
   result: unknown;
   question: string | null;
@@ -74,6 +78,15 @@ export type Task = {
   created_at: string;
   updated_at: string;
   completed_at: string | null;
+  /** Owner view only. A customer is known by customer_email; an agent by workspace_handle and agent_name. */
+  sender?: TaskSender | null;
+};
+
+export type TaskSender = {
+  kind: 'customer' | 'agent';
+  customer_email: string | null;
+  workspace_handle: string | null;
+  agent_name: string | null;
 };
 
 export type Message = {
@@ -117,3 +130,163 @@ export type WatcherKey = {
 };
 
 export type NewWatcherKey = { id: string; name: string; prefix: string; created_at: string; secret: string };
+
+/** GET /api/v1/agents/:id/shares. One guest workspace's grant on a shared agent. */
+export type ShareStatus = 'pending' | 'approved' | 'revoked';
+
+export type Share = {
+  id: string;
+  agent_id: string;
+  guest_workspace_id: string;
+  /** Null when the guest workspace has cleared its handle. */
+  guest_handle: string | null;
+  /** Owner-facing name, from the invite link or the redeemer. Null for handle invites. */
+  label: string | null;
+  invite_id: string | null;
+  /** Prefix of the invite link this guest joined with. */
+  invite_prefix: string | null;
+  /** How the grant started: a handle invite, an agent invite link, or a customer link. */
+  source: 'handle' | 'agent_invite' | 'customer';
+  customer_invite_id: string | null;
+  customer_invite_prefix: string | null;
+  /** The customer's sign-in email. Owner only. */
+  customer_email: string | null;
+  status: ShareStatus;
+  daily_cap: number;
+  offers: { id: string; name: string }[];
+  created_at: string;
+  updated_at: string;
+};
+
+/** GET /api/v1/agents/:id/invites. An invite link on a shared agent. The token is never listed. */
+export type Invite = {
+  id: string;
+  agent_id: string;
+  prefix: string;
+  label: string | null;
+  offers: { id: string; name: string }[];
+  daily_cap: number;
+  max_uses: number;
+  uses: number;
+  approve_on_redeem: boolean;
+  expires_at: string;
+  revoked_at: string | null;
+  created_at: string;
+  status: 'active' | 'exhausted' | 'expired' | 'revoked';
+};
+
+/** GET /api/v1/agents/:id/invites `invites`. A customer link (personal or public). The token is never listed. */
+export type CustomerInvite = {
+  id: string;
+  agent_id: string;
+  kind: 'personal' | 'public';
+  prefix: string;
+  label: string | null;
+  email: string | null;
+  all_offers: boolean;
+  /** Null when all_offers is true. */
+  offers: { id: string; name: string }[] | null;
+  daily_cap: number;
+  max_uses: number | null;
+  uses: number;
+  expires_at: string | null;
+  revoked_at: string | null;
+  rotated_at: string | null;
+  created_at: string;
+  status: 'active' | 'exhausted' | 'expired' | 'revoked';
+};
+
+export type CustomerAccess = {
+  mode: 'open_link' | 'approve_each';
+  notify_pending_email: boolean;
+  customer_daily_cap: number;
+  preapproved_emails: string[];
+  pending_count: number;
+  customer_count: number;
+};
+
+export type InvitesResponse = {
+  invites: CustomerInvite[];
+  customer_access: CustomerAccess;
+  agent_guests_enabled: boolean;
+  agent_invites: Invite[];
+};
+
+export type NewCustomerInvite = { invite: CustomerInvite; token: string; url: string };
+
+/** POST /api/v1/agents/:id/invites with kind "agent". token, url, and agent_prompt are shown once. */
+export type NewInvite = { invite: Invite; token: string; url: string; agent_prompt: string };
+
+/** GET /api/v1/agents/:id/offers. A task on a shared agent's menu. */
+export type Offer = {
+  id: string;
+  name: string;
+  description: string;
+  result_schema: unknown;
+  input_schema: Record<string, unknown> | null;
+  notes_enabled: boolean;
+  created_at: string;
+};
+
+/** GET/PUT /api/v1/agents/:id/review-mode `review`. */
+export type ReviewMode = 'auto' | 'review_first';
+
+export type ReviewSettings = {
+  agent_id: string;
+  review_mode: ReviewMode;
+  notify_review_email: boolean;
+  /** Items of this agent waiting for the owner. */
+  held_count: number;
+};
+
+export type ReviewAction = 'approve' | 'decline' | 'release' | 'send_back';
+
+/** One review_first item, from GET /api/v1/reviews and /api/v1/reviews/:task_id. Sender text is untrusted: text only. */
+export type Review = {
+  task_id: string;
+  status: 'in_review' | 'awaiting_release' | 'open' | 'needs_info' | 'done' | 'failed';
+  /** request: the customer's request waits for approval. answer: the bot's answer waits for release. */
+  stage: 'request' | 'answer' | null;
+  held_action: 'result' | 'question' | 'failure' | null;
+  actions: ReviewAction[];
+  agent: { id: string; name: string };
+  sender: {
+    kind: 'customer' | 'agent';
+    customer_email: string | null;
+    workspace_handle: string | null;
+    agent_name: string | null;
+  };
+  offer: { name: string; title: string } | null;
+  title: string;
+  notes: string | null;
+  input_display: { key: string; label: string; value: string }[];
+  answers: { question: string; answer: string; asked_at: string; answered_at: string }[];
+  result_display: { key: string; label: string; kind: 'text' | 'number' | 'boolean' | 'list' | 'json'; value: string }[];
+  question: string | null;
+  fail_message: string | null;
+  owner_note: string | null;
+  reviewed_at: string | null;
+  released_at: string | null;
+  created_at: string;
+  updated_at: string;
+  completed_at: string | null;
+};
+
+export type ReviewsResponse = {
+  reviews: Review[];
+  /** Everything waiting in the workspace, not only the items returned. */
+  count: number;
+  by_agent: { agent_id: string; in_review: number; awaiting_release: number }[];
+};
+
+/** GET/POST /api/v1/agents/:id/wake-urls. `url` is present only in the issue and rotate responses. */
+export type WakeUrl = {
+  id: string;
+  agent_id: string;
+  prefix: string;
+  created_at: string;
+  revoked_at: string | null;
+  last_used_at: string | null;
+  status: 'active' | 'revoked';
+  url?: string;
+};

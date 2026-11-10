@@ -4,7 +4,7 @@ import { useEffect } from 'react';
 
 /**
  * Progressive enhancements only; every element is visible and readable before this runs.
- * The task-list status flip, the pinned "how a task works" stage and the FAQ pane.
+ * The relay line, the task-list status flip, the "how a task works" rows fading in and the FAQ pane.
  */
 export function LandingEffects() {
   useEffect(() => {
@@ -44,24 +44,58 @@ export function LandingEffects() {
       });
     }
 
-    // pinned stage
-    const steps = [...document.querySelectorAll<HTMLElement>('.steps li')];
-    const frames = [...document.querySelectorAll<HTMLElement>('.frame > pre')];
-    const caps = ['builder → relay', 'reviewer → relay', 'reviewer → relay'];
-    const cap = document.getElementById('stage-cap');
-    const setStep = (i: number) => {
-      steps.forEach((s, j) => s.classList.toggle('on', j === i));
-      frames.forEach((f, j) => f.classList.toggle('cur', j === i));
-      if (cap) cap.textContent = caps[i] ?? '';
-    };
-    const so = new IntersectionObserver(
-      (es) => {
-        for (const e of es) if (e.isIntersecting) setStep(Number((e.target as HTMLElement).dataset.step));
-      },
-      { rootMargin: '-45% 0px -45% 0px' },
-    );
-    steps.forEach((s) => so.observe(s));
-    cleanups.push(() => so.disconnect());
+    // the relay line: swap the resting copy for the stage, then play the beats once the block is half in view
+    const relay = document.querySelector<HTMLElement>('[data-relay]');
+    const roll = relay?.querySelectorAll<HTMLElement>('.roll > span');
+    if (relay && roll?.length === 2 && !reduce && relay.getBoundingClientRect().bottom > 0) {
+      // the slot's width follows its words: "you are", then "ReplySlip is"
+      const size = () => {
+        relay.style.setProperty('--w1', `${roll[0]!.offsetWidth}px`);
+        relay.style.setProperty('--w2', `${roll[1]!.offsetWidth}px`);
+      };
+      relay.classList.add('anim');
+      size();
+      addEventListener('resize', size);
+      const lo = new IntersectionObserver(
+        (es) => {
+          if (!es.some((e) => e.isIntersecting)) return;
+          lo.disconnect();
+          relay.classList.add('play');
+        },
+        { threshold: 0.5 },
+      );
+      lo.observe(relay);
+      cleanups.push(() => {
+        lo.disconnect();
+        removeEventListener('resize', size);
+        relay.classList.remove('anim', 'play');
+      });
+    }
+
+    // how a task works: rows below the fold wait hidden, then fade in once as they scroll into view
+    const rows = [...document.querySelectorAll<HTMLElement>('[data-how] .scene')];
+    if (rows.length && !reduce) {
+      const ro = new IntersectionObserver(
+        (es) => {
+          for (const e of es) {
+            if (!e.isIntersecting) continue;
+            e.target.classList.remove('hid');
+            ro.unobserve(e.target);
+          }
+        },
+        { threshold: 0.2, rootMargin: '0px 0px -5% 0px' },
+      );
+      // rows already on screen or above it (an anchor jump, a reload mid-page) stay as they are
+      for (const r of rows) {
+        if (r.getBoundingClientRect().top < innerHeight * 0.9) continue;
+        r.classList.add('hid');
+        ro.observe(r);
+      }
+      cleanups.push(() => {
+        ro.disconnect();
+        rows.forEach((r) => r.classList.remove('hid'));
+      });
+    }
 
     // faq: index on the left, one answer in the pane (wide screens)
     const pane = document.getElementById('faq-pane');

@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
+import { ReviewsNavLink } from '@/components/dashboard/ReviewsNavLink';
 import { currentUser } from '@/components/dashboard/session';
 import { SignOutButton } from '@/components/dashboard/SignOutButton';
 import { MarkIcon } from '@/components/site/Mark';
@@ -10,8 +11,10 @@ import '@/components/dashboard/dashboard.css';
 export const dynamic = 'force-dynamic';
 
 export const metadata: Metadata = {
-  title: 'Dashboard',
+  title: { absolute: 'Dashboard · Valetto', template: '%s · Valetto' },
   robots: { index: false, follow: false, nocache: true },
+  // Connected apps live here; links out never carry a Referer (docs/design/mcp-oauth.md §5.4).
+  referrer: 'no-referrer',
 };
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -24,12 +27,15 @@ export default async function DashboardLayout({ children }: { children: React.Re
         Skip to content
       </a>
       <header className="dash-top">
-        <Link className="mark" href="/dashboard" aria-label="ReplySlip dashboard">
+        <Link className="mark" href="/dashboard" aria-label="Valetto dashboard">
           <MarkIcon />
-          ReplySlip
+          Valetto
         </Link>
         <nav aria-label="Dashboard">
           <ul>
+            <li>
+              <ReviewsNavLink />
+            </li>
             <li>
               <a href={agentDocs.paths.skill} target="_blank" rel="noreferrer">
                 Agent docs
@@ -51,7 +57,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
       </main>
       <footer className="foot-simple">
         <p>
-          ReplySlip is built by <a href="https://clairevue.ai">ClaireVue</a>, Montréal
+          Valetto is built by <a href="https://clairevue.ai">ClaireVue</a>, Montréal
         </p>
         <Link href="/agents">How agents join</Link>
       </footer>

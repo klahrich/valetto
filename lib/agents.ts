@@ -1,6 +1,6 @@
 import { and, desc, eq, isNull, max, sql } from 'drizzle-orm';
 import { getDb } from '@/db';
-import { agentKeys, agents, joinCodes, watcherKeys, type AgentRow, type JoinCodeRow } from '@/db/schema';
+import { agentBranding, agentKeys, agents, joinCodes, watcherKeys, type AgentRow, type JoinCodeRow } from '@/db/schema';
 import type { SessionUser } from './auth';
 import {
   AGENT_NAME_PATTERN,
@@ -12,7 +12,13 @@ import {
 } from './constants';
 import { randomToken, sha256, tokenPrefix } from './crypto';
 import { applyDeliveryUpdate, deliveryColumns, publicDelivery, type DeliveryInput, type DeliveryUpdate } from './delivery';
+import { agentCountForUpdate, loadFirstAgentNotice, queueFirstAgentAlert } from './first-agent-alert';
 import { HttpError, isUniqueViolation } from './errors';
+import { deleteLogoQuietly } from './logo-store';
+import { oauthEnabled } from './oauth/config';
+import { revokeAgentGrants } from './oauth/grants';
+import { guestCredentialState } from './invites';
+import { deliverWakeIds, failGuestTasks } from './sharing';
 import { clientIp } from './origin';
 import { assertWithinLimit } from './plans';
 import { consumeRateLimit } from './rate-limit';
@@ -22,6 +28,13 @@ export type AgentPrincipal = {
   agentId: string;
   agentName: string;
   keyId: string;
+  /**
+   * True for a key that belongs to an unclaimed invite workspace. That caller may use only the
+   * granted offers and the tasks it sent. Claiming the workspace clears this.
+   */
+  externalGuest?: boolean;
+  /** The invite that minted this guest has expired. Later calls must fail. */
+  externalGrantExpired?: boolean;
 };
 
 type WorkspaceUser = SessionUser & { workspace: NonNullable<SessionUser['workspace']> };
@@ -38,7 +51,9 @@ export function serializeAgent(agent: AgentRow) {
     description: agent.description,
     created_at: agent.createdAt.toISOString(),
     revoked_at: agent.revokedAt?.toISOString() ?? null,
+    shared: agent.shared,
     delivery: publicDelivery(agent),
+    review_mode: agent.reviewMode === 'review_first' ? 'review_first' : 'auto',
   };
 }
 
@@ -54,8 +69,9 @@ export async function createAgent(
     );
   }
   try {
-    return await getDb().transaction(async (tx) => {
+    const created = await getDb().transaction(async (tx) => {
       await assertWithinLimit(user.workspace.id, 'agents', tx);
+      const prior = await agentCountForUpdate(tx, user.workspace.id);
       const [agent] = await tx
         .insert(agents)
         .values({
@@ -65,8 +81,11 @@ export async function createAgent(
         })
         .returning();
       if (!agent) throw new HttpError(500, 'internal_error', 'Something went wrong.');
-      return agent;
+      const notice = prior === 0 ? await loadFirstAgentNotice(tx, agent) : null;
+      return { agent, notice };
     });
+    if (created.notice) queueFirstAgentAlert(created.notice);
+    return created.agent;
   } catch (err) {
     if (isUniqueViolation(err)) {
       throw new HttpError(409, 'name_taken', `An agent named ${input.name} already exists in this workspace.`);
@@ -79,18 +98,105 @@ export async function listAgents(workspaceId: string): Promise<AgentRow[]> {
   return getDb()
     .select()
     .from(agents)
-    .where(eq(agents.workspaceId, workspaceId))
+    .where(and(eq(agents.workspaceId, workspaceId), eq(agents.role, 'agent')))
     .orderBy(desc(agents.createdAt));
+}
+
+export type TeammateDelivery = 'webhook' | 'local' | 'none';
+
+export type Teammate = {
+  id: string;
+  name: string;
+  description: string | null;
+  delivery: TeammateDelivery;
+  shared: boolean;
+  created_at: string;
+  you: boolean;
+  watcher_online?: boolean;
+};
+
+/**
+ * MCP list_agents: active agents in the caller's workspace, sorted by name.
+ * Selects only public columns, so no webhook URL, pane, header, secret, or key ever leaves the database.
+ */
+export async function listTeammates(principal: AgentPrincipal): Promise<Teammate[]> {
+  const rows = await getDb()
+    .select({
+      id: agents.id,
+      name: agents.name,
+      description: agents.description,
+      deliveryMode: agents.deliveryMode,
+      shared: agents.shared,
+      createdAt: agents.createdAt,
+    })
+    .from(agents)
+    .where(and(eq(agents.workspaceId, principal.workspaceId), isNull(agents.revokedAt), eq(agents.role, 'agent')));
+  const hasLocal = rows.some((row) => isLocalDelivery(row));
+  const seen = hasLocal ? await workspaceWatcherLastSeen(principal.workspaceId) : null;
+  return rows
+    .map((row): Teammate => {
+      const delivery: TeammateDelivery = isLocalDelivery(row) ? 'local' : row.deliveryMode === 'webhook' ? 'webhook' : 'none';
+      return {
+        id: row.id,
+        name: row.name,
+        description: row.description,
+        delivery,
+        shared: row.shared,
+        created_at: row.createdAt.toISOString(),
+        you: row.id === principal.agentId,
+        ...(delivery === 'local' ? { watcher_online: watcherPresence(row, seen).watcher_online } : {}),
+      };
+    })
+    .sort((a, b) => {
+      const byFolded = a.name.toLowerCase().localeCompare(b.name.toLowerCase(), 'en');
+      return byFolded !== 0 ? byFolded : a.name < b.name ? -1 : a.name > b.name ? 1 : 0;
+    });
 }
 
 export async function getAgent(workspaceId: string, agentId: string): Promise<AgentRow> {
   const [agent] = await getDb()
     .select()
     .from(agents)
-    .where(and(eq(agents.id, agentId), eq(agents.workspaceId, workspaceId)))
+    .where(and(eq(agents.id, agentId), eq(agents.workspaceId, workspaceId), eq(agents.role, 'agent')))
     .limit(1);
+  // The hidden customer sender agent is not manageable: no keys, delivery, or revoke through these routes.
   if (!agent) throw new HttpError(404, 'not_found', 'No agent was found.');
   return agent;
+}
+
+/** Same name rule as registration: trim, then a letter followed by letters, numbers, underscores, or hyphens, max 64. */
+export function assertAgentName(name: string): string {
+  const trimmed = name.trim();
+  if (!AGENT_NAME_PATTERN.test(trimmed)) {
+    throw new HttpError(
+      400,
+      'invalid_name',
+      'Agent name must start with a letter and contain only letters, numbers, underscores, or hyphens (max 64).',
+    );
+  }
+  return trimmed;
+}
+
+/** PATCH /api/v1/agents/:id: the owner can rename any agent in the workspace; an agent key can rename only itself. */
+export async function renameAgent(workspaceId: string, agentId: string, name: string): Promise<AgentRow> {
+  const next = assertAgentName(name);
+  const agent = await getAgent(workspaceId, agentId);
+  if (agent.revokedAt) throw new HttpError(409, 'agent_revoked', 'This agent has been revoked.');
+  if (agent.name === next) return agent;
+  try {
+    const [updated] = await getDb()
+      .update(agents)
+      .set({ name: next })
+      .where(and(eq(agents.id, agent.id), eq(agents.workspaceId, workspaceId)))
+      .returning();
+    if (!updated) throw new HttpError(404, 'not_found', 'No agent was found.');
+    return updated;
+  } catch (err) {
+    if (isUniqueViolation(err)) {
+      throw new HttpError(409, 'name_taken', `An agent named ${next} already exists in this workspace.`);
+    }
+    throw err;
+  }
 }
 
 export async function revokeAgent(workspaceId: string, agentId: string): Promise<AgentRow> {
@@ -98,13 +204,30 @@ export async function revokeAgent(workspaceId: string, agentId: string): Promise
   const agent = await getAgent(workspaceId, agentId);
   if (agent.revokedAt) return agent;
   const now = new Date();
-  await db.transaction(async (tx) => {
+  const written = await db.transaction(async (tx) => {
+    // Agent first, then its tasks: the same lock order as answerTask and the task tools.
+    await tx.execute(sql`select id from agents where id = ${agent.id} and workspace_id = ${workspaceId} for update`);
+    const [fresh] = await tx.select().from(agents).where(eq(agents.id, agent.id)).limit(1);
+    if (!fresh || fresh.revokedAt) return { logoPath: null, wakeIds: [] as string[] };
     await tx.update(agents).set({ revokedAt: now }).where(eq(agents.id, agent.id));
     await tx
       .update(agentKeys)
       .set({ revokedAt: now })
       .where(and(eq(agentKeys.agentId, agent.id), isNull(agentKeys.revokedAt)));
+    // MCP OAuth §5.8: every connected-app grant on the agent goes with it. Behind the flag, so this never touches
+    // the oauth_* tables before their migration is applied.
+    if (oauthEnabled()) await revokeAgentGrants(tx, agent.id);
+    // Spec 13.5: a revoked agent keeps no branding, and its logo blob goes too (after commit).
+    const [branding] = await tx
+      .delete(agentBranding)
+      .where(eq(agentBranding.agentId, agent.id))
+      .returning({ logoBlobPath: agentBranding.logoBlobPath });
+    // Open guest and customer requests to this agent fail as declined_by_owner, and their senders are woken.
+    const closed = await failGuestTasks(tx, fresh, null);
+    return { logoPath: branding?.logoBlobPath ?? null, wakeIds: closed.wakeIds };
   });
+  await deliverWakeIds(written.wakeIds);
+  await deleteLogoQuietly(written.logoPath);
   return { ...agent, revokedAt: now };
 }
 
@@ -179,18 +302,25 @@ export async function setAgentDelivery(workspaceId: string, agentId: string, inp
   return updated;
 }
 
-export async function authenticateAgentKey(token: string): Promise<AgentPrincipal | null> {
+export async function authenticateAgentKey(
+  token: string,
+  options?: { recordUse?: boolean },
+): Promise<AgentPrincipal | null> {
   const db = getDb();
   const [key] = await db.select().from(agentKeys).where(eq(agentKeys.tokenHash, sha256(token))).limit(1);
   if (!key || key.revokedAt) return null;
   const [agent] = await db.select().from(agents).where(eq(agents.id, key.agentId)).limit(1);
   if (!agent || agent.revokedAt) return null;
-  await db.update(agentKeys).set({ lastUsedAt: new Date() }).where(eq(agentKeys.id, key.id));
+  if (options?.recordUse !== false) {
+    await db.update(agentKeys).set({ lastUsedAt: new Date() }).where(eq(agentKeys.id, key.id));
+  }
+  const guest = await guestCredentialState(agent.workspaceId);
   return {
     workspaceId: agent.workspaceId,
     agentId: agent.id,
     agentName: agent.name,
     keyId: key.id,
+    ...(guest.external ? { externalGuest: true, externalGrantExpired: guest.expired } : {}),
   };
 }
 
@@ -349,7 +479,7 @@ export async function registerAgentWithJoinCode(input: {
   const secret = randomToken('rsk_');
 
   try {
-    return await getDb().transaction(async (tx) => {
+    const created = await getDb().transaction(async (tx) => {
       await tx.execute(sql`select id from join_codes where id = ${loaded.code.id} for update`);
       const [fresh] = await tx.select().from(joinCodes).where(eq(joinCodes.id, loaded.code.id)).limit(1);
       if (!fresh || fresh.revokedAt) {
@@ -362,6 +492,7 @@ export async function registerAgentWithJoinCode(input: {
         throw new HttpError(401, 'join_code_expired', 'This join code has expired.');
       }
       await assertWithinLimit(fresh.workspaceId, 'agents', tx);
+      const prior = await agentCountForUpdate(tx, fresh.workspaceId);
       const [agent] = await tx
         .insert(agents)
         .values({
@@ -385,8 +516,11 @@ export async function registerAgentWithJoinCode(input: {
       if (!consumed) {
         throw new HttpError(401, 'join_code_used', 'This join code has already been used.');
       }
-      return { agent, apiKey: secret };
+      const notice = prior === 0 ? await loadFirstAgentNotice(tx, agent) : null;
+      return { agent, apiKey: secret, notice };
     });
+    if (created.notice) queueFirstAgentAlert(created.notice);
+    return { agent: created.agent, apiKey: created.apiKey };
   } catch (err) {
     if (isUniqueViolation(err)) {
       throw new HttpError(409, 'name_taken', `An agent named ${input.name} already exists in this workspace.`);
@@ -495,6 +629,26 @@ export async function revokeWatcherKey(workspaceId: string, keyId: string) {
     .limit(1);
   if (!existing) throw new HttpError(404, 'not_found', 'No watcher key was found.');
   return existing;
+}
+
+/**
+ * Who may poll and ack local wakes. A legacy workspace watcher key (`rsw_`) covers every local agent in the
+ * workspace. An agent's own key (`rsk_`) covers only that agent: the poll and ack queries are scoped to its id, so
+ * it never sees or acks another agent's wakes.
+ */
+export type WakePoller =
+  | { kind: 'watcher'; workspaceId: string; keyId: string }
+  | { kind: 'agent'; workspaceId: string; agentId: string; agentName: string };
+
+export const POLL_KEY_REQUIRED = 'Agent key or watcher key required.';
+export const POLL_KEY_REJECTED = "Key rejected. Use this agent's own key, or a watcher key from your dashboard.";
+
+export async function authenticateWakePoller(token: string): Promise<WakePoller | null> {
+  const watcher = await authenticateWatcherKey(token);
+  if (watcher) return { kind: 'watcher', ...watcher };
+  const agent = await authenticateAgentKey(token, { recordUse: false });
+  if (!agent) return null;
+  return { kind: 'agent', workspaceId: agent.workspaceId, agentId: agent.agentId, agentName: agent.agentName };
 }
 
 /**

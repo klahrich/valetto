@@ -1,7 +1,8 @@
 import { and, desc, eq, isNull, sql } from 'drizzle-orm';
 import { getDb } from '@/db';
-import { loginCodes, sessions, users, workspaces } from '@/db/schema';
+import { agents, loginCodes, sessions, users, workspaces } from '@/db/schema';
 import {
+  agentGuestsEnabled,
   EMAIL_PATTERN,
   LOGIN_CODE_MAX_ATTEMPTS,
   LOGIN_CODE_TTL_MS,
@@ -16,11 +17,14 @@ import {
   sha256,
 } from './crypto';
 import { getEmailSender } from './email';
+import { authenticateAgentKey } from './agents';
 import { HttpError } from './errors';
-import { readCookie } from './http';
+import { bearerToken, readCookie } from './http';
 import { recordMarketingOptIn } from './marketing';
 import { clientIp } from './origin';
 import { consumeRateLimit } from './rate-limit';
+import { workspaceNameFromEmail } from './workspace-name';
+import { queueSignupAlert, type SignupKind } from './signup-alert';
 
 export const REQUEST_CODE_MESSAGE =
   'If that email can receive mail, we sent a sign-in code. It expires in 10 minutes.';
@@ -31,7 +35,7 @@ export type SessionUser = {
   emailVerifiedAt: Date | null;
   marketingOptIn: boolean;
   createdAt: Date;
-  workspace: { id: string; name: string; createdAt: Date } | null;
+  workspace: { id: string; name: string; handle: string | null; createdAt: Date } | null;
 };
 
 export type MarketingOptIn = { consentText: string };
@@ -44,15 +48,30 @@ function normalizeEmail(email: string): string {
   return normalized;
 }
 
-function workspaceNameFromEmail(email: string): string {
-  const local = email.split('@')[0] ?? '';
-  const cleaned = local.replace(/[^A-Za-z0-9]+/g, ' ').trim().slice(0, 40);
-  return cleaned ? `${cleaned} workspace` : 'Workspace';
+
+/**
+ * A signup source is a short slug such as a `?ref=` or `?utm_source=` value. Anything else is dropped, so a newline
+ * or other free text can never reach the internal first-agent alert email as an extra line.
+ */
+const SIGNUP_SOURCE_PATTERN = /^[a-z0-9_-]{1,40}$/;
+
+/** Trimmed and lowercased, kept only when it matches SIGNUP_SOURCE_PATTERN, else null. Never written over an existing user. */
+export function normalizeSignupSource(value: string | null | undefined): string | null {
+  if (typeof value !== 'string') return null;
+  const normalized = value.trim().toLowerCase();
+  return SIGNUP_SOURCE_PATTERN.test(normalized) ? normalized : null;
+}
+
+/** True only for a JSON boolean true. Anything else, including "true" or 1, is ignored. */
+export function normalizeWantsSharing(value: unknown): boolean {
+  return value === true;
 }
 
 export async function requestLoginCode(
   emailInput: string,
   req: Request,
+  sourceInput?: string | null,
+  options: { wantsSharing?: boolean } = {},
 ): Promise<{ limited: true; retryAfterSeconds: number } | { limited: false }> {
   const email = normalizeEmail(emailInput);
   const limit = await consumeRateLimit({
@@ -64,8 +83,12 @@ export async function requestLoginCode(
 
   const db = getDb();
   const existing = await db.select({ id: users.id }).from(users).where(eq(users.email, email)).limit(1);
+  const wantsSharing = options.wantsSharing === true;
   if (existing.length === 0) {
-    await db.insert(users).values({ email });
+    await db.insert(users).values({ email, signupSource: normalizeSignupSource(sourceInput), wantsSharing });
+  } else if (wantsSharing) {
+    // Sticky: an existing user can opt in later. Nothing here sets it back to false.
+    await db.update(users).set({ wantsSharing: true }).where(and(eq(users.email, email), eq(users.wantsSharing, false)));
   }
 
   const code = randomLoginCode();
@@ -87,6 +110,7 @@ export async function requestLoginCode(
 export async function renameWorkspace(workspaceId: string, name: string): Promise<{
   id: string;
   name: string;
+  handle: string | null;
   createdAt: Date;
 }> {
   const trimmed = name.trim();
@@ -97,15 +121,38 @@ export async function renameWorkspace(workspaceId: string, name: string): Promis
     .update(workspaces)
     .set({ name: trimmed })
     .where(eq(workspaces.id, workspaceId))
-    .returning({ id: workspaces.id, name: workspaces.name, createdAt: workspaces.createdAt });
+    .returning({ id: workspaces.id, name: workspaces.name, handle: workspaces.handle, createdAt: workspaces.createdAt });
   if (!updated) throw new HttpError(404, 'not_found', 'No workspace was found.');
   return updated;
+}
+
+const CLAIM_NOT_FOUND = 'This claim link is not valid.';
+const ALREADY_IN_WORKSPACE =
+  "This email already has a workspace. Ask your agent to call redeem_invite to add the share to it.";
+
+/** Public summary for the claim page. One 404 for an unknown or already claimed token. */
+/** An open claim: not yet claimed and inside its 7-day window. */
+function claimOpen(hash: string) {
+  return and(eq(workspaces.claimTokenHash, hash), isNull(workspaces.claimedAt), sql`${workspaces.claimExpiresAt} > now()`);
+}
+
+export async function previewClaim(claimToken: string) {
+  if (!agentGuestsEnabled()) throw new HttpError(404, 'claim_not_found', CLAIM_NOT_FOUND);
+  const db = getDb();
+  const [workspace] = await db.select().from(workspaces).where(claimOpen(sha256(claimToken))).limit(1);
+  if (!workspace) throw new HttpError(404, 'claim_not_found', CLAIM_NOT_FOUND);
+  const agentRows = await db
+    .select({ name: agents.name })
+    .from(agents)
+    .where(and(eq(agents.workspaceId, workspace.id), isNull(agents.revokedAt)));
+  return { workspace: { name: workspace.name, handle: workspace.handle }, agents: agentRows };
 }
 
 export async function verifyLoginCode(
   emailInput: string,
   codeInput: string,
   marketing?: MarketingOptIn,
+  claimToken?: string,
 ): Promise<{ token: string; user: SessionUser }> {
   const email = normalizeEmail(emailInput);
   if (!/^\d{6}$/.test(codeInput)) {
@@ -154,11 +201,25 @@ export async function verifyLoginCode(
     throw new HttpError(401, 'invalid_code', 'That code is not valid.');
   }
 
+  // A claim that cannot succeed is refused before the code is consumed, so the person can retry without a new code.
+  const claimHash = claimToken ? sha256(claimToken) : null;
+  if (claimHash && !agentGuestsEnabled()) throw new HttpError(404, 'claim_not_found', CLAIM_NOT_FOUND);
+  if (claimHash) {
+    const [owner] = await db.select({ workspaceId: users.workspaceId }).from(users).where(eq(users.email, email)).limit(1);
+    if (owner?.workspaceId) throw new HttpError(409, 'already_in_workspace', ALREADY_IN_WORKSPACE);
+    const [claimable] = await db
+      .select({ id: workspaces.id })
+      .from(workspaces)
+      .where(claimOpen(claimHash))
+      .limit(1);
+    if (!claimable) throw new HttpError(404, 'claim_not_found', CLAIM_NOT_FOUND);
+  }
+
   const token = randomSessionToken();
   const tokenHash = sha256(token);
   const expiresAt = new Date(Date.now() + SESSION_TTL_SECONDS * 1000);
 
-  const user = await db.transaction(async (tx) => {
+  const { user, signup } = await db.transaction(async (tx) => {
     const [consumed] = await tx
       .update(loginCodes)
       .set({ consumedAt: new Date() })
@@ -180,15 +241,29 @@ export async function verifyLoginCode(
     }
 
     let workspaceId = row.workspaceId;
-    let workspace: { id: string; name: string; createdAt: Date } | null = null;
+    let signupKind: SignupKind | null = null;
+    let workspace: { id: string; name: string; handle: string | null; createdAt: Date } | null = null;
+    if (claimHash && workspaceId) throw new HttpError(409, 'already_in_workspace', ALREADY_IN_WORKSPACE);
     if (!workspaceId) {
-      const [created] = await tx
-        .insert(workspaces)
-        .values({ name: workspaceNameFromEmail(email) })
-        .returning();
+      let created: typeof workspaces.$inferSelect | undefined;
+      if (claimHash) {
+        await tx.execute(sql`select id from workspaces where claim_token_hash = ${claimHash} for update`);
+        [created] = await tx
+          .update(workspaces)
+          .set({ claimTokenHash: null, claimedAt: new Date(), claimExpiresAt: null })
+          .where(claimOpen(claimHash))
+          .returning();
+        if (!created) throw new HttpError(404, 'claim_not_found', CLAIM_NOT_FOUND);
+      } else {
+        [created] = await tx
+          .insert(workspaces)
+          .values({ name: workspaceNameFromEmail(email) })
+          .returning();
+      }
       if (!created) throw new HttpError(500, 'internal_error', 'Something went wrong.');
+      signupKind = claimHash ? 'claim' : 'signup';
       workspaceId = created.id;
-      workspace = { id: created.id, name: created.name, createdAt: created.createdAt };
+      workspace = { id: created.id, name: created.name, handle: created.handle, createdAt: created.createdAt };
       await tx
         .update(users)
         .set({ workspaceId, emailVerifiedAt: new Date() })
@@ -203,6 +278,7 @@ export async function verifyLoginCode(
       workspace = {
         id: existingWorkspace.id,
         name: existingWorkspace.name,
+        handle: existingWorkspace.handle,
         createdAt: existingWorkspace.createdAt,
       };
       if (!row.emailVerifiedAt) {
@@ -215,15 +291,30 @@ export async function verifyLoginCode(
     const [fresh] = await tx.select().from(users).where(eq(users.id, row.id)).limit(1);
     if (!fresh || !workspace) throw new HttpError(500, 'internal_error', 'Something went wrong.');
     return {
-      id: fresh.id,
-      email: fresh.email,
-      emailVerifiedAt: fresh.emailVerifiedAt,
-      marketingOptIn: fresh.marketingOptIn,
-      createdAt: fresh.createdAt,
-      workspace,
-    } satisfies SessionUser;
+      user: {
+        id: fresh.id,
+        email: fresh.email,
+        emailVerifiedAt: fresh.emailVerifiedAt,
+        marketingOptIn: fresh.marketingOptIn,
+        createdAt: fresh.createdAt,
+        workspace,
+      } satisfies SessionUser,
+      signup: signupKind
+        ? {
+            kind: signupKind,
+            email: fresh.email,
+            workspaceId: workspace.id,
+            workspaceName: workspace.name,
+            signupSource: fresh.signupSource,
+            wantsSharing: fresh.wantsSharing,
+            createdAt: new Date(),
+          }
+        : null,
+    };
   });
 
+  // After commit, once per user: only the sign-in that gave them their first workspace queues the alert.
+  if (signup) queueSignupAlert(signup);
   return { token, user };
 }
 
@@ -251,7 +342,7 @@ export async function sessionUser(req: Request): Promise<SessionUser | null> {
   let workspace: SessionUser['workspace'] = null;
   if (user.workspaceId) {
     const [row] = await db.select().from(workspaces).where(eq(workspaces.id, user.workspaceId)).limit(1);
-    if (row) workspace = { id: row.id, name: row.name, createdAt: row.createdAt };
+    if (row) workspace = { id: row.id, name: row.name, handle: row.handle, createdAt: row.createdAt };
   }
   return {
     id: user.id,
@@ -276,6 +367,7 @@ export function serializeUser(user: SessionUser) {
       ? {
           id: user.workspace.id,
           name: user.workspace.name,
+          handle: user.workspace.handle,
           created_at: user.workspace.createdAt.toISOString(),
         }
       : null,
@@ -291,4 +383,26 @@ export async function requireUser(req: Request): Promise<SessionUser & { workspa
     throw new HttpError(409, 'workspace_required', 'This account has no workspace yet.');
   }
   return user as SessionUser & { workspace: NonNullable<SessionUser['workspace']> };
+}
+
+export const HUMAN_APPROVAL_MESSAGE = 'A signed-in human must approve guests in the dashboard.';
+/** review_first: a bot can never approve, release or read what waits for review. */
+export const HUMAN_REVIEW_MESSAGE = 'A signed-in human must review this in the dashboard. Your bot cannot approve or release anything.';
+
+/**
+ * Session cookie for a human owner. An agent API key (`rsk_`) is a different
+ * credential: it is looked up as an agent key, not as a session, and cannot approve.
+ */
+export async function requireHumanOwner(
+  req: Request,
+  message: string = HUMAN_APPROVAL_MESSAGE,
+): Promise<SessionUser & { workspace: NonNullable<SessionUser['workspace']> }> {
+  const token = bearerToken(req);
+  if (token?.startsWith('rsk_')) {
+    await authenticateAgentKey(token, { recordUse: false });
+    throw new HttpError(403, 'human_required', message);
+  }
+  // An MCP OAuth access token (docs/design/mcp-oauth.md §4) is an agent credential too, never a human.
+  if (token?.startsWith('rsoa_')) throw new HttpError(403, 'human_required', message);
+  return requireUser(req);
 }

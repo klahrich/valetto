@@ -3,15 +3,20 @@
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
 import { Agents } from './Agents';
-import { api, errorText, formatTime, SIGNED_OUT_EVENT } from './api';
+import { ConnectedApps } from './ConnectedApps';
+import { api, errorText, SIGNED_OUT_EVENT } from './api';
+import { LocalTime } from './LocalTime';
 import { EmailPrefs } from './EmailPrefs';
 import { JoinCodes, type DocPaths } from './JoinCodes';
+import { SetupChecklist } from './SetupChecklist';
+import { Sharing } from './Sharing';
+import { Tabs } from './Tabs';
 import { Tasks } from './Tasks';
 import { WatcherKeys } from './WatcherKeys';
 import { WorkspaceName } from './WorkspaceName';
 import type { Agent, AgentKey, JoinCode } from './types';
 
-type Workspace = { id: string; name: string; created_at: string };
+type Workspace = { id: string; name: string; handle: string | null; created_at: string };
 
 type Loaded = { agents: Agent[]; keys: Record<string, AgentKey[]>; codes: JoinCode[] };
 
@@ -32,6 +37,7 @@ export function Dashboard({
   marketingOptIn,
   origin,
   paths,
+  guestLimit,
 }: {
   workspace: Workspace;
   email: string;
@@ -39,8 +45,11 @@ export function Dashboard({
   marketingOptIn: boolean;
   origin: string;
   paths: DocPaths;
+  /** Free-plan guest workspaces per shared agent, or null when the plan has no cap. */
+  guestLimit: number | null;
 }) {
   const [agents, setAgents] = useState<Agent[]>([]);
+  const [handle, setHandle] = useState(workspace.handle);
   const [keys, setKeys] = useState<Record<string, AgentKey[]>>({});
   const [codes, setCodes] = useState<JoinCode[]>([]);
   const [loaded, setLoaded] = useState(false);
@@ -97,8 +106,18 @@ export function Dashboard({
         <p className="dash-muted">Workspace</p>
         <WorkspaceName initialName={workspace.name} />
         <p className="dash-muted">
-          Signed in as {email} · created {formatTime(workspace.created_at)}
+          Signed in as {email} · created <LocalTime iso={workspace.created_at} />
           {loaded ? ` · ${live} active ${live === 1 ? 'agent' : 'agents'}` : ''}
+        </p>
+        <p className="dash-muted">
+          {handle ? (
+            <>
+              Handle <code translate="no">@{handle}</code> ·{' '}
+            </>
+          ) : null}
+          <a className="link" href="#sharing">
+            {handle ? 'Manage sharing' : 'Set a handle to share agents'}
+          </a>
         </p>
       </section>
       {error ? (
@@ -109,11 +128,33 @@ export function Dashboard({
           </button>
         </p>
       ) : null}
-      <JoinCodes codes={codes} agents={agents} origin={origin} paths={paths} onChange={refresh} />
-      {loaded ? <Agents agents={agents} keys={keys} onChange={refresh} /> : null}
-      <WatcherKeys />
-      <Tasks refreshKey={tick} />
-      <EmailPrefs initialOptIn={marketingOptIn} />
+      <Tabs
+        label="Dashboard sections"
+        tabs={[
+          {
+            id: 'workspace',
+            label: 'Workspace',
+            content: (
+              <>
+                {loaded && !error ? <SetupChecklist handle={handle} agents={agents} codes={codes} /> : null}
+                <JoinCodes codes={codes} agents={agents} origin={origin} paths={paths} onChange={refresh} />
+                {loaded ? <Agents agents={agents} keys={keys} onChange={refresh} handle={handle} /> : null}
+                <ConnectedApps />
+                <WatcherKeys />
+                <Tasks refreshKey={tick} />
+                <EmailPrefs initialOptIn={marketingOptIn} />
+              </>
+            ),
+          },
+          {
+            id: 'sharing',
+            label: 'Sharing',
+            content: loaded ? (
+              <Sharing agents={agents} handle={handle} onHandleSaved={setHandle} guestLimit={guestLimit} onChange={refresh} />
+            ) : null,
+          },
+        ]}
+      />
     </>
   );
 }

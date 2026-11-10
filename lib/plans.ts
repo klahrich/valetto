@@ -1,4 +1,4 @@
-import { and, eq, gte, isNull, lt, sql } from 'drizzle-orm';
+import { and, eq, gte, isNull, lt, or, sql } from 'drizzle-orm';
 import { getDb, type Db } from '@/db';
 import { agents, tasks, workspaces } from '@/db/schema';
 import { HttpError } from './errors';
@@ -20,9 +20,24 @@ export function usePlanLimitsForTests(caps: PlanCaps | null): void {
   testCaps = caps;
 }
 
+/**
+ * Guests (customers) per shared agent on the free plan. Counts approved shares plus pending
+ * invite_guest and agent-invite shares; a pending customer request counts only toward
+ * MAX_PENDING_PER_BOT. Unlimited workspaces skip this.
+ */
+export const FREE_CUSTOMERS_PER_BOT = 250;
+/** Old name, kept so existing imports and the plan_limit `guest_workspaces` wording stay stable. */
+export const FREE_GUEST_WORKSPACES = FREE_CUSTOMERS_PER_BOT;
+
+let testGuestMax: number | null = null;
+
+export function setGuestWorkspaceLimitForTests(max: number | null): void {
+  testGuestMax = max;
+}
+
 export type PlanLimitBody = {
   error: 'plan_limit';
-  limit: 'agents' | 'tasks_per_month';
+  limit: 'agents' | 'tasks_per_month' | 'guest_workspaces';
   max: number;
   used: number;
   resets_at?: string;
@@ -44,6 +59,9 @@ export function utcMonthWindow(now = new Date()): { start: Date; next: Date } {
 export function planLimitMessage(limit: PlanLimitBody['limit'], max: number, resetsAt?: Date): string {
   const shown = max.toLocaleString('en-US');
   if (limit === 'agents') return `Free plan limit: ${shown} ${max === 1 ? 'agent' : 'agents'}.`;
+  if (limit === 'guest_workspaces') {
+    return `Free plan limit: ${shown} ${max === 1 ? 'customer' : 'customers'} per shared agent.`;
+  }
   const day = (resetsAt ?? utcMonthWindow().next).toISOString().slice(0, 10);
   return `Free plan limit: ${shown} ${max === 1 ? 'task' : 'tasks'} per month. Resets ${day}.`;
 }
@@ -70,18 +88,59 @@ async function countActiveAgents(db: Db, workspaceId: string): Promise<number> {
   return asCount(row?.count);
 }
 
-async function countTasksThisMonth(db: Db, workspaceId: string, now = new Date()): Promise<number> {
+/**
+ * Every task this workspace took part in this UTC month: ones it sent, plus ones its agents received from customers
+ * or guest agents (stored in this workspace, charged to the sender). This is what `usage.tasks_this_month` reports,
+ * so a bot that only serves customers does not read 0.
+ */
+async function countWorkspaceTasksThisMonth(db: Db, workspaceId: string, now = new Date()): Promise<number> {
   const { start, next } = utcMonthWindow(now);
+  const touchesWorkspace = or(eq(tasks.fromWorkspaceId, workspaceId), eq(tasks.workspaceId, workspaceId));
   const [row] = await db
     .select({ count: sql<number>`count(*)::int` })
     .from(tasks)
-    .where(and(eq(tasks.workspaceId, workspaceId), gte(tasks.createdAt, start), lt(tasks.createdAt, next)));
+    .where(and(touchesWorkspace, gte(tasks.createdAt, start), lt(tasks.createdAt, next)));
   return asCount(row?.count);
+}
+
+/** Tasks charged to this workspace's monthly cap this UTC month: the ones it sent. */
+async function countChargedTasksThisMonth(db: Db, workspaceId: string, now = new Date()): Promise<number> {
+  const { start, next } = utcMonthWindow(now);
+  // Guest tasks are stored in the owner's workspace and charged to the sender via from_workspace_id.
+  // Rows from before sharing have a null sender workspace and still count on workspace_id.
+  const sentByWorkspace = or(
+    eq(tasks.fromWorkspaceId, workspaceId),
+    and(isNull(tasks.fromWorkspaceId), eq(tasks.workspaceId, workspaceId)),
+  );
+  const [row] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(tasks)
+    .where(and(sentByWorkspace, gte(tasks.createdAt, start), lt(tasks.createdAt, next)));
+  return asCount(row?.count);
+}
+
+/** Refuse another guest workspace when this shared agent is already at the free cap. `used` is the current pending+approved count. */
+export async function assertGuestWorkspaceLimit(ownerWorkspaceId: string, used: number, db: Db = getDb()): Promise<void> {
+  const [row] = await db.select({ plan: workspaces.plan }).from(workspaces).where(eq(workspaces.id, ownerWorkspaceId)).limit(1);
+  if (asPlan(row?.plan) === 'unlimited') return;
+  const max = testGuestMax ?? FREE_GUEST_WORKSPACES;
+  if (used < max) return;
+  throw new PlanLimitError({
+    error: 'plan_limit',
+    limit: 'guest_workspaces',
+    max,
+    used,
+    message: planLimitMessage('guest_workspaces', max),
+  });
 }
 
 export type WorkspacePlanUsage = {
   plan: PlanName;
-  usage: { agents: number; tasks_this_month: number };
+  /**
+   * tasks_this_month: every task sent or received this month. tasks_charged_this_month: the ones that count toward
+   * limits.tasks_per_month (sent by this workspace; a customer's or guest's task counts on the sender).
+   */
+  usage: { agents: number; tasks_this_month: number; tasks_charged_this_month: number };
   limits: { agents: number | null; tasks_per_month: number | null };
 };
 
@@ -90,10 +149,11 @@ export async function workspacePlanUsage(workspaceId: string, db: Db = getDb()):
   const plan = asPlan(row?.plan);
   const caps = capsFor(plan);
   const agentCount = await countActiveAgents(db, workspaceId);
-  const taskCount = await countTasksThisMonth(db, workspaceId);
+  const taskCount = await countWorkspaceTasksThisMonth(db, workspaceId);
+  const chargedCount = await countChargedTasksThisMonth(db, workspaceId);
   return {
     plan,
-    usage: { agents: agentCount, tasks_this_month: taskCount },
+    usage: { agents: agentCount, tasks_this_month: taskCount, tasks_charged_this_month: chargedCount },
     limits: { agents: caps.agents, tasks_per_month: caps.tasksPerMonth },
   };
 }
@@ -107,7 +167,7 @@ export async function assertWithinLimit(workspaceId: string, resource: PlanResou
   const usage = await workspacePlanUsage(workspaceId, db);
   const max = resource === 'agents' ? usage.limits.agents : usage.limits.tasks_per_month;
   if (max === null) return;
-  const used = resource === 'agents' ? usage.usage.agents : usage.usage.tasks_this_month;
+  const used = resource === 'agents' ? usage.usage.agents : usage.usage.tasks_charged_this_month;
   if (used < max) return;
   if (resource === 'agents') {
     throw new PlanLimitError({

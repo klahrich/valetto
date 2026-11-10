@@ -43,6 +43,111 @@
       "when": 1762400000000,
       "tag": "0005_marketing_consent",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1762500000000,
+      "tag": "0006_signup_source",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1762600000000,
+      "tag": "0007_wants_sharing",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1762700000000,
+      "tag": "0008_agent_sharing",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1762800000000,
+      "tag": "0009_offer_input_schema",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1762900000000,
+      "tag": "0010_agent_invites",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1763000000000,
+      "tag": "0011_customer_invites",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1763100000000,
+      "tag": "0012_branding_customer_routes",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1763200000000,
+      "tag": "0013_offer_titles",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1763300000000,
+      "tag": "0014_review_first",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1763400000000,
+      "tag": "0015_site_demo",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1763500000000,
+      "tag": "0016_site_demo_requests",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1763600000000,
+      "tag": "0017_suggested_answer_languages",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1763700000000,
+      "tag": "0018_mcp_oauth",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1763800000000,
+      "tag": "0019_wake_urls",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1763900000000,
+      "tag": "0020_message_inbox",
+      "breakpoints": true
     }
   ]
 }

@@ -27,7 +27,7 @@ async function post(path: string, body: unknown): Promise<{ status: number; data
 const NETWORK_ERROR: AuthResult = {
   ok: false,
   code: 'network_error',
-  message: 'We couldn’t reach ReplySlip. Check your connection and try again.',
+  message: 'We couldn’t reach Valetto. Check your connection and try again.',
 };
 
 function failure(status: number, data: unknown, messages: Record<string, string>): AuthResult {
@@ -48,9 +48,33 @@ export function retryMessage(seconds: number | undefined): string {
   return `Too many requests, try again in ${minutes} ${minutes === 1 ? 'minute' : 'minutes'}.`;
 }
 
-export async function requestSignInCode(email: string): Promise<AuthResult> {
+/** Client-side length cap. The server keeps `source` only when it is a short slug (`^[a-z0-9_-]{1,40}$`). */
+export const SOURCE_MAX = 200;
+
+/** `?ref=` or `?utm_source=` on the current page: the signup `source` sent with the sign-in request. */
+export function sourceFromUrl(): string {
   try {
-    const { status, data, retryAfter } = await post('/api/v1/auth/request-code', { email });
+    const q = new URLSearchParams(window.location.search);
+    return (q.get('ref') || q.get('utm_source') || '').trim().slice(0, SOURCE_MAX);
+  } catch {
+    return '';
+  }
+}
+
+/**
+ * `source` is the signup source, normally the `?ref=` / `?utm_source=` value from sourceFromUrl(). It goes out only
+ * when it has text; the server keeps it only when this request creates the user and it is a short slug, so it is fine
+ * to send on every sign-in. `wants_sharing` goes out only
+ * when the visitor came from /sharing (?ref=sharing).
+ */
+export async function requestSignInCode(email: string, source = '', wantsSharing = false): Promise<AuthResult> {
+  try {
+    const src = source.trim().slice(0, SOURCE_MAX);
+    const { status, data, retryAfter } = await post('/api/v1/auth/request-code', {
+      email,
+      ...(src ? { source: src } : {}),
+      ...(wantsSharing ? { wants_sharing: true } : {}),
+    });
     // Older backends answer 200 even when rate-limited; that still reads as "maybe sent".
     if (status === 200) return { ok: true, message: (data as { message?: string } | null)?.message };
     if (status === 429) {
@@ -68,11 +92,19 @@ export async function requestSignInCode(email: string): Promise<AuthResult> {
  * `marketingOptIn` is the sign-in checkbox. Only a checked box sends the
  * fields; leaving it unchecked sends nothing, which keeps any earlier choice.
  */
-export async function verifySignInCode(email: string, code: string, marketingOptIn = false): Promise<AuthResult> {
+export async function verifySignInCode(
+  email: string,
+  code: string,
+  marketingOptIn = false,
+  claimToken?: string,
+): Promise<AuthResult> {
   try {
-    const body = marketingOptIn
-      ? { email, code, marketing_opt_in: true, consent_text: MARKETING_CONSENT_TEXT }
-      : { email, code };
+    const body = {
+      email,
+      code,
+      ...(marketingOptIn ? { marketing_opt_in: true, consent_text: MARKETING_CONSENT_TEXT } : {}),
+      ...(claimToken ? { claim_token: claimToken } : {}),
+    };
     const { status, data } = await post('/api/v1/auth/verify-code', body);
     if (status === 200) return { ok: true };
     return failure(status, data, {
@@ -81,6 +113,9 @@ export async function verifySignInCode(email: string, code: string, marketingOpt
       code_exhausted: 'Too many wrong tries for this code. Send a new one.',
       code_already_used: 'That code was already used. Send a new one.',
       validation_error: 'Enter the email address the code was sent to.',
+      already_in_workspace:
+        'This email already has a Valetto workspace. Use a different email, or ask your agent to call redeem_invite from your workspace.',
+      claim_not_found: 'This claim link isn’t valid any more. It may already have been used.',
     });
   } catch {
     return NETWORK_ERROR;

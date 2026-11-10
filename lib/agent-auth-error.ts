@@ -1,3 +1,5 @@
+import { TOKEN_PREFIX } from './oauth/tokens';
+
 /** Descriptions for a rejected agent credential. None of these include the token. */
 
 export const AGENT_AUTH_MISSING =
@@ -18,18 +20,22 @@ export const AGENT_AUTH_REVOKED_WATCHER =
 export const AGENT_AUTH_UNKNOWN =
   'Unknown agent key. Agent keys start with rsk_. Check ~/.replyslip/agents/<name>.json.';
 
+/** A bad or expired OAuth access token. Not an agent-key failure, and not the token itself. */
+export const AGENT_AUTH_OAUTH = `This access token (${TOKEN_PREFIX.access}) is invalid or expired.`;
+
 export type StoredCredential = {
   agentKeyRevoked: boolean;
   watcherKeyRevoked: boolean;
 };
 
-export type AgentAuthFailure = 'missing' | 'not_bearer' | 'watcher_key' | 'revoked' | 'revoked_watcher' | 'unknown';
+export type AgentAuthFailure = 'missing' | 'not_bearer' | 'watcher_key' | 'revoked' | 'revoked_watcher' | 'oauth' | 'unknown';
 
 /**
  * Classify a raw Authorization header the same way mcp-handler does:
  * the scheme is the first space-separated field and the token is the second.
  * Revoked rows are supplied by a hash lookup. A live watcher key is recognized
- * only by the rsw_ prefix. The token is not returned.
+ * only by the rsw_ prefix. An rsoa_ access token is not described as an agent key.
+ * The token is not returned.
  */
 export function agentAuthFailure(authorization: string | null | undefined, stored?: StoredCredential | null): AgentAuthFailure {
   if (authorization == null) return 'missing';
@@ -38,6 +44,7 @@ export function agentAuthFailure(authorization: string | null | undefined, store
   if (stored?.agentKeyRevoked) return 'revoked';
   if (stored?.watcherKeyRevoked) return 'revoked_watcher';
   if (token.startsWith('rsw_')) return 'watcher_key';
+  if (token.startsWith(TOKEN_PREFIX.access)) return 'oauth';
   return 'unknown';
 }
 
@@ -53,6 +60,8 @@ export function agentAuthErrorDescription(authorization: string | null | undefin
       return AGENT_AUTH_REVOKED;
     case 'revoked_watcher':
       return AGENT_AUTH_REVOKED_WATCHER;
+    case 'oauth':
+      return AGENT_AUTH_OAUTH;
     case 'unknown':
       return AGENT_AUTH_UNKNOWN;
   }

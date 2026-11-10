@@ -1,13 +1,20 @@
 import { sql } from 'drizzle-orm';
 import {
+  type AnyPgColumn,
+  bigint,
   boolean,
   check,
+  customType,
+  date,
+  foreignKey,
   index,
   integer,
   jsonb,
   pgTable,
+  primaryKey,
   text,
   timestamp,
+  unique,
   uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core';
@@ -21,9 +28,24 @@ export const workspaces = pgTable(
     name: text('name').notNull(),
     /** free or unlimited. A person sets unlimited with one UPDATE; the app does not name that workspace. */
     plan: text('plan').notNull().default('free'),
+    /** Public address for shared agents: @handle/agentname. Null until the workspace sets one. */
+    handle: text('handle'),
+    /** signup: created at email sign-in. invite: created by redeeming an invite, no user until claimed. */
+    origin: text('origin').notNull().default('signup'),
+    /** sha256 of the rsc_ claim token. Null once claimed, and always null for signup workspaces. */
+    claimTokenHash: text('claim_token_hash'),
+    claimedAt: ts('claimed_at'),
+    /** Claim links stop working after this. Null for signup workspaces. */
+    claimExpiresAt: ts('claim_expires_at'),
     createdAt: ts('created_at').notNull().defaultNow(),
   },
-  (table) => [check('workspaces_plan_check', sql`${table.plan} in ('free', 'unlimited')`)],
+  (table) => [
+    check('workspaces_plan_check', sql`${table.plan} in ('free', 'unlimited')`),
+    uniqueIndex('workspaces_handle_unique').on(table.handle).where(sql`${table.handle} is not null`),
+    check('workspaces_handle_check', sql`${table.handle} is null or ${table.handle} ~ '^[a-z][a-z0-9-]{1,31}$'`),
+    check('workspaces_origin_check', sql`${table.origin} in ('signup', 'invite')`),
+    uniqueIndex('workspaces_claim_token_hash_unique').on(table.claimTokenHash).where(sql`${table.claimTokenHash} is not null`),
+  ],
 );
 
 export const users = pgTable(
@@ -41,6 +63,10 @@ export const users = pgTable(
     marketingConsentText: text('marketing_consent_text'),
     /** When they withdrew consent. Null while they are opted in. */
     marketingUnsubscribedAt: ts('marketing_unsubscribed_at'),
+    /** Set once, on the request that creates the user. Later sign-ins do not replace it. */
+    signupSource: text('signup_source'),
+    /** Signed up wanting agent sharing (e.g. via ?ref=sharing). Informational only; does not gate sharing. Set by request-code; once true, never cleared by it. */
+    wantsSharing: boolean('wants_sharing').notNull().default(false),
     createdAt: ts('created_at').notNull().defaultNow(),
   },
   (table) => [uniqueIndex('users_email_unique').on(table.email)],
@@ -105,11 +131,35 @@ export const agents = pgTable(
     localDriver: text('local_driver'),
     localTarget: text('local_target'),
     revokedAt: ts('revoked_at'),
+    /** When true, other workspaces can be granted tasks to this agent at @handle/name. */
+    shared: boolean('shared').notNull().default(false),
+    /** agent, or customer_sender: the hidden keyless `valetto` agent a customer workspace sends tasks as. */
+    role: text('role').notNull().default('agent'),
+    /** Total customer tasks per rolling 24 hours across every guest of this shared agent. */
+    customerDailyCap: integer('customer_daily_cap').notNull().default(300),
+    /** How the public link admits customers: open_link approves at once, approve_each makes a pending request. */
+    customerAccessMode: text('customer_access_mode').notNull().default('approve_each'),
+    notifyPendingEmail: boolean('notify_pending_email').notNull().default(true),
+    /** Last pending-request email to the owner. Throttles it to one per hour. */
+    pendingNotifiedAt: ts('pending_notified_at'),
+    /** auto (null counts as auto) or review_first: the owner approves each customer request and releases each answer. */
+    reviewMode: text('review_mode'),
+    /** Hourly owner email when requests wait for review. Null counts as on. */
+    notifyReviewEmail: boolean('notify_review_email'),
+    /** Last review-needed email to the owner. Throttles it to one per hour. */
+    reviewNotifiedAt: ts('review_notified_at'),
     createdAt: ts('created_at').notNull().defaultNow(),
   },
   (table) => [
     uniqueIndex('agents_workspace_name_unique').on(table.workspaceId, table.name),
+    uniqueIndex('agents_one_customer_sender')
+      .on(table.workspaceId)
+      .where(sql`${table.role} = 'customer_sender' and ${table.revokedAt} is null`),
     check('agents_delivery_mode_check', sql`${table.deliveryMode} in ('none', 'webhook', 'herdr', 'local')`),
+    check('agents_role_check', sql`${table.role} in ('agent', 'customer_sender')`),
+    check('agents_customer_daily_cap_check', sql`${table.customerDailyCap} >= 1 and ${table.customerDailyCap} <= 10000`),
+    check('agents_customer_access_mode_check', sql`${table.customerAccessMode} in ('open_link', 'approve_each')`),
+    check('agents_review_mode_check', sql`${table.reviewMode} is null or ${table.reviewMode} in ('auto', 'review_first')`),
   ],
 );
 
@@ -170,6 +220,31 @@ export const watcherKeys = pgTable(
   (table) => [uniqueIndex('watcher_keys_token_hash_unique').on(table.tokenHash)],
 );
 
+export const agentOffers = pgTable(
+  'agent_offers',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    agentId: uuid('agent_id')
+      .notNull()
+      .references(() => agents.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    /** Owner-set readable job title shown to customers. Null = the humanized name. */
+    title: text('title'),
+    description: text('description').notNull(),
+    resultSchema: jsonb('result_schema').$type<Record<string, unknown>>().notNull(),
+    /** Optional form a guest fills in (normalized profile schema). Null = free-text offer. */
+    inputSchema: jsonb('input_schema').$type<Record<string, unknown>>(),
+    /** Whether a guest may add notes (tasks.description) to a form task. Only false with input_schema set. */
+    notesEnabled: boolean('notes_enabled').notNull().default(true),
+    createdAt: ts('created_at').notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('agent_offers_agent_name_unique').on(table.agentId, table.name),
+    check('agent_offers_name_check', sql`${table.name} ~ '^[a-z][a-z0-9_-]{0,63}$'`),
+    check('agent_offers_notes_check', sql`${table.notesEnabled} or ${table.inputSchema} is not null`),
+  ],
+);
+
 export const tasks = pgTable(
   'tasks',
   {
@@ -190,15 +265,276 @@ export const tasks = pgTable(
     result: jsonb('result').$type<unknown>(),
     question: text('question'),
     failReason: text('fail_reason'),
+    /** Workspace that sent the task. Null on rows created before sharing existed. */
+    fromWorkspaceId: uuid('from_workspace_id').references(() => workspaces.id),
+    /** Set when the task used a shared-agent offer. The stored result_schema is a copy of that offer. */
+    offerId: uuid('offer_id').references(() => agentOffers.id),
+    /** Copy of the offer input_schema when the task was created. Set together with input. */
+    inputSchema: jsonb('input_schema').$type<Record<string, unknown>>(),
+    /** The guest's form fields, already validated against inputSchema. */
+    input: jsonb('input').$type<Record<string, unknown>>(),
+    /** Customer-supplied idempotency key (R5). Unique per sending workspace. */
+    clientRequestId: uuid('client_request_id'),
+    /** When the current question was asked. Cleared when the sender answers. */
+    questionAskedAt: ts('question_asked_at'),
+    /** Copy of the target agent's review_mode when the task was created. review_first means the owner gates it. */
+    reviewMode: text('review_mode'),
+    /** While awaiting_release: what the bot did that is held (result, question or failure). */
+    heldAction: text('held_action'),
+    /** Last owner review action (approve, decline, release, send back). */
+    reviewedAt: ts('reviewed_at'),
+    reviewedBy: uuid('reviewed_by').references(() => users.id, { onDelete: 'set null' }),
+    /** When the owner released the held answer to the sender. */
+    releasedAt: ts('released_at'),
+    /** Note from the owner on Send back or Decline. Shown to the target bot only, never to the sender. */
+    ownerNote: text('owner_note'),
     createdAt: ts('created_at').notNull().defaultNow(),
     updatedAt: ts('updated_at').notNull().defaultNow(),
     completedAt: ts('completed_at'),
   },
   (table) => [
-    check('tasks_status_check', sql`${table.status} in ('open', 'done', 'needs_info', 'failed')`),
+    check(
+      'tasks_status_check',
+      sql`${table.status} in ('open', 'done', 'needs_info', 'failed', 'in_review', 'awaiting_release')`,
+    ),
+    check('tasks_review_mode_check', sql`${table.reviewMode} is null or ${table.reviewMode} in ('auto', 'review_first')`),
+    check('tasks_held_action_check', sql`${table.heldAction} is null or ${table.heldAction} in ('result', 'question', 'failure')`),
+    index('tasks_held_idx')
+      .on(table.workspaceId, table.updatedAt)
+      .where(sql`${table.status} in ('in_review', 'awaiting_release')`),
+    check('tasks_input_pair_check', sql`(${table.input} is null) = (${table.inputSchema} is null)`),
     index('tasks_workspace_created_idx').on(table.workspaceId, table.createdAt),
     index('tasks_to_agent_idx').on(table.toAgentId, table.status),
     index('tasks_from_agent_idx').on(table.fromAgentId, table.status),
+    index('tasks_from_workspace_idx').on(table.fromWorkspaceId, table.createdAt),
+    index('tasks_from_workspace_to_agent_idx').on(table.fromWorkspaceId, table.toAgentId, table.createdAt),
+    uniqueIndex('tasks_client_request_unique')
+      .on(table.fromWorkspaceId, table.clientRequestId)
+      .where(sql`${table.clientRequestId} is not null`),
+  ],
+);
+
+/** Each answer a sender gave to a needs_info question, oldest first. */
+export const taskAnswers = pgTable(
+  'task_answers',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    taskId: uuid('task_id')
+      .notNull()
+      .references(() => tasks.id, { onDelete: 'cascade' }),
+    question: text('question').notNull(),
+    answer: text('answer').notNull(),
+    askedAt: ts('asked_at').notNull(),
+    answeredAt: ts('answered_at').notNull().defaultNow(),
+  },
+  (table) => [index('task_answers_task_idx').on(table.taskId, table.answeredAt)],
+);
+
+/** Customer-facing look of one shared agent. Missing row = Valetto defaults. */
+export const agentBranding = pgTable(
+  'agent_branding',
+  {
+    agentId: uuid('agent_id')
+      .primaryKey()
+      .references(() => agents.id, { onDelete: 'cascade' }),
+    displayName: text('display_name'),
+    primaryColor: text('primary_color'),
+    accentColor: text('accent_color'),
+    logoBlobPath: text('logo_blob_path'),
+    logoUrl: text('logo_url'),
+    logoWidth: integer('logo_width'),
+    logoHeight: integer('logo_height'),
+    logoSha256: text('logo_sha256'),
+    createdAt: ts('created_at').notNull().defaultNow(),
+    updatedAt: ts('updated_at').notNull().defaultNow(),
+  },
+  (table) => [
+    check('agent_branding_primary_color_check', sql`${table.primaryColor} is null or ${table.primaryColor} ~ '^#[0-9A-F]{6}$'`),
+    check('agent_branding_accent_color_check', sql`${table.accentColor} is null or ${table.accentColor} ~ '^#[0-9A-F]{6}$'`),
+    check('agent_branding_logo_check', sql`(${table.logoUrl} is null) = (${table.logoBlobPath} is null)`),
+  ],
+);
+
+export const agentShares = pgTable(
+  'agent_shares',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    agentId: uuid('agent_id')
+      .notNull()
+      .references(() => agents.id, { onDelete: 'cascade' }),
+    guestWorkspaceId: uuid('guest_workspace_id')
+      .notNull()
+      .references(() => workspaces.id),
+    status: text('status').notNull().default('pending'),
+    dailyCap: integer('daily_cap').notNull().default(50),
+    /** Invite this share was redeemed from. Null for invite_guest shares. */
+    inviteId: uuid('invite_id').references((): AnyPgColumn => agentInvites.id, { onDelete: 'set null' }),
+    /** Owner-facing name for the guest: redeem label, else the invite label. */
+    label: text('label'),
+    /** handle (invite_guest), agent_invite (Karim's redeem flow), or customer (a customer link). */
+    source: text('source').notNull().default('handle'),
+    /** Customer link this share was accepted from. Survives a rotate; null if the invite is gone. */
+    customerInviteId: uuid('customer_invite_id').references((): AnyPgColumn => customerInvites.id, { onDelete: 'set null' }),
+    /** The signed-in customer. Owner-only display as customer_email. */
+    requestedByUserId: uuid('requested_by_user_id').references(() => users.id, { onDelete: 'set null' }),
+    /** sha256(invite id + client IP) for an anonymous agent-guest redeem. A revoked source cannot redeem that invite again. */
+    redeemSourceHash: text('redeem_source_hash'),
+    /** Set on every revoke and never cleared. The pending-request cron never deletes a share that was ever revoked. */
+    lastRevokedAt: ts('last_revoked_at'),
+    createdAt: ts('created_at').notNull().defaultNow(),
+    updatedAt: ts('updated_at').notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('agent_shares_agent_guest_unique').on(table.agentId, table.guestWorkspaceId),
+    index('agent_shares_agent_status_idx').on(table.agentId, table.status),
+    index('agent_shares_redeem_source_idx')
+      .on(table.inviteId, table.redeemSourceHash)
+      .where(sql`${table.redeemSourceHash} is not null`),
+    index('agent_shares_customer_invite_idx')
+      .on(table.customerInviteId)
+      .where(sql`${table.customerInviteId} is not null`),
+    check('agent_shares_source_check', sql`${table.source} in ('handle', 'agent_invite', 'customer')`),
+    check('agent_shares_status_check', sql`${table.status} in ('pending', 'approved', 'revoked')`),
+    check('agent_shares_daily_cap_check', sql`${table.dailyCap} >= 1 and ${table.dailyCap} <= 10000`),
+  ],
+);
+
+export const agentShareOffers = pgTable(
+  'agent_share_offers',
+  {
+    shareId: uuid('share_id')
+      .notNull()
+      .references(() => agentShares.id, { onDelete: 'cascade' }),
+    offerId: uuid('offer_id')
+      .notNull()
+      .references(() => agentOffers.id, { onDelete: 'cascade' }),
+  },
+  (table) => [primaryKey({ columns: [table.shareId, table.offerId] })],
+);
+
+export const agentInvites = pgTable(
+  'agent_invites',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    agentId: uuid('agent_id')
+      .notNull()
+      .references(() => agents.id, { onDelete: 'cascade' }),
+    /** Owner workspace. Denormalized from the agent so list and revoke can scope by workspace. */
+    workspaceId: uuid('workspace_id')
+      .notNull()
+      .references(() => workspaces.id),
+    tokenHash: text('token_hash').notNull(),
+    tokenPrefix: text('token_prefix').notNull(),
+    label: text('label'),
+    dailyCap: integer('daily_cap').notNull().default(50),
+    /** True only when a signed-in human created the invite. Redeemed shares are then approved. */
+    approveOnRedeem: boolean('approve_on_redeem').notNull().default(false),
+    maxUses: integer('max_uses').notNull().default(1),
+    uses: integer('uses').notNull().default(0),
+    expiresAt: ts('expires_at').notNull(),
+    revokedAt: ts('revoked_at'),
+    createdByUserId: uuid('created_by_user_id').references(() => users.id),
+    createdByAgentId: uuid('created_by_agent_id').references(() => agents.id),
+    createdAt: ts('created_at').notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('agent_invites_token_hash_unique').on(table.tokenHash),
+    index('agent_invites_agent_idx').on(table.agentId, table.createdAt),
+    check('agent_invites_daily_cap_check', sql`${table.dailyCap} >= 1 and ${table.dailyCap} <= 10000`),
+    check('agent_invites_max_uses_check', sql`${table.maxUses} >= 1 and ${table.maxUses} <= 1000`),
+    check('agent_invites_uses_check', sql`${table.uses} >= 0 and ${table.uses} <= ${table.maxUses}`),
+    check('agent_invites_creator_check', sql`${table.createdByUserId} is not null or ${table.createdByAgentId} is not null`),
+    check('agent_invites_approve_check', sql`not ${table.approveOnRedeem} or ${table.createdByUserId} is not null`),
+  ],
+);
+
+export const agentInviteOffers = pgTable(
+  'agent_invite_offers',
+  {
+    inviteId: uuid('invite_id')
+      .notNull()
+      .references(() => agentInvites.id, { onDelete: 'cascade' }),
+    offerId: uuid('offer_id')
+      .notNull()
+      .references(() => agentOffers.id, { onDelete: 'cascade' }),
+  },
+  (table) => [primaryKey({ columns: [table.inviteId, table.offerId] })],
+);
+
+export const customerInvites = pgTable(
+  'customer_invites',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    agentId: uuid('agent_id')
+      .notNull()
+      .references(() => agents.id, { onDelete: 'cascade' }),
+    /** personal: one customer, single use. public: one active link per agent. */
+    kind: text('kind').notNull(),
+    tokenHash: text('token_hash').notNull(),
+    tokenPrefix: text('token_prefix').notNull(),
+    label: text('label'),
+    /** Personal invites only. The signed-in email must match. Stored lowercased. */
+    email: text('email'),
+    /** True: every offer on the agent, including offers added later. False: customer_invite_offers. */
+    allOffers: boolean('all_offers').notNull().default(true),
+    dailyCap: integer('daily_cap').notNull().default(20),
+    /** Null means no limit (public links). Personal invites are always 1. */
+    maxUses: integer('max_uses'),
+    uses: integer('uses').notNull().default(0),
+    expiresAt: ts('expires_at'),
+    revokedAt: ts('revoked_at'),
+    rotatedAt: ts('rotated_at'),
+    /** Owner who made the link. Set null if that user is ever deleted, so the link and its customers survive. */
+    createdByUserId: uuid('created_by_user_id').references(() => users.id, { onDelete: 'set null' }),
+    createdAt: ts('created_at').notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('customer_invites_token_hash_unique').on(table.tokenHash),
+    index('customer_invites_agent_idx').on(table.agentId, table.createdAt),
+    uniqueIndex('customer_invites_one_public_link')
+      .on(table.agentId)
+      .where(sql`${table.kind} = 'public' and ${table.revokedAt} is null`),
+    check('customer_invites_kind_check', sql`${table.kind} in ('personal', 'public')`),
+    check('customer_invites_label_check', sql`${table.label} is null or char_length(${table.label}) <= 80`),
+    check('customer_invites_email_check', sql`${table.email} is null or ${table.kind} = 'personal'`),
+    check('customer_invites_daily_cap_check', sql`${table.dailyCap} >= 1 and ${table.dailyCap} <= 10000`),
+    check(
+      'customer_invites_max_uses_check',
+      sql`${table.maxUses} is null or (${table.maxUses} >= 1 and ${table.maxUses} <= 100000)`,
+    ),
+    check('customer_invites_personal_uses_check', sql`${table.kind} <> 'personal' or ${table.maxUses} = 1`),
+    check(
+      'customer_invites_uses_check',
+      sql`${table.uses} >= 0 and (${table.maxUses} is null or ${table.uses} <= ${table.maxUses})`,
+    ),
+  ],
+);
+
+export const customerInviteOffers = pgTable(
+  'customer_invite_offers',
+  {
+    inviteId: uuid('invite_id')
+      .notNull()
+      .references(() => customerInvites.id, { onDelete: 'cascade' }),
+    offerId: uuid('offer_id')
+      .notNull()
+      .references(() => agentOffers.id, { onDelete: 'cascade' }),
+  },
+  (table) => [primaryKey({ columns: [table.inviteId, table.offerId] })],
+);
+
+export const customerPreapprovedEmails = pgTable(
+  'customer_preapproved_emails',
+  {
+    agentId: uuid('agent_id')
+      .notNull()
+      .references(() => agents.id, { onDelete: 'cascade' }),
+    email: text('email').notNull(),
+    createdAt: ts('created_at').notNull().defaultNow(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.agentId, table.email] }),
+    check('customer_preapproved_emails_lower_check', sql`${table.email} = lower(${table.email})`),
   ],
 );
 
@@ -218,10 +554,24 @@ export const messages = pgTable(
     body: text('body').notNull(),
     taskId: uuid('task_id').references(() => tasks.id),
     createdAt: ts('created_at').notNull().defaultNow(),
+    /**
+     * Recipient read mark for a standalone inbox message. Null means unread. Task-thread rows stay null:
+     * those messages are read with get_task, and list_messages does not return them. Not a page cursor.
+     */
+    readAt: ts('read_at'),
+    /**
+     * Arrival order for inbox pages. Assigned by messages_assign_inbox_seq, which locks until commit before
+     * nextval, so a higher value cannot commit while a lower one is still open. Not the read watermark.
+     */
+    inboxSeq: bigint('inbox_seq', { mode: 'number' }).notNull().default(sql`0`),
   },
   (table) => [
     index('messages_task_idx').on(table.taskId, table.createdAt),
     index('messages_to_agent_idx').on(table.toAgentId, table.createdAt),
+    uniqueIndex('messages_inbox_seq_unique').on(table.inboxSeq),
+    index('messages_inbox_idx')
+      .on(table.toAgentId, table.inboxSeq)
+      .where(sql`${table.taskId} is null`),
   ],
 );
 
@@ -249,9 +599,552 @@ export const wakes = pgTable(
     check('wakes_status_check', sql`${table.status} in ('pending', 'delivered', 'failed', 'cancelled')`),
     check(
       'wakes_reason_check',
-      sql`${table.reason} in ('message', 'task', 'result', 'question', 'failure', 'test')`,
+      sql`${table.reason} in ('message', 'task', 'result', 'question', 'failure', 'test', 'answer', 'review_needed', 'sent_back')`,
     ),
     index('wakes_due_idx').on(table.status, table.nextAttemptAt),
+    /** Wake URL polls (lib/wake-urls.ts) read one agent's change marker. */
+    index('wakes_agent_created_idx').on(table.agentId, table.createdAt),
+  ],
+);
+
+/**
+ * Public wake URLs (lib/wake-urls.ts): GET /api/v1/wake/<token> answers only an opaque change id, so a platform that
+ * cannot hold a secret knows when to fetch through MCP. The token is stored as sha256 hex, like agent_keys. Scoped to
+ * one agent: agent_id names it. At most one active URL per agent.
+ */
+export const wakeUrls = pgTable(
+  'wake_urls',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id')
+      .notNull()
+      .references(() => workspaces.id),
+    agentId: uuid('agent_id')
+      .notNull()
+      .references(() => agents.id, { onDelete: 'cascade' }),
+    tokenHash: text('token_hash').notNull(),
+    tokenPrefix: text('token_prefix').notNull(),
+    createdAt: ts('created_at').notNull().defaultNow(),
+    revokedAt: ts('revoked_at'),
+    /** Last successful poll. */
+    lastUsedAt: ts('last_used_at'),
+    /** Per-token poll limit (lib/wake-urls.ts): a fixed window kept on this row, so a poll never inserts a row. */
+    pollWindowStartedAt: ts('poll_window_started_at'),
+    pollCount: integer('poll_count').notNull().default(0),
+  },
+  (table) => [
+    uniqueIndex('wake_urls_token_hash_unique').on(table.tokenHash),
+    uniqueIndex('wake_urls_one_active_per_agent')
+      .on(table.agentId)
+      .where(sql`${table.revokedAt} is null`),
+  ],
+);
+
+/** Raw bytes (screenshots). Drizzle has no built-in bytea. */
+const bytea = customType<{ data: Buffer; driverData: Buffer }>({
+  dataType: () => 'bytea',
+});
+
+/**
+ * Site assistant demo (story 0b). One row per business Karim picked. Not tied to a workspace: Valetto holds it
+ * until a claim (later stories). The context markdown and the suggested questions are separate columns, so the
+ * suggested questions never count as a source in the verbatim quote check.
+ */
+export const siteBusinesses = pgTable(
+  'site_businesses',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    slug: text('slug').notNull(),
+    displayName: text('display_name').notNull(),
+    sourceUrl: text('source_url').notNull(),
+    scrapedAt: ts('scraped_at'),
+    /** RedBot's markdown with the "Suggested questions" section removed. This is the only answer source. */
+    contextMd: text('context_md').notNull(),
+    /** Plain strings from the "Suggested questions" section, in order. Never a source. */
+    suggestedQuestions: jsonb('suggested_questions').$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+    desktopShot: bytea('desktop_shot'),
+    desktopShotType: text('desktop_shot_type'),
+    mobileShot: bytea('mobile_shot'),
+    mobileShotType: text('mobile_shot_type'),
+    /** Main language of the business's pages (RedBot's `language`, else detected). */
+    language: text('language').notNull().default('en'),
+    /** Chat tile colour (#rrggbb). Null: the server picks one from the slug. */
+    tileColor: text('tile_color'),
+    visitorDailyMessageCap: integer('visitor_daily_message_cap').notNull().default(20),
+    dailyMessageCap: integer('daily_message_cap').notNull().default(30),
+    dailyCostCapMicroUsd: bigint('daily_cost_cap_micro_usd', { mode: 'number' }).notNull().default(250_000),
+    createdAt: ts('created_at').notNull().defaultNow(),
+    updatedAt: ts('updated_at').notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('site_businesses_slug_unique').on(table.slug),
+    check('site_businesses_slug_check', sql`${table.slug} ~ '^[a-z0-9][a-z0-9-]{1,62}$'`),
+    check('site_businesses_display_name_check', sql`char_length(${table.displayName}) between 1 and 120`),
+    check('site_businesses_source_url_check', sql`${table.sourceUrl} ~ '^https?://'`),
+    check('site_businesses_context_check', sql`char_length(${table.contextMd}) <= 200000`),
+    check('site_businesses_suggested_check', sql`jsonb_typeof(${table.suggestedQuestions}) = 'array'`),
+    check(
+      'site_businesses_desktop_shot_check',
+      sql`(${table.desktopShot} is null) = (${table.desktopShotType} is null) and (${table.desktopShotType} is null or ${table.desktopShotType} in ('image/png', 'image/jpeg', 'image/webp'))`,
+    ),
+    check(
+      'site_businesses_mobile_shot_check',
+      sql`(${table.mobileShot} is null) = (${table.mobileShotType} is null) and (${table.mobileShotType} is null or ${table.mobileShotType} in ('image/png', 'image/jpeg', 'image/webp'))`,
+    ),
+    check('site_businesses_language_check', sql`${table.language} in ('en', 'fr')`),
+    check('site_businesses_tile_color_check', sql`${table.tileColor} is null or ${table.tileColor} ~ '^#[0-9a-f]{6}$'`),
+    check(
+      'site_businesses_caps_check',
+      sql`${table.visitorDailyMessageCap} >= 0 and ${table.dailyMessageCap} >= 0 and ${table.dailyCostCapMicroUsd} >= 0`,
+    ),
+  ],
+);
+
+/** Private demo link. Only the sha256 of the random token is stored. */
+export const siteDemoLinks = pgTable(
+  'site_demo_links',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    businessId: uuid('business_id')
+      .notNull()
+      .references(() => siteBusinesses.id, { onDelete: 'cascade' }),
+    tokenHash: text('token_hash').notNull(),
+    expiresAt: ts('expires_at').notNull().default(sql`now() + interval '30 days'`),
+    revokedAt: ts('revoked_at'),
+    createdAt: ts('created_at').notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('site_demo_links_token_hash_unique').on(table.tokenHash),
+    unique('site_demo_links_id_business_unique').on(table.id, table.businessId),
+    index('site_demo_links_business_idx').on(table.businessId, table.createdAt),
+  ],
+);
+
+/** One conversation per visitor cookie per demo link. */
+export const siteConversations = pgTable(
+  'site_conversations',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    businessId: uuid('business_id').notNull(),
+    demoLinkId: uuid('demo_link_id').notNull(),
+    visitorTokenHash: text('visitor_token_hash').notNull(),
+    mode: text('mode').notNull().default('demo'),
+    language: text('language'),
+    createdAt: ts('created_at').notNull().defaultNow(),
+    lastMessageAt: ts('last_message_at').notNull().defaultNow(),
+  },
+  (table) => [
+    foreignKey({
+      name: 'site_conversations_demo_link_fk',
+      columns: [table.demoLinkId, table.businessId],
+      foreignColumns: [siteDemoLinks.id, siteDemoLinks.businessId],
+    }).onDelete('cascade'),
+    unique('site_conversations_id_business_unique').on(table.id, table.businessId),
+    uniqueIndex('site_conversations_visitor_unique').on(table.demoLinkId, table.visitorTokenHash),
+    index('site_conversations_last_message_idx').on(table.lastMessageAt),
+    check('site_conversations_mode_check', sql`${table.mode} in ('demo')`),
+    check('site_conversations_language_check', sql`${table.language} is null or ${table.language} in ('en', 'fr', 'other')`),
+  ],
+);
+
+/**
+ * Pre-generated answers to a business's suggested questions. Karim checks each one (checked_at) before a demo
+ * link goes out; unchecked rows never reach the page. Re-generating clears checked_at.
+ * `position` is the question's index in the business's list; each position has one row per language (en, fr),
+ * the second a translation of the first, each checked on its own.
+ */
+export const siteSuggestedAnswers = pgTable(
+  'site_suggested_answers',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    businessId: uuid('business_id')
+      .notNull()
+      .references(() => siteBusinesses.id, { onDelete: 'cascade' }),
+    position: integer('position').notNull(),
+    question: text('question').notNull(),
+    answer: text('answer').notNull(),
+    status: text('status').notNull(),
+    topic: text('topic'),
+    language: text('language').notNull(),
+    decidedBy: text('decided_by').notNull(),
+    sourcesKept: jsonb('sources_kept').$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+    rawOutput: jsonb('raw_output'),
+    model: text('model'),
+    generatedAt: ts('generated_at').notNull().defaultNow(),
+    checkedAt: ts('checked_at'),
+  },
+  (table) => [
+    unique('site_suggested_answers_id_business_unique').on(table.id, table.businessId),
+    // One row per (position, language): the same suggested question in English and in French (0017).
+    uniqueIndex('site_suggested_answers_position_language_unique').on(table.businessId, table.position, table.language),
+    check('site_suggested_answers_position_check', sql`${table.position} >= 0`),
+    check('site_suggested_answers_question_check', sql`char_length(${table.question}) between 1 and 1000`),
+    check(
+      'site_suggested_answers_status_check',
+      sql`${table.status} in ('answered', 'needs_owner', 'off_topic', 'capped')`,
+    ),
+    check('site_suggested_answers_language_check', sql`${table.language} in ('en', 'fr', 'other')`),
+  ],
+);
+
+export const siteMessages = pgTable(
+  'site_messages',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    businessId: uuid('business_id').notNull(),
+    conversationId: uuid('conversation_id').notNull(),
+    role: text('role').notNull(),
+    body: text('body').notNull(),
+    /** Assistant rows only. */
+    status: text('status'),
+    topic: text('topic'),
+    language: text('language'),
+    /** Which server rule decided the status (spec 4.2 rule 10). */
+    decidedBy: text('decided_by'),
+    sourcesKept: jsonb('sources_kept').$type<string[]>(),
+    sourcesDropped: jsonb('sources_dropped').$type<string[]>(),
+    ownerQuestion: text('owner_question'),
+    /** Raw model output, for review. Never sent to the visitor. */
+    rawOutput: jsonb('raw_output'),
+    suggestedAnswerId: uuid('suggested_answer_id'),
+    clientMessageId: uuid('client_message_id'),
+    inputTokens: integer('input_tokens'),
+    outputTokens: integer('output_tokens'),
+    costMicroUsd: bigint('cost_micro_usd', { mode: 'number' }),
+    createdAt: ts('created_at').notNull().defaultNow(),
+  },
+  (table) => [
+    foreignKey({
+      name: 'site_messages_conversation_fk',
+      columns: [table.conversationId, table.businessId],
+      foreignColumns: [siteConversations.id, siteConversations.businessId],
+    }).onDelete('cascade'),
+    foreignKey({
+      name: 'site_messages_suggested_answer_fk',
+      columns: [table.suggestedAnswerId, table.businessId],
+      foreignColumns: [siteSuggestedAnswers.id, siteSuggestedAnswers.businessId],
+    }),
+    uniqueIndex('site_messages_client_unique')
+      .on(table.conversationId, table.role, table.clientMessageId)
+      .where(sql`${table.clientMessageId} is not null`),
+    index('site_messages_conversation_idx').on(table.conversationId, table.createdAt),
+    check('site_messages_role_check', sql`${table.role} in ('visitor', 'assistant')`),
+    check('site_messages_body_check', sql`char_length(${table.body}) <= 4000`),
+    check(
+      'site_messages_status_check',
+      sql`${table.status} is null or ${table.status} in ('answered', 'needs_owner', 'off_topic', 'capped')`,
+    ),
+    check('site_messages_language_check', sql`${table.language} is null or ${table.language} in ('en', 'fr', 'other')`),
+  ],
+);
+
+/** Per-business daily usage. reserved_micro_usd holds in-flight worst-case costs (reserve, then settle). */
+export const siteUsageDaily = pgTable(
+  'site_usage_daily',
+  {
+    businessId: uuid('business_id')
+      .notNull()
+      .references(() => siteBusinesses.id, { onDelete: 'cascade' }),
+    day: date('day', { mode: 'string' }).notNull(),
+    messages: integer('messages').notNull().default(0),
+    llmCalls: integer('llm_calls').notNull().default(0),
+    inputTokens: bigint('input_tokens', { mode: 'number' }).notNull().default(0),
+    outputTokens: bigint('output_tokens', { mode: 'number' }).notNull().default(0),
+    costMicroUsd: bigint('cost_micro_usd', { mode: 'number' }).notNull().default(0),
+    reservedMicroUsd: bigint('reserved_micro_usd', { mode: 'number' }).notNull().default(0),
+  },
+  (table) => [
+    primaryKey({ columns: [table.businessId, table.day] }),
+    check('site_usage_daily_nonneg_check', sql`${table.messages} >= 0 and ${table.reservedMicroUsd} >= 0 and ${table.costMicroUsd} >= 0`),
+  ],
+);
+
+/** Global daily LLM spend across every business. */
+export const siteUsageGlobalDaily = pgTable(
+  'site_usage_global_daily',
+  {
+    day: date('day', { mode: 'string' }).primaryKey(),
+    llmCalls: integer('llm_calls').notNull().default(0),
+    costMicroUsd: bigint('cost_micro_usd', { mode: 'number' }).notNull().default(0),
+    reservedMicroUsd: bigint('reserved_micro_usd', { mode: 'number' }).notNull().default(0),
+  },
+  (table) => [
+    check('site_usage_global_daily_nonneg_check', sql`${table.reservedMicroUsd} >= 0 and ${table.costMicroUsd} >= 0`),
+  ],
+);
+
+/** Per-visitor (conversation) daily message count. */
+export const siteVisitorUsageDaily = pgTable(
+  'site_visitor_usage_daily',
+  {
+    conversationId: uuid('conversation_id').notNull(),
+    businessId: uuid('business_id').notNull(),
+    day: date('day', { mode: 'string' }).notNull(),
+    messages: integer('messages').notNull().default(0),
+  },
+  (table) => [
+    primaryKey({ columns: [table.conversationId, table.day] }),
+    foreignKey({
+      name: 'site_visitor_usage_conversation_fk',
+      columns: [table.conversationId, table.businessId],
+      foreignColumns: [siteConversations.id, siteConversations.businessId],
+    }).onDelete('cascade'),
+  ],
+);
+
+/**
+ * One row per (demo link, client_message_id): the idempotency key for POST /api/v1/s/demo/:token/messages. The
+ * primary key makes a second request with the same id, with or without the cookie, wait for or replay the first
+ * instead of making a second model call. `failed` (or a `pending` row older than the function timeout) can be
+ * taken over by a retry. `request_hash` stops one id being reused for a different question.
+ */
+export const siteMessageRequests = pgTable(
+  'site_message_requests',
+  {
+    demoLinkId: uuid('demo_link_id').notNull(),
+    clientMessageId: uuid('client_message_id').notNull(),
+    businessId: uuid('business_id').notNull(),
+    conversationId: uuid('conversation_id').notNull(),
+    requestHash: text('request_hash').notNull(),
+    state: text('state').notNull().default('pending'),
+    visitorMessageId: uuid('visitor_message_id'),
+    assistantMessageId: uuid('assistant_message_id'),
+    createdAt: ts('created_at').notNull().defaultNow(),
+    updatedAt: ts('updated_at').notNull().defaultNow(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.demoLinkId, table.clientMessageId] }),
+    foreignKey({
+      name: 'site_message_requests_demo_link_fk',
+      columns: [table.demoLinkId, table.businessId],
+      foreignColumns: [siteDemoLinks.id, siteDemoLinks.businessId],
+    }).onDelete('cascade'),
+    foreignKey({
+      name: 'site_message_requests_conversation_fk',
+      columns: [table.conversationId, table.businessId],
+      foreignColumns: [siteConversations.id, siteConversations.businessId],
+    }).onDelete('cascade'),
+    index('site_message_requests_conversation_idx').on(table.conversationId),
+    check('site_message_requests_state_check', sql`${table.state} in ('pending', 'done', 'failed')`),
+    check(
+      'site_message_requests_done_check',
+      sql`${table.state} <> 'done' or (${table.visitorMessageId} is not null and ${table.assistantMessageId} is not null)`,
+    ),
+  ],
+);
+
+/**
+ * Per-IP daily message counts, so clearing the visitor cookie doesn't reset the limit. `key_hash` is an HMAC
+ * (ENCRYPTION_KEY) of the IP with the demo link id, or with "*" for the all-links count. The raw IP is never stored.
+ */
+export const siteIpUsageDaily = pgTable(
+  'site_ip_usage_daily',
+  {
+    keyHash: text('key_hash').notNull(),
+    day: date('day', { mode: 'string' }).notNull(),
+    messages: integer('messages').notNull().default(0),
+  },
+  (table) => [
+    primaryKey({ columns: [table.keyHash, table.day] }),
+    index('site_ip_usage_daily_day_idx').on(table.day),
+    check('site_ip_usage_daily_nonneg_check', sql`${table.messages} >= 0`),
+  ],
+);
+
+/**
+ * MCP OAuth (docs/design/mcp-oauth.md §3). Every secret is stored as sha256 hex. Nothing reads these tables unless
+ * MCP_OAUTH_ENABLED=1.
+ */
+export const oauthClients = pgTable(
+  'oauth_clients',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    /** rsdc_… for DCR; the full https URL for CIMD. */
+    clientId: text('client_id').notNull(),
+    kind: text('kind').notNull(),
+    /** Sanitized, at most 100 characters. */
+    clientName: text('client_name').notNull(),
+    /** Display host only. */
+    clientUri: text('client_uri'),
+    /** string[]; exact values. */
+    redirectUris: jsonb('redirect_uris').$type<string[]>().notNull(),
+    tokenEndpointAuthMethod: text('token_endpoint_auth_method').notNull(),
+    /** Null unless client_secret_*. */
+    clientSecretHash: text('client_secret_hash'),
+    grantTypes: jsonb('grant_types')
+      .$type<string[]>()
+      .notNull()
+      .default(sql`'["authorization_code","refresh_token"]'::jsonb`),
+    /** 'web' | 'native' (DCR, informational). */
+    applicationType: text('application_type'),
+    /** CIMD cache expiry. */
+    metadataExpiresAt: ts('metadata_expires_at'),
+    /** When the CIMD document was last fetched successfully. */
+    metadataFetchedAt: ts('metadata_fetched_at'),
+    /** keyedHash('oauth-dcr-ip', ip); never the raw IP. */
+    registeredIpHash: text('registered_ip_hash'),
+    /** Operator kill switch. */
+    disabledAt: ts('disabled_at'),
+    lastUsedAt: ts('last_used_at'),
+    createdAt: ts('created_at').notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('oauth_clients_client_id_unique').on(table.clientId),
+    index('oauth_clients_kind_created_idx').on(table.kind, table.createdAt),
+    check('oauth_clients_kind_check', sql`${table.kind} in ('dcr', 'cimd')`),
+    check(
+      'oauth_clients_auth_method_check',
+      sql`${table.tokenEndpointAuthMethod} in ('none', 'client_secret_post', 'client_secret_basic')`,
+    ),
+  ],
+);
+
+/** Pending consent, 20 minutes. */
+export const oauthAuthorizationRequests = pgTable(
+  'oauth_authorization_requests',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    /** sha256 of the req token in the consent URL. */
+    requestHash: text('request_hash').notNull(),
+    /** sha256 of this request's __Host-valetto_oauth value. */
+    bindingHash: text('binding_hash').notNull(),
+    clientId: uuid('client_id')
+      .notNull()
+      .references(() => oauthClients.id, { onDelete: 'cascade' }),
+    redirectUri: text('redirect_uri').notNull(),
+    /** At most 1024 bytes, echoed verbatim. */
+    state: text('state'),
+    codeChallenge: text('code_challenge').notNull(),
+    scope: text('scope').notNull(),
+    resource: text('resource').notNull(),
+    /** Bound on the first signed-in view. */
+    userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }),
+    expiresAt: ts('expires_at').notNull(),
+    completedAt: ts('completed_at'),
+    createdAt: ts('created_at').notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('oauth_authorization_requests_request_hash_unique').on(table.requestHash),
+    index('oauth_authorization_requests_expires_idx').on(table.expiresAt),
+  ],
+);
+
+/** One approved connection is one row. */
+export const oauthGrants = pgTable(
+  'oauth_grants',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    clientId: uuid('client_id')
+      .notNull()
+      .references(() => oauthClients.id, { onDelete: 'cascade' }),
+    /** Who approved. */
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    workspaceId: uuid('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    agentId: uuid('agent_id')
+      .notNull()
+      .references(() => agents.id, { onDelete: 'cascade' }),
+    /** True when this grant created the agent (offered as "Reconnect as" later). */
+    agentCreated: boolean('agent_created').notNull(),
+    scope: text('scope').notNull(),
+    /** Audience, e.g. https://valetto.tech/api/mcp. */
+    resource: text('resource').notNull(),
+    /** The redirect URI the code went to; the connected-apps list shows its host. */
+    redirectUri: text('redirect_uri').notNull(),
+    /** created_at + 365 days. */
+    absoluteExpiresAt: ts('absolute_expires_at').notNull(),
+    /** Throttled: written at most every 5 minutes. */
+    lastUsedAt: ts('last_used_at'),
+    revokedAt: ts('revoked_at'),
+    revokedReason: text('revoked_reason'),
+    createdAt: ts('created_at').notNull().defaultNow(),
+  },
+  (table) => [
+    index('oauth_grants_workspace_created_idx').on(table.workspaceId, table.createdAt.desc()),
+    index('oauth_grants_agent_idx').on(table.agentId),
+    index('oauth_grants_client_idx').on(table.clientId),
+    check(
+      'oauth_grants_revoked_reason_check',
+      sql`${table.revokedReason} is null or ${table.revokedReason} in ('user', 'agent_revoked', 'refresh_reuse', 'code_reuse', 'client_disabled', 'user_left_workspace', 'reconnected')`,
+    ),
+  ],
+);
+
+/** 5 minutes, single use. */
+export const oauthAuthorizationCodes = pgTable(
+  'oauth_authorization_codes',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    codeHash: text('code_hash').notNull(),
+    clientId: uuid('client_id')
+      .notNull()
+      .references(() => oauthClients.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    workspaceId: uuid('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    /** Existing agent chosen (reconnect); null means create one named new_agent_name. */
+    agentId: uuid('agent_id').references(() => agents.id, { onDelete: 'cascade' }),
+    newAgentName: text('new_agent_name'),
+    redirectUri: text('redirect_uri').notNull(),
+    codeChallenge: text('code_challenge').notNull(),
+    scope: text('scope').notNull(),
+    resource: text('resource').notNull(),
+    expiresAt: ts('expires_at').notNull(),
+    consumedAt: ts('consumed_at'),
+    /** The grant this code created, for code-reuse revocation. */
+    grantId: uuid('grant_id').references(() => oauthGrants.id, { onDelete: 'set null' }),
+    createdAt: ts('created_at').notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('oauth_authorization_codes_code_hash_unique').on(table.codeHash),
+    check('oauth_authorization_codes_agent_xor', sql`(${table.agentId} is null) <> (${table.newAgentName} is null)`),
+  ],
+);
+
+/** 1 hour. */
+export const oauthAccessTokens = pgTable(
+  'oauth_access_tokens',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    grantId: uuid('grant_id')
+      .notNull()
+      .references(() => oauthGrants.id, { onDelete: 'cascade' }),
+    tokenHash: text('token_hash').notNull(),
+    expiresAt: ts('expires_at').notNull(),
+    revokedAt: ts('revoked_at'),
+    createdAt: ts('created_at').notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('oauth_access_tokens_token_hash_unique').on(table.tokenHash),
+    index('oauth_access_tokens_grant_idx').on(table.grantId),
+  ],
+);
+
+/** 30 days idle, rotated on every use. */
+export const oauthRefreshTokens = pgTable(
+  'oauth_refresh_tokens',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    grantId: uuid('grant_id')
+      .notNull()
+      .references(() => oauthGrants.id, { onDelete: 'cascade' }),
+    tokenHash: text('token_hash').notNull(),
+    parentId: uuid('parent_id').references((): AnyPgColumn => oauthRefreshTokens.id, { onDelete: 'set null' }),
+    expiresAt: ts('expires_at').notNull(),
+    rotatedAt: ts('rotated_at'),
+    revokedAt: ts('revoked_at'),
+    createdAt: ts('created_at').notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('oauth_refresh_tokens_token_hash_unique').on(table.tokenHash),
+    index('oauth_refresh_tokens_grant_idx').on(table.grantId),
+    index('oauth_refresh_tokens_parent_idx').on(table.parentId),
   ],
 );
 
@@ -261,3 +1154,16 @@ export type MessageRow = typeof messages.$inferSelect;
 export type UserRow = typeof users.$inferSelect;
 export type WorkspaceRow = typeof workspaces.$inferSelect;
 export type JoinCodeRow = typeof joinCodes.$inferSelect;
+export type AgentInviteRow = typeof agentInvites.$inferSelect;
+export type AgentShareRow = typeof agentShares.$inferSelect;
+export type CustomerInviteRow = typeof customerInvites.$inferSelect;
+export type AgentBrandingRow = typeof agentBranding.$inferSelect;
+export type TaskAnswerRow = typeof taskAnswers.$inferSelect;
+export type SiteBusinessRow = typeof siteBusinesses.$inferSelect;
+export type SiteDemoLinkRow = typeof siteDemoLinks.$inferSelect;
+export type SiteConversationRow = typeof siteConversations.$inferSelect;
+export type SiteMessageRow = typeof siteMessages.$inferSelect;
+export type SiteSuggestedAnswerRow = typeof siteSuggestedAnswers.$inferSelect;
+export type OAuthClientRow = typeof oauthClients.$inferSelect;
+export type OAuthGrantRow = typeof oauthGrants.$inferSelect;
+export type OAuthAuthorizationRequestRow = typeof oauthAuthorizationRequests.$inferSelect;

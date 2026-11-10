@@ -7,6 +7,7 @@ import {
   forgetSignInEmail,
   rememberSignInEmail,
   requestSignInCode,
+  sourceFromUrl,
   storedSignInEmail,
   verifySignInCode,
 } from './auth-client';
@@ -16,9 +17,15 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 type Step = 'email' | 'code';
 
 const noSubscribe = () => () => {};
+/** Visitors from /sharing arrive with ?ref=sharing. Their sign-in sends wants_sharing: true, which feeds the wants_sharing count, separate from source. */
+const fromSharing = () => new URLSearchParams(window.location.search).get('ref') === 'sharing';
 
-/** `sent` means the landing form already asked for a code; the email itself comes from sessionStorage. */
-export function SignInForm({ sent }: { sent: boolean }) {
+/**
+ * `sent` means the landing form already asked for a code; the email itself comes from sessionStorage.
+ * `claimToken` (from /claim) attaches a new account to an invite workspace instead of creating one.
+ * `next` is where to go after the code instead of /dashboard: only the consent page, already checked by safeNextPath.
+ */
+export function SignInForm({ sent, claimToken, next }: { sent: boolean; claimToken?: string; next?: string }) {
   const router = useRouter();
   const stored = useSyncExternalStore(noSubscribe, storedSignInEmail, () => null);
   const [stepChoice, setStep] = useState<Step | null>(null);
@@ -31,6 +38,7 @@ export function SignInForm({ sent }: { sent: boolean }) {
   const [busy, setBusy] = useState(false);
   const [resent, setResent] = useState(false);
   const [marketing, setMarketing] = useState(false);
+  const wantsSharing = useSyncExternalStore(noSubscribe, fromSharing, () => false);
   const codeRef = useRef<HTMLInputElement>(null);
   const emailRef = useRef<HTMLInputElement>(null);
 
@@ -49,7 +57,7 @@ export function SignInForm({ sent }: { sent: boolean }) {
     setBusy(true);
     setError('');
     setNotice('');
-    const res = await requestSignInCode(value);
+    const res = await requestSignInCode(value, sourceFromUrl(), wantsSharing);
     setBusy(false);
     if (!res.ok) {
       setError(res.message);
@@ -75,7 +83,7 @@ export function SignInForm({ sent }: { sent: boolean }) {
     setBusy(true);
     setError('');
     setNotice('');
-    const res = await verifySignInCode(email.trim(), value, marketing);
+    const res = await verifySignInCode(email.trim(), value, marketing, claimToken);
     if (!res.ok) {
       setBusy(false);
       setError(res.message);
@@ -83,15 +91,24 @@ export function SignInForm({ sent }: { sent: boolean }) {
       return;
     }
     forgetSignInEmail();
-    router.replace('/dashboard');
+    router.replace(next ?? '/dashboard');
     router.refresh();
   }
 
   if (step === 'email') {
     return (
       <>
-        <h1>Sign in to ReplySlip</h1>
-        <p className="lead">Enter your email and we’ll send you a 6-digit code. New here? The same code creates your workspace.</p>
+        {claimToken ? (
+          <h2>Claim it with your email</h2>
+        ) : (
+          <>
+            <h1>Sign in to Valetto</h1>
+            <p className="lead">
+              {next ? 'Sign in to finish connecting the app. ' : ''}Enter your email and we’ll send you a 6-digit code. New
+              here? The same code creates your workspace.
+            </p>
+          </>
+        )}
         <form className="signup" noValidate onSubmit={sendCode}>
           <label htmlFor="si-email">Your email</label>
           <input

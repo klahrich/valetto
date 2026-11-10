@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { SESSION_COOKIE, SESSION_TTL_SECONDS } from './constants';
 import { HttpError } from './errors';
@@ -37,6 +38,93 @@ export async function handle(fn: () => Promise<Response>): Promise<Response> {
   }
 }
 
+/** Headers on every /api/v1/c/* response (spec 14, 15.1, 17.13). */
+export const CUSTOMER_API_HEADERS = {
+  'cache-control': 'private, no-store',
+  'x-robots-tag': 'noindex, nofollow',
+  'referrer-policy': 'no-referrer',
+} as const;
+
+/**
+ * handle() for customer routes: plan_limit is wrapped in the normal error envelope with the old
+ * flat body in details (spec 15.1), and every response, errors included, carries CUSTOMER_API_HEADERS.
+ */
+export async function handleCustomer(fn: () => Promise<Response>): Promise<Response> {
+  let response: Response;
+  try {
+    response = await fn();
+  } catch (err) {
+    if (err instanceof PlanLimitError) {
+      response = json({ error: { code: 'plan_limit', message: err.body.message, details: err.body } }, err.status);
+    } else if (err instanceof HttpError) {
+      response = jsonError(err);
+    } else {
+      console.error(err);
+      response = jsonError(new HttpError(500, 'internal_error', 'Something went wrong.'));
+    }
+  }
+  for (const [name, value] of Object.entries(CUSTOMER_API_HEADERS)) response.headers.set(name, value);
+  // 17.13: a conditional GET (ETag or 304) must be revalidated, not refused by the cache.
+  if (response.status === 304 || response.headers.has('etag')) {
+    response.headers.set('cache-control', CUSTOMER_ETAG_CACHE_CONTROL);
+  }
+  return response;
+}
+
+export const CUSTOMER_ETAG_CACHE_CONTROL = 'private, no-cache';
+
+/** Weak ETag over the exact response body, so any visible change gives a new tag. */
+export function weakEtag(body: unknown): string {
+  return `W/"${createHash('sha256').update(JSON.stringify(body)).digest('base64url').slice(0, 27)}"`;
+}
+
+/** Weak comparison per RFC 9110. `*` is not honored: these are JSON reads, and `*` would pin a stale 304. */
+function etagMatches(header: string | null, etag: string): boolean {
+  if (!header) return false;
+  const bare = etag.replace(/^W\//, '');
+  return header
+    .split(',')
+    .map((part) => part.trim())
+    .some((part) => part !== '*' && part.replace(/^W\//, '') === bare);
+}
+
+/** 200 with an ETag, or 304 with no body when If-None-Match already has it (15.9). */
+export function jsonWithEtag(req: Request, body: unknown, etag = weakEtag(body)): Response {
+  if (etagMatches(req.headers.get('if-none-match'), etag)) {
+    return new Response(null, { status: 304, headers: { etag } });
+  }
+  return json(body, 200, { etag });
+}
+
+/**
+ * Raw request body capped at maxBytes. Rejects early on Content-Length, and stops reading the
+ * stream past the cap, both as 413 image_too_large (13.4).
+ */
+export async function readImageBody(req: Request, maxBytes: number): Promise<{ bytes: Buffer; contentType: string }> {
+  const contentType = (req.headers.get('content-type') ?? '').split(';')[0]!.trim().toLowerCase();
+  const tooLarge = () =>
+    new HttpError(413, 'image_too_large', `The image must be at most ${Math.round(maxBytes / 1024)} KB.`, {
+      max_bytes: maxBytes,
+    });
+  const declared = Number(req.headers.get('content-length'));
+  if (Number.isFinite(declared) && declared > maxBytes) throw tooLarge();
+  if (!req.body) return { bytes: Buffer.alloc(0), contentType };
+  const reader = req.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > maxBytes) {
+      await reader.cancel().catch(() => undefined);
+      throw tooLarge();
+    }
+    chunks.push(value);
+  }
+  return { bytes: Buffer.concat(chunks), contentType };
+}
+
 export async function readJson(req: Request): Promise<unknown> {
   const contentType = req.headers.get('content-type') ?? '';
   if (!contentType.toLowerCase().includes('application/json')) {
@@ -44,6 +132,21 @@ export async function readJson(req: Request): Promise<unknown> {
   }
   try {
     return await req.json();
+  } catch {
+    throw new HttpError(400, 'invalid_json', 'Request body must be valid JSON.');
+  }
+}
+
+/** Like readJson, but an empty body is `{}` (for POSTs whose fields are all optional). */
+export async function readOptionalJson(req: Request): Promise<unknown> {
+  const text = await req.text();
+  if (!text.trim()) return {};
+  const contentType = req.headers.get('content-type') ?? '';
+  if (!contentType.toLowerCase().includes('application/json')) {
+    throw new HttpError(415, 'unsupported_media_type', 'Content-Type must be application/json.');
+  }
+  try {
+    return JSON.parse(text) as unknown;
   } catch {
     throw new HttpError(400, 'invalid_json', 'Request body must be valid JSON.');
   }

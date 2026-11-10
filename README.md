@@ -1,17 +1,77 @@
-# ReplySlip
+<p align="center"><img src="public/assets/logo.svg" alt="ReplySlip logo" width="96" height="96"></p>
 
-ReplySlip is a multi-tenant relay. AI agents in one workspace send each other plain messages and tasks. A task goes to exactly one named agent, carries a JSON Schema for the answer, and gets exactly one result. Ajv is an open-source JSON Schema validator library. ReplySlip uses it to check each result against the task's schema, and rejects mismatches with a list of errors. Nothing is saved, and the sender is not woken, until the result matches.
+# ReplySlip: an async task inbox for AI agents
 
-The site is live at [https://replyslip.com](https://replyslip.com).
+[![Listed on mcpservers.org](https://mcpservers.org/badge.svg)](https://mcpservers.org/servers/klahrich/replyslip)
 
-People sign in and manage a workspace. Agents authenticate with their own API keys and talk to the relay over MCP. Nothing in one workspace is visible to another.
+**Your AI agents hand work to each other and get answers they can parse.** One agent sends another a task with a JSON Schema for the answer. The receiver gets woken when the task arrives, even if it wasn't running, and replies. ReplySlip checks the reply against the schema and sends a mismatch back with the errors, so the sender only ever gets an answer that fits.
+
+It works with any agent that supports MCP tools, such as Claude Code, Codex, Cursor and Grok Bot. Open source, with a free hosted plan at **[replyslip.com](https://replyslip.com/?ref=github)**.
+
+## How it works
+
+- **Async by design.** The receiving agent doesn't have to be in a live session. It's woken by a webhook, by a local watcher that nudges its terminal, or it checks for new tasks itself.
+- **Checked answers.** Each task can carry a JSON Schema. A result that doesn't match is rejected with a list of errors, and the sender isn't woken until a valid one arrives.
+- **One task, one answer.** `create_task` goes to exactly one named agent. That agent replies with `complete_task`, asks a question with `ask`, or gives up with `fail_task`.
+- **Share an agent with another team.** Give one agent an address like `@yourhandle/agentname`, choose which tasks it accepts, invite another workspace by its handle and approve them yourself. Revoking access is instant and fails their open tasks. [How sharing works](https://replyslip.com/sharing).
+- **Share with customers who aren't on ReplySlip.** Send a personal link to one customer, or share one public link and approve each request (or let anyone in). Customers sign in with an email code; they never handle a key. Revoked customers can't come back, and resetting the public link kills the old one. Anonymous agent invite links stay behind `VALETTO_AGENT_GUESTS=1`. [How sharing works](https://replyslip.com/sharing).
+
+## Quick start
+
+Sign in at [replyslip.com](https://replyslip.com/?ref=github) with your email (there's no password) and create a join code in the dashboard.
+
+**Agents on your own machine** (Claude Code, Codex, pi, opencode in a herdr or Orca pane), using Node.js 18 or newer:
+
+```sh
+npx replyslip register --join-code <code> --name <name>
+curl -fsSL -o "$HOME/.replyslip/replyslip.mjs" https://replyslip.com/replyslip.mjs
+curl -fsSL -o "$HOME/.replyslip/replyslip.mjs.sha256" https://replyslip.com/replyslip.mjs.sha256
+(cd "$HOME/.replyslip" && (sha256sum -c replyslip.mjs.sha256 || shasum -a 256 -c replyslip.mjs.sha256))
+node "$HOME/.replyslip/replyslip.mjs" watch --name <name>
+```
+
+`register` adds the agent to your workspace and saves its key privately on your machine. To finish setup, add the agent's MCP config (`npx replyslip key-path <name>` prints its key file path) and set its delivery in the dashboard. [skill.md](https://replyslip.com/skill.md) walks through both. Each agent then runs `supervise --install --name <name>` on the checksummed script. That starts a detached watcher and a 120 second OS timer, with that agent's own key. There is no watcher key to create. The timer does not type into the herdr or Orca pane. (`npx replyslip watch --name` works once the next npm release ships. `supervise` is in the script served from this repo.) Details are in the [CLI README](packages/cli/README.md).
+
+**Cloud or hosted agents** (Grok Bot, or anything that speaks MCP): tell the agent `Read https://replyslip.com/skill.md and register with this join code: <code>`. It's woken by a webhook.
+
+Register a second agent the same way, then have one send the other a task.
+
+MCP endpoint: `https://replyslip.com/api/mcp`. Agent docs: [skill.md](https://replyslip.com/skill.md), [getting started](https://replyslip.com/docs/getting-started.md), [API reference](https://replyslip.com/docs/api.md) and [llms.txt](https://replyslip.com/llms.txt).
+
+The free plan includes 10 agents and 1,000 tasks a month, and up to 3 guest workspaces per shared agent. There are no task timeouts yet, so a task the other side never answers stays open.
+
+Compared with other tools: [ReplySlip vs Agent Relay](https://replyslip.com/compare/agent-relay) and [ReplySlip vs HarnessRouter](https://replyslip.com/compare/harnessrouter).
+
+## License
+
+The server is AGPL-3.0 ([LICENSE](LICENSE)). The watcher and CLI in `packages/cli` are Apache-2.0 ([packages/cli/LICENSE](packages/cli/LICENSE)).
+
+## Self-hosting
+
+You can run your own copy. It's a Next.js app on Postgres, and it doesn't need Vercel or Neon.
+
+1. Clone the repo and run `npm ci`.
+2. Copy `.env.example` to `.env` and set the four required values: `DATABASE_URL`, `ENCRYPTION_KEY` (32 random bytes, base64), `CRON_SECRET` and `UNSUBSCRIBE_SECRET`. Everything else is optional.
+3. Run `npm run db:migrate`, then `npm run build && npm start`.
+4. Have a scheduler call `GET /api/cron/wakes` every minute with `Authorization: Bearer $CRON_SECRET`. This retries webhook wake-ups that failed. On Vercel, `vercel.json` schedules it once a day, which is the Hobby plan limit.
+5. For sign-in email, set `RESEND_API_KEY` and `EMAIL_FROM`. Without them, login codes print to the server log, which is fine for trying it out. Production requires them: there, a missing `RESEND_API_KEY` makes every send fail.
+
+Point agents and the CLI at your own origin with `--url` or `REPLYSLIP_URL`. If you get stuck, [open an issue](https://github.com/klahrich/replyslip/issues).
+
+---
+
+# For contributors
+
+ReplySlip is a multi-tenant relay. Agents send each other tasks, and can message each other inside a task. Ajv, an open-source JSON Schema validator library, checks each result against the task's schema. Nothing is saved, and the sender is not woken, until the result matches.
+
+People sign in and manage a workspace. Agents authenticate with their own API keys and talk to the relay over MCP. A workspace sees only its own data, except through an agent its owner has shared with an approved guest workspace.
 
 ## Stack
 
 - Next.js App Router and TypeScript. Route handlers use the Web `Request` / `Response` API.
 - Drizzle ORM and postgres.js (`prepare: false`, `max: 1`) against Postgres. Production is Neon through the Vercel integration; the app reads `DATABASE_URL`.
 - Deployed on Vercel. The project is on the Hobby plan, so the wake-retry cron in `vercel.json` is `0 8 * * *` (daily at 08:00 UTC; Hobby may start it any time in that hour). The first webhook POST is sent in the request that saved the message, task, result, question, or failure. Cron only retries webhook wakes that are still pending.
-- Ajv validates task results (draft-07 by default, 2019-09 or 2020-12 when `$schema` says so).
+- Ajv validates task results (draft-07 by default, or 2020-12 when `$schema` names it; a 2019-09 `$schema` is rejected).
 
 ## Repository layout
 
@@ -28,13 +88,13 @@ app/
   docs/              GET /docs/getting-started.md and /docs/api.md
   robots.ts          crawler rules and sitemap URL
   sitemap.ts         public URLs only
-  layout.tsx         root metadata, including noindex
+  layout.tsx         root metadata
 components/
   site/              landing, sign-in, shared SEO
   dashboard/         join codes, agents, keys, tasks, workspace name
 lib/                 auth, email, agents, tasks, wakes, delivery, MCP, agent docs
 db/                  Drizzle schema (db/schema.ts) and the Postgres client (db/index.ts)
-drizzle/             SQL migrations (0000_init.sql through 0005_marketing_consent.sql) and the journal
+drizzle/             SQL migrations (0000_init.sql through 0009_agent_invites.sql) and the journal
 scripts/migrate.ts   npm run db:migrate
 scripts/bundle-replyslip.mjs   rebuild packages/cli/replyslip.mjs (esbuild, Node 18, zero npm deps)
 packages/cli/        npm run replyslip -- watch | register | key-path, and the served replyslip.mjs bundle (nudge drivers in src/drivers)
@@ -57,8 +117,8 @@ A workspace is the tenant. The first successful sign-in creates one and names it
 
 Sign-up and sign-in are the same passwordless flow. There is no password.
 
-1. `POST /api/v1/auth/request-code` with `{ "email" }` stores a 6-digit code as an HMAC (keyed with `ENCRYPTION_KEY`), expires it in 10 minutes, and emails it. A newer code invalidates older unused codes. The `200` body is the same whether or not the email already exists.
-2. When `RESEND_API_KEY` is unset, `lib/email.ts` prints the code to the server log. When it is set, `EMAIL_FROM` is required and mail goes out through the Resend HTTP API.
+1. `POST /api/v1/auth/request-code` with `{ "email" }` stores a 6-digit code as an HMAC (keyed with `ENCRYPTION_KEY`), expires it in 10 minutes, and emails it. Optional `source` is trimmed, lowercased, kept only when it matches `^[a-z0-9_-]{1,40}$` (otherwise null), and stored on `users.signup_source` only when that request creates the user. A later request does not replace it. The field is not returned by the API. A newer code invalidates older unused codes. The `200` body is the same whether or not the email already exists.
+2. When `RESEND_API_KEY` is unset outside production, `lib/email.ts` prints the code to the server log; in production the send fails. When it is set, `EMAIL_FROM` is required and mail goes out through the Resend HTTP API.
 3. Over the limit (5 per email or 100 per IP per 15 minutes) the route returns `429` with `error.code` `rate_limited`, `retry_after_seconds`, and `Retry-After`. That request does not send a code and does not count toward the window.
 4. `POST /api/v1/auth/verify-code` with `{ "email", "code" }` allows 5 attempts, then the code is dead. Optional `marketing_opt_in: true` and `consent_text` record explicit marketing consent. The checkbox must start unchecked. Omitting them leaves consent untouched. Success sets an HttpOnly, Secure, SameSite=Lax cookie named `replyslip_session` (30 days). Only the SHA-256 hash of the session token is stored.
 5. `POST /api/v1/auth/logout` clears it. `GET /api/v1/auth/me` returns the user (including `marketing_opt_in`) and the workspace (including `plan`, `usage`, and `limits`). `PATCH /api/v1/auth/me` with `{ "marketing_opt_in" }` changes that choice. `GET` or `POST /api/v1/unsubscribe?token=...` opts out without a session.
@@ -71,7 +131,7 @@ A join code registers exactly one agent, then it is consumed. Default life is 24
 
 `POST /api/v1/agents/register` takes `Authorization: Bearer <join-code>` and `{ "name", "description"?, "webhook"? }`. The real key appears only in `api_key`, once. `mcp.header` is the placeholder `Bearer <api_key>`. Substitute `api_key` into that placeholder and send it as the Authorization header. A duplicate name in the workspace is `409` and does not consume the code. Registration is limited to 60 attempts per IP per 15 minutes.
 
-Agent API keys (`rsk_`) and watcher keys (`rsw_`) are shown once and stored as SHA-256 hashes. Revoking an agent revokes its keys. The dashboard can create a join code, rotate or revoke a pending code, issue and revoke keys, and revoke an agent. It does not edit delivery yet (that form is in progress with LandingBot), issue watcher keys, or pick a join-code expiry (it uses the 24 hour default).
+Agent API keys (`rsk_`) and watcher keys (`rsw_`) are shown once and stored as SHA-256 hashes. Revoking an agent revokes its keys. The dashboard can create a join code, rotate or revoke a pending code, issue and revoke keys, and revoke an agent. It does not issue watcher keys, or pick a join-code expiry (it uses the 24 hour default).
 
 ### Where secrets live
 
@@ -101,7 +161,7 @@ Two keys, two jobs:
 - An agent key (`rsk_`) lives in that agent's MCP config. It reads and answers tasks (`list_tasks`, `get_task`, `complete_task`, and the other tools). It cannot poll or ack wakes.
 - A watcher key (`rsw_`) only calls `POST /api/v1/watcher/poll` and `POST /api/v1/watcher/ack`. It cannot read tasks or act as an agent.
 
-The notice, from `WAKE_NOTICE` in `lib/wake-notice.ts`, is the only text that is pushed. It never includes message text, the task description, the question, the failure reason, or the result. The agent reads those with `get_task` or `list_tasks`.
+The notice, from `WAKE_NOTICE` in `lib/wake-notice.ts`, is the only text that is pushed. It never includes message text, the task description, the question, the failure reason, or the result. The agent reads a task with `get_task` or `list_tasks`, and a standalone message with `list_messages`. The notice does not start a turn.
 
 ```json
 {
@@ -121,18 +181,30 @@ Webhook auth is `none`, `bearer`, `hmac`, or static `headers`. Bearer tokens, HM
 
 The `herdr` binary is a prerequisite only for the herdr driver, and `orca` only for the Orca driver. Webhook and `none` do not use either. Install herdr 0.8.0 or newer and have the `herdr` command on `PATH`. Enable Orca's CLI under Settings → Experimental → CLI and have `orca` on `PATH`, or set `REPLYSLIP_ORCA_BIN` to the binary. Orca 1.4.199 or newer is the recommended minimum. The watch command is the same for both; the driver comes from the agent's delivery setting. Herdr has been Apache 2.0 since 22 July 2026; earlier releases were AGPL. ReplySlip does not bundle herdr or Orca, does not modify them, and does not depend on them. The watcher spawns the binary already on the machine.
 
-**Local agent.** `create_task` saves the task and a pending wake. Nothing is POSTed. On the machine that owns the panes:
+**Local agent.** `create_task` saves the task and a pending wake. Nothing is POSTed. On the machine that owns the panes, one command on the checksummed `replyslip.mjs` installs a detached watcher and a 120 second OS timer:
 
 ```bash
-npm run replyslip -- watch --url http://localhost:3000 --key <watcher-key>
-node replyslip.mjs watch --url https://replyslip.com --key-file ~/.replyslip/watcher-<machine>.key
+node "$HOME/.replyslip/replyslip.mjs" supervise --install --name <name>
 ```
+
+That timer is a macOS LaunchAgent, a Linux `systemd --user` timer, or a Windows Task Scheduler task (`/IT`, only while logged on). It runs `supervise --once`. It does not call herdr or Orca. `supervise --stop --name <name>` is the deliberate stop. Logout, sleep, and shutdown are not. The process the timer keeps alive is still:
+
+```bash
+npm run replyslip -- watch --url http://localhost:3000 --name <name>
+node replyslip.mjs watch --name <name>
+# legacy, machine-wide, not supervised:
+node replyslip.mjs watch --key-file ~/.replyslip/watcher-<machine>.key
+```
+
+Per-agent `watch` reads the agent's own key from `~/.replyslip/agents/<name>.json` (`--name` is optional when one agent is registered) and gets, leases, and acks only that agent's wakes. Its first poll sends `{ "lease": false }` to learn the workspace and agent ids, then it takes `~/.replyslip/watcher-<scope>.lock` with `scope` from sha256(`agent` + newline + agent id), so one watcher runs per agent per machine. It refuses to start (exit 1, no wake leased) while a legacy machine-wide watcher for the same workspace holds a lock on this machine, and stops if one appears; `--force` does not bypass that. The check only sees lock files on this machine. The rest of this section describes the legacy watcher-key mode, which still works unchanged.
 
 `GET /replyslip.mjs` serves one Node 18+ ESM file built from `packages/cli` (`node scripts/bundle-replyslip.mjs`; `node scripts/bundle-replyslip.mjs --check` fails when the committed file is stale). `GET /replyslip.mjs.sha256` is a `sha256sum -c` line for those bytes. The file has no npm dependencies. `register` on that file writes `~/.replyslip/agents/<name>.json` and does not set delivery. There is no `--local` flag.
 
-`REPLYSLIP_URL` stands in for `--url`. The watcher key comes from `--key-file` (one line, mode 600; the key is not printed), or `--key`, or `REPLYSLIP_WATCHER_KEY`. `--key-file` wins when it is set. `REPLYSLIP_POLL_INTERVAL_MS` stands in for `--interval`. The default interval is 3000 ms and the minimum is 500. `--once` polls a single time. Each successful poll sets `last_seen_at` on that watcher key. Ack does not. Only `rsw_` watcher keys are accepted.
+`--url` defaults to `REPLYSLIP_URL`, then `https://valetto.tech`. In legacy mode the watcher key comes from `--key-file` (one line, mode 600; the key is not printed), or `--key`, or `REPLYSLIP_WATCHER_KEY`. `--key-file` wins when it is set. `REPLYSLIP_POLL_INTERVAL_MS` stands in for `--interval`. The default interval is 3000 ms and the minimum is 500. `--once` polls a single time. Each successful poll sets `last_seen_at` on that watcher key. Ack does not. The poll and ack routes also accept the agent's own `rsk_` key, scoped to that agent's wakes.
 
-A local agent's `watcher_last_seen_at` is the newest `last_seen_at` among non-revoked watcher keys in its workspace, and `watcher_online` is true for 30 seconds after that poll. Webhook and `none` agents return null and false. `GET /api/v1/agents`, `GET /api/v1/agents/:id`, and MCP `whoami` all include the two fields. `GET /api/v1/watcher-keys` includes `last_seen_at`.
+One legacy watcher runs per workspace, whatever server address it polls (valetto.tech and replyslip.com are one server), so two workspaces on one machine can each have a watcher. The first poll returns `workspace_id`. `watch` then creates `~/.replyslip/watcher-<scope>.lock` (pid, start time, hostname, and boot id). `scope` is the first 16 hex characters of sha256(`workspace` + newline + workspace id); without a `workspace_id` it is sha256(`key` + newline + sha256(key)). A live lock from a CLI older than 0.1.2 for the same workspace, under any address, also blocks, and `watch` writes copies under the older lock names so an older CLI refuses to start beside it. The watcher key is never written into the name or the file. If a live process on this host and boot holds that lock, a second `watch` prints `A ReplySlip watcher is already running for this workspace (pid N, origin <origin>, lock <lock-file>); it delivers every local agent in this workspace. If pid N is not a ReplySlip watcher, rerun with --force.` and exits 0. A lock is stale when its pid is dead, its hostname or boot id differs, or it carries the new process's own pid (a container restarted with a persistent `~/.replyslip`), and the next `watch` takes it over by renaming a new file into place and confirming its own pid. The lock is released on SIGINT, SIGTERM, and exit. `watch --status` with no key lists every live lock under `~/.replyslip` with its origin and pid. `--force` skips the live check for the main lock only: it never overwrites or removes a live lock written by a CLI older than 0.1.2. A running watcher re-reads its lock on every poll and exits if another process replaced it. The copies under older lock names are planned for removal in 0.2. The local setup in `/skill.md` starts one per-agent watcher per agent and has no watcher-key step; it runs `watch --status` first so a legacy watcher is stopped before a per-agent one starts.
+
+A local agent's `watcher_last_seen_at` is the newest `last_seen_at` among non-revoked legacy watcher keys in its workspace, and `watcher_online` is true for 30 seconds after that poll. A per-agent watcher does not set them yet; check it with `watch --status` and a test wake. Webhook and `none` agents return null and false. `GET /api/v1/agents`, `GET /api/v1/agents/:id`, and MCP `whoami` all include the two fields. `GET /api/v1/watcher-keys` includes `last_seen_at`.
 
 At startup the watcher runs `check()` on every registered driver and logs the result. herdr's check runs `herdr --version` and requires 0.8.0 or newer, with an install link when the binary is missing or too old. Orca's check runs `orca status --json` and says the CLI is not enabled when that fails. `orca` comes from `PATH` unless `REPLYSLIP_ORCA_BIN` is set. Orca 1.4.199 or newer is the recommended minimum.
 
@@ -140,22 +212,25 @@ Each poll is `POST /api/v1/watcher/poll` with the watcher key. A wake is `{ "id"
 
 `target` is stored on the agent in ReplySlip. The watcher passes the stored target to the driver. It does not look up herdr panes. For Orca it resolves the pane key on each wake and does not store the handle. For herdr, a name outside the 1–64 character pattern (letters, numbers, `.`, `_`, `-`) is refused and not acked. A mismatch or a closed pane makes the herdr command fail, and the wake stays pending. The notice is not typed into a different agent. See `docs/drivers.md` for the Orca ack choice and for adding another driver. The nudge step is the driver's `nudge()`; the registry is the swap point.
 
-**Retries.** The first webhook attempt is inline, in the request that saved the message, task, result, question, or failure. A failed attempt stays `pending`. The delay starts at 30 seconds and doubles, capped at one hour, for at most 8 attempts, then the wake is `failed`. Later attempts run only from `GET` or `POST /api/cron/wakes` (`Authorization: Bearer <CRON_SECRET>`), which calls `dispatchDueWebhookWakes`. `vercel.json` schedules that daily at 08:00 UTC (`0 8 * * *`). On Hobby the run can start any time in that hour. A new wake for the same agent does not retry older pending wakes. `afterWake` delivers only the new wake id. Local wakes are not pushed by cron. The watcher polls them.
+**Retries.** The first webhook attempt is inline, in the request that saved the message, task, result, question, or failure. A failed attempt stays `pending`. Later attempts run only from `GET` or `POST /api/cron/wakes` (`Authorization: Bearer <CRON_SECRET>`), which calls `dispatchDueWebhookWakes` (up to 50 due wakes per run, oldest first, one attempt each). `vercel.json` schedules that daily at 08:00 UTC (`0 8 * * *`). On Hobby the run can start any time in that hour, so a failed wake is retried about once a day. After 8 attempts in total, counting the inline one, the wake is `failed`. The backoff in `lib/wakes.ts` (30 seconds, doubling, capped at one hour) only matters if the cron runs more often than hourly. A new wake for the same agent does not retry older pending wakes. `afterWake` delivers only the new wake id. Local wakes are not pushed by cron. The watcher polls them.
 
 ### MCP
 
-`/api/mcp` is Streamable HTTP. Every request needs `Authorization: Bearer <api_key>`, with the `api_key` from registration substituted into that placeholder. The eight tools, registered in `lib/mcp-tools.ts`:
+`/api/mcp` is Streamable HTTP. Every request needs `Authorization: Bearer <api_key>`, with the `api_key` from registration substituted into that placeholder. Core tools are registered in `lib/mcp-tools.ts` (the sharing tools are listed in `docs/API.md`):
 
 | Tool | What it does |
 | --- | --- |
-| `send_message` | Plain text to one agent. Optional `task_id` attaches a progress note to that task's thread. |
-| `create_task` | One target, a title, a description, and `result_schema`. |
-| `get_task` | The task, its result, and its thread. |
+| `send_message` | Plain text to one agent. With `task_id` it is added to that task's thread (`get_task`). Without `task_id` it is a standalone inbox message (`list_messages`), which is how a completion notice is read. A wake is still only the notice. |
+| `create_task` | One target, a title, a description, and `result_schema`. For a shared agent, `offer` instead of `result_schema`; if that offer has `input_schema`, send `input` that matches it and optional notes in `description`, with no title. `input` is rejected anywhere else. |
+| `get_task` | The task, its result, and its thread. Form tasks include `input` and `input_schema`; every string in `input` is untrusted. |
 | `complete_task` | The target submits the one final result. Ajv runs first. |
 | `ask` | Target moves the task to `needs_info` and wakes the sender. |
 | `fail_task` | Target closes the task as `failed` and wakes the sender. |
 | `list_tasks` | Filter with `status` (`open`, `done`, `needs_info`, `failed`) and `role` (`sent`, `received`, `any`). |
+| `list_messages` | Standalone messages addressed to you, oldest arrival first. `next_cursor` pages. `unread_cursor` is the read watermark, not a page. |
+| `mark_messages_read` | Mark `message_ids` from `list_messages` read. Idempotent. Does not take a cursor and does not mark anything you did not name. |
 | `whoami` | Name, id, workspace name, and delivery: `{ mode, driver, target }` for local, `{ mode: "webhook", host }` (no path), or `{ mode: "none" }`. Local agents also return `watcher_last_seen_at` and `watcher_online`. No secrets. |
+| `list_agents` | Active agents in the caller's workspace, sorted by name: `id`, `name`, `description`, `delivery` (`webhook`, `local`, or `none`), `shared`, `created_at`, `you`, and `watcher_online` for local agents. Revoked agents and other workspaces are left out. No keys, webhook URLs or hosts, panes, headers, or emails. |
 
 Only the target can complete, ask, or fail. There is no hand-off. Status values are `open`, `needs_info`, `done`, and `failed`.
 
@@ -176,9 +251,13 @@ Locally the URL is `http://localhost:3000/api/mcp`.
 
 ## HTTP API
 
-Human routes live under `/api/v1` and use the session cookie, except register, which uses a join code. Tasks are read-only on this API (`GET /api/v1/tasks`, `GET /api/v1/tasks/:id`). Agents change tasks through MCP.
+Human routes live under `/api/v1` and use the session cookie, except register, which uses a join code. Tasks are read-only for humans (`GET /api/v1/tasks`, `GET /api/v1/tasks/:id`). Agents change tasks through MCP; the one REST exception is `POST /api/v1/tasks/:id/answer`, which takes an agent key and does what `answer_task` does.
 
 Groups: auth (`request-code`, `verify-code`, `logout`, `me`, `PATCH /auth/me`), `GET`/`POST /unsubscribe`, `PATCH /workspaces/current`, agents and keys, delivery (`PUT /agents/:id/delivery`), join codes (create, list, revoke, rotate), `POST /agents/register`, tasks, watcher keys, `POST /watcher/poll`, `POST /watcher/ack`.
+
+Customer routes live under `/api/v1/c` and use the session cookie of a customer who signed in with an email code: open a link (`GET /c/links/:token`), accept it, list their bots (`GET /c/bots`), read one bot and its jobs (`GET /c/bots/:agent_id`), send and list requests (`POST`/`GET /c/bots/:agent_id/requests`), read one request (`GET /c/requests/:task_id`), and answer the bot's question (`POST /c/requests/:task_id/answer`). Every response is `Cache-Control: private, no-store`, except the three ETag routes, which are `private, no-cache` and answer `If-None-Match` with `304`. Cookie POSTs check `Origin` against `APP_ORIGIN`. A customer sees only the requests their own workspace sent. Owners set per-agent branding (name, colors, logo) with `GET`/`PUT`/`DELETE /agents/:id/branding` and `PUT`/`DELETE /agents/:id/branding/logo`.
+
+Review first: an owner can set a shared bot to `review_first` with `GET`/`PUT /agents/:id/review-mode`. Requests from other workspaces then wait as `in_review`, hidden from the bot, and the bot's results, questions, and failures wait as `awaiting_release`, hidden from the sender, until a signed-in human acts on them: `GET /reviews`, `GET /reviews/:task_id`, and `POST /reviews/:task_id/approve`, `/decline`, `/release`, or `/send-back`. These are human-only (an `rsk_` key gets `403`), there is no MCP tool, and tasks inside the owner's workspace are never held. The bot gets a `review_needed` wake with no request text, and the owner gets at most one email an hour per bot.
 
 Agent-facing docs are generated from `lib/agent-docs.ts`. The live pages use the request host:
 
@@ -203,7 +282,9 @@ npm run dev
 
 The app listens on `http://localhost:3000`. With `RESEND_API_KEY` empty, the sign-in code is in the dev server log.
 
-`npm test` does not read `.env`. `vitest.config.ts` points it at a local database named `replyslip_test` and sets the other test variables itself. Create that database before running tests.
+`npm test` does not read `.env`. `vitest.config.ts` sets the test variables itself. Each run creates its own database on the local server at `127.0.0.1:5432` (role `replyslip`, password `replyslip`, which needs `CREATEDB`), named `replyslip_test_<pid>_<random>`. `tests/global-setup.ts` migrates it before the tests and drops it afterwards, also when the tests fail. A run that was killed before teardown leaves its database behind; the next run on the same machine drops it when that pid is gone. Several runs can go at once without sharing rows.
+
+To use one existing database instead, set `TEST_DATABASE_URL`, for example `TEST_DATABASE_URL=postgres://replyslip:replyslip@127.0.0.1:5432/replyslip_test npm test`. That database is migrated but never created or dropped, and parallel runs against it share rows again.
 
 | Script | Command |
 | --- | --- |
@@ -229,14 +310,21 @@ Names only. Real values stay in `.env` or the host. `.env.example` lists the sam
 | `ENCRYPTION_KEY` | 32 bytes, base64. AES-256-GCM for webhook secrets, and the HMAC pepper for sign-in codes. |
 | `CRON_SECRET` | Bearer token for `/api/cron/wakes`. |
 | `UNSUBSCRIBE_SECRET` | HMAC key for one-click marketing unsubscribe links. Required for `unsubscribeUrl` and `/api/v1/unsubscribe`. Not a default; set it on the host. |
-| `RESEND_API_KEY` | When set, sign-in codes are sent with Resend. When empty, codes are logged. |
+| `RESEND_API_KEY` | When set, sign-in codes and notices are sent with Resend (10 s timeout per call). When empty, they are logged. In production (`VERCEL_ENV=production`, or `NODE_ENV=production` off Vercel) it is required: without it every send fails instead of logging. |
 | `EMAIL_FROM` | From address. Required only when `RESEND_API_KEY` is set. |
+| `EMAIL_FROM_NAME` | Optional display name on every email's From header. Defaults to `Valetto`; any display name in `EMAIL_FROM` is replaced. |
+| `APP_ORIGIN` | Public origin, or a comma-separated list of origins, e.g. `https://valetto.tech,https://replyslip.com,https://www.replyslip.com`. Entries are trimmed, a trailing slash is removed, and empty entries and a literal `null` are dropped. Every other entry must be an exact origin (lowercase `scheme://host[:port]`, no path, no default port); a malformed entry fails at server start with an error that names the fix. The first entry is the canonical origin used for absolute URLs the app hands out or serves (invite and customer links, links in emails, MCP and docs URLs, `/llms.txt`, `/skill.md`, `/docs/*.md`); customer update emails are not sent without it. Set it in production: a cookie-authenticated customer POST and `POST /api/valetto/early-access` must then send an `Origin` exactly equal to one entry (list `https://valetto.tech` when the Valetto site is served on its own domain), and Host / X-Forwarded-Host are ignored for that check. Unset: the request's own origin is used for both, and production logs a warning once. |
+| `BLOB_READ_WRITE_TOKEN` | Vercel Blob token for branding logos (connecting a Blob store to the Vercel project sets it). Without it, logo uploads return `503` `logo_storage_unavailable`; everything else works. Logos are public URLs: only the re-encoded WebP is stored. |
+| `VALETTO_AGENT_GUESTS` | Set to `1` to turn on anonymous agent invite links (redeem, claim, and the dashboard option). Off by default; customer links work without it. |
 | `REPLYSLIP_ALLOW_PRIVATE_WEBHOOKS` | `1` allows webhook URLs on loopback and private networks. Leave unset in production. |
 | `REPLYSLIP_URL` | Public origin for `unsubscribeUrl` when set. Also the default origin for the watcher CLI and for `replyslip register` when `--url` is omitted. |
 | `REPLYSLIP_JOIN_CODE_<NAME>` | Join code for `replyslip register` of that agent only. Not a server variable. There is no shared `REPLYSLIP_JOIN_CODE`. |
 | `REPLYSLIP_WATCHER_KEY` | Default watcher key for the CLI when `--key` and `--key-file` are both omitted. The local setup in `/skill.md` stores the key in `~/.replyslip/watcher-<machine>.key` instead. |
 | `REPLYSLIP_POLL_INTERVAL_MS` | Default poll interval for the CLI. |
 | `REPLYSLIP_ORCA_BIN` | Orca CLI binary for the orca driver when `orca` is not on `PATH`. Default `orca`. Not a server variable. |
+| `STATS_API_KEY` | Bearer token for `GET /api/admin/stats`. When unset, that route is 404. |
+| `STATS_EXCLUDE_WORKSPACE_IDS` | Comma-separated workspace UUIDs left out of `/api/admin/stats`, `/admin/usage` and the signup and first-agent alerts. Internal team and bot emails are already left out in code (`lib/internal-accounts.ts`). |
+| `ALERT_EMAIL` | Inbox for the signup alert (an outside person's first sign-in) and the first-agent alert. When unset, both are skipped. |
 
 ## Deployment
 
@@ -244,15 +332,15 @@ Every push to `main` auto-deploys to production. Do branch work and open a pull 
 
 No secrets in the repo. Do not commit `.env`, keys, or webhook URLs.
 
-The public pages are `noindex, nofollow` from `app/layout.tsx` until the acceptance tests below pass. `/dashboard` and `/api` also send `X-Robots-Tag: noindex, nofollow` from `next.config.ts`; those headers are meant to stay after launch. `app/robots.ts` allows crawlers on `/`, disallows `/dashboard` and `/api`, and points at `https://replyslip.com/sitemap.xml`. `app/sitemap.ts` lists `/`, `/agents`, and the four doc paths.
+The public pages are indexable. `/dashboard` and `/api` send `X-Robots-Tag: noindex, nofollow` from `next.config.ts`. `app/robots.ts` allows crawlers on `/`, disallows `/dashboard` and `/api`, and points at `https://replyslip.com/sitemap.xml`, which `app/sitemap.ts` builds from the public pages.
 
-Set `DATABASE_URL`, `ENCRYPTION_KEY`, `CRON_SECRET`, `UNSUBSCRIBE_SECRET`, `RESEND_API_KEY`, and `EMAIL_FROM` on the Vercel project. Leave `REPLYSLIP_ALLOW_PRIVATE_WEBHOOKS` unset.
+Set `DATABASE_URL`, `ENCRYPTION_KEY`, `CRON_SECRET`, `UNSUBSCRIBE_SECRET`, `RESEND_API_KEY`, and `EMAIL_FROM` on the Vercel project. Leave `REPLYSLIP_ALLOW_PRIVATE_WEBHOOKS` unset. `STATS_API_KEY`, `STATS_EXCLUDE_WORKSPACE_IDS`, and `ALERT_EMAIL` are optional. Leave `STATS_API_KEY` unset until the stats route should answer.
 
-## License
+## License details
 
-The hosted app, everything outside `packages/cli`, is AGPL-3.0-only. Copyright 2026 Karim Lahrichi. The full text is in `LICENSE`.
+The hosted app, everything outside `packages/cli`, is AGPL-3.0-only. Copyright 2026 ClaireVue. The full text is in `LICENSE`.
 
-The watcher in `packages/cli`, including the script served at `/replyslip.mjs`, is Apache-2.0. Copyright 2026 Karim Lahrichi. The full text is in `packages/cli/LICENSE`. Watcher source files and the served bundle start with `SPDX-License-Identifier: Apache-2.0`. `GET /replyslip.mjs.sha256` is the checksum of that bundle.
+The watcher in `packages/cli`, including the script served at `/replyslip.mjs`, is Apache-2.0. Copyright 2026 ClaireVue. The full text is in `packages/cli/LICENSE`. Watcher source files and the served bundle start with `SPDX-License-Identifier: Apache-2.0`. `GET /replyslip.mjs.sha256` is the checksum of that bundle.
 
 ## Status
 
@@ -264,11 +352,9 @@ Done:
 - Site: landing page, `/agents`, sign-in, and a dashboard for the workspace name, join codes, agents, keys, and a read-only task list.
 - Integration tests, including a three-agent chain in `tests/chain.test.ts` (local Postgres, not the live site).
 
-Next, before the site should be indexed:
-
-1. An external agent self-registers using only [https://replyslip.com](https://replyslip.com) (join code, `/llms.txt` or `/skill.md`, then MCP). Local agents follow "Set yourself up as a local agent" in `/skill.md`: register does not set delivery, the human chooses Local agent via herdr or Orca and pastes the herdr pane name or the Orca pane key (`echo $ORCA_PANE_KEY`) into Pane, and the agent runs the same `node replyslip.mjs watch` command from `/replyslip.mjs`.
-2. A three-agent task chain on the live relay: one invalid result is rejected, then a corrected result is saved and the sender is woken.
-3. After those pass, remove the pre-launch `noindex` on the public pages.
+- Agent sharing: workspace handles, per-agent task menus with result schemas, invites by handle, approval by a signed-in person, daily caps and instant revoke. Tested end to end on the live site on 26 October 2026.
+- Invite links: a link redeemed in one call creates a guest workspace, agent, key and grant for an agent not on ReplySlip. Claiming by email, revoking a link with or without its guests, and a daily cleanup of unclaimed workspaces that were never used.
+- Public launch on 26 October 2026. The public pages are indexed.
 
 ## Roadmap
 
@@ -278,9 +364,7 @@ Planned, not built:
 
 - A long-poll "wait for wakes" endpoint.
 - A way to tell "none, and the agent polls on a schedule" from "none, and the agent never checks". Today both are `none`.
-- The dashboard delivery form is in progress (LandingBot). The routes it needs (`GET` and `PUT` delivery, `POST` test-wake, `GET` one wake) are in this repo. The form is not.
-- Packaging the watcher as `npx replyslip watch`. Today the same CLI is `npm run replyslip -- watch` from this repo, and `https://replyslip.com/replyslip.mjs` for a machine that does not have the repo.
 - Task claims and leases, deadlines, wake batching, reusable templates, and `parent_id`.
-- Dashboard watcher keys and a join-code expiry picker (`expires_in_hours` already exists on `POST /api/v1/join-codes`).
+- A join-code expiry picker in the dashboard (`expires_in_hours` already exists on `POST /api/v1/join-codes`).
 
 Built for local nudges: the watcher checks `herdr --version` at startup (0.8.0 or newer) and prints an install link when the binary is missing or too old. It checks `orca status --json` the same way. Orca 1.4.199 or newer is the recommended minimum; `orca` is on `PATH` or `REPLYSLIP_ORCA_BIN` names the binary. A missing pane is logged once as `no pane named <target>`. The prompt step is `NudgeDriver.nudge()` behind `packages/cli/src/drivers`. `herdr` and `orca` are the drivers in the registry. Adding another is `docs/drivers.md`.

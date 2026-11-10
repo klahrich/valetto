@@ -1,19 +1,22 @@
 import { and, asc, eq, gte, sql } from 'drizzle-orm';
-import { getDb } from '@/db';
+import { getDb, type Db } from '@/db';
 import { rateEvents } from '@/db/schema';
 import { RATE_LIMITS } from './constants';
+import { OAUTH_RATE_LIMITS } from './oauth/constants';
+
+const RULES = { ...RATE_LIMITS, ...OAUTH_RATE_LIMITS };
 
 type RateRule = { windowMs: number; email?: number; ip?: number; agent?: number };
 
 export async function consumeRateLimit(input: {
-  kind: keyof typeof RATE_LIMITS;
+  kind: keyof typeof RULES;
   email?: string;
   ip?: string;
   /** Per-agent limits store the agent id in rate_events.email. That column has no other meaning for those kinds. */
   agentId?: string;
 }): Promise<{ limited: boolean; retryAfterSeconds: number }> {
   const db = getDb();
-  const rule = RATE_LIMITS[input.kind] as RateRule;
+  const rule = RULES[input.kind] as RateRule;
   const since = new Date(Date.now() - rule.windowMs);
   await db.delete(rateEvents).where(sql`${rateEvents.createdAt} < now() - interval '1 day'`);
 
@@ -75,10 +78,56 @@ export async function consumeRateLimit(input: {
   });
 }
 
+/**
+ * Sliding window for a per-row cap, such as a share's daily guest-task limit.
+ * The caller holds the row lock. `key` is stored in rate_events.email. A full window inserts nothing.
+ */
+export async function consumeKeyedRateLimit(
+  tx: Db,
+  input: { kind: string; key: string; limit: number; windowMs: number; /** false when a cron prunes this kind. */ prune?: boolean },
+): Promise<{ limited: boolean; retryAfterSeconds: number }> {
+  const since = new Date(Date.now() - input.windowMs);
+  if (input.prune !== false) await pruneRateEvents(tx, input.kind);
+  const rows = await tx
+    .select({ createdAt: rateEvents.createdAt })
+    .from(rateEvents)
+    .where(and(eq(rateEvents.kind, input.kind), eq(rateEvents.email, input.key), gte(rateEvents.createdAt, since)))
+    .orderBy(asc(rateEvents.createdAt));
+  if (rows.length >= input.limit) {
+    const retryMs = retryDelayMs(
+      rows.map((row) => row.createdAt),
+      input.limit,
+      input.windowMs,
+      Date.now(),
+    );
+    return { limited: true, retryAfterSeconds: Math.max(1, Math.ceil((retryMs || input.windowMs) / 1000)) };
+  }
+  await tx.insert(rateEvents).values({ kind: input.kind, email: input.key, ip: null });
+  return { limited: false, retryAfterSeconds: 0 };
+}
+
+/** Deletes this kind's rate_events older than a day (every window here is at most a day). Returns the count. */
+export async function pruneRateEvents(db: Db, kind: string): Promise<number> {
+  const gone = await db
+    .delete(rateEvents)
+    .where(and(eq(rateEvents.kind, kind), sql`${rateEvents.createdAt} < now() - interval '1 day'`))
+    .returning({ id: rateEvents.id });
+  return gone.length;
+}
+
 /** Milliseconds until a sliding window of `limit` events drops below the limit. 0 when another event still fits. */
 function retryDelayMs(createdAt: Date[], limit: number, windowMs: number, now: number): number {
   if (createdAt.length < limit) return 0;
   const pivot = createdAt[createdAt.length - limit];
   if (!pivot) return 0;
   return Math.max(0, pivot.getTime() + windowMs - now);
+}
+
+/** Gives back one event taken by consumeKeyedRateLimit (the newest), for an attempt that was rejected. */
+export async function refundKeyedRateLimit(db: Db, input: { kind: string; key: string }): Promise<void> {
+  await db.execute(sql`
+    delete from rate_events where id = (
+      select id from rate_events where kind = ${input.kind} and email = ${input.key}
+      order by created_at desc limit 1
+    )`);
 }

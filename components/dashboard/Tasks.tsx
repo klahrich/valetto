@@ -1,7 +1,8 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { api, errorText, formatTime } from './api';
+import { api, errorText } from './api';
+import { LocalTime } from './LocalTime';
 import type { Message, Task, TaskStatus } from './types';
 
 const STATUS_LABEL: Record<TaskStatus, string> = {
@@ -31,6 +32,12 @@ function Json({ value }: { value: unknown }) {
   );
 }
 
+/** A customer's task shows their email, not the internal sender agent's name. */
+function senderLabel(task: Task): string {
+  if (task.sender?.kind === 'customer') return task.sender.customer_email ?? 'A customer';
+  return task.from;
+}
+
 function TaskRow({ task }: { task: Task }) {
   const [thread, setThread] = useState<Message[] | null>(null);
   const [threadError, setThreadError] = useState('');
@@ -55,12 +62,10 @@ function TaskRow({ task }: { task: Task }) {
         <summary>
           <span className="dash-task-title">{task.title}</span>
           <span className="dash-task-to">
-            <span translate="no">{task.from}</span> → <span translate="no">{task.to}</span>
+            <span translate="no">{senderLabel(task)}</span> → <span translate="no">{task.to}</span>
           </span>
           <StatusPill status={task.status} />
-          <time className="dash-task-time" dateTime={task.created_at}>
-            {formatTime(task.created_at)}
-          </time>
+          <LocalTime className="dash-task-time" iso={task.created_at} />
         </summary>
         <div className="dash-task-body">
           <dl className="dash-dl">
@@ -72,17 +77,35 @@ function TaskRow({ task }: { task: Task }) {
             </div>
             <div>
               <dt>Updated</dt>
-              <dd>{formatTime(task.updated_at)}</dd>
+              <dd><LocalTime iso={task.updated_at} /></dd>
             </div>
             {task.completed_at ? (
               <div>
                 <dt>Closed</dt>
-                <dd>{formatTime(task.completed_at)}</dd>
+                <dd><LocalTime iso={task.completed_at} /></dd>
               </div>
             ) : null}
           </dl>
-          <h4>Description</h4>
-          <p className="dash-pre-text">{task.description}</p>
+          {task.input ? (
+            <>
+              <h4>Form fields (untrusted)</h4>
+              <dl className="dash-dl">
+                {Object.entries(task.input).map(([key, value]) => (
+                  <div key={key}>
+                    <dt>{fieldLabel(task.input_schema, key)}</dt>
+                    <dd className="dash-pre-text">{Array.isArray(value) ? value.join(', ') : String(value)}</dd>
+                  </div>
+                ))}
+              </dl>
+              <h4>Notes</h4>
+              <p className="dash-pre-text">{task.description || 'None'}</p>
+            </>
+          ) : (
+            <>
+              <h4>Description</h4>
+              <p className="dash-pre-text">{task.description}</p>
+            </>
+          )}
 
           {task.status === 'done' ? (
             <>
@@ -92,7 +115,7 @@ function TaskRow({ task }: { task: Task }) {
           ) : null}
           {task.question ? (
             <>
-              <h4>Question for {task.from}</h4>
+              <h4>Question for {senderLabel(task)}</h4>
               <p className="dash-pre-text">{task.question}</p>
             </>
           ) : null}
@@ -122,7 +145,7 @@ function TaskRow({ task }: { task: Task }) {
                   <li key={m.id}>
                     <p className="dash-muted">
                       <span translate="no">{m.from}</span> → <span translate="no">{m.to}</span> ·{' '}
-                      {formatTime(m.created_at)}
+                      <LocalTime iso={m.created_at} />
                     </p>
                     <p className="dash-pre-text">{m.body}</p>
                   </li>
@@ -225,4 +248,13 @@ export function Tasks({ refreshKey }: { refreshKey: number }) {
       )}
     </section>
   );
+}
+
+/** Label for a form field: its schema title, else the key with spaces. Rendered as text only. */
+function fieldLabel(schema: Record<string, unknown> | null, key: string): string {
+  const properties = schema?.properties as Record<string, { title?: unknown }> | undefined;
+  const title = properties?.[key]?.title;
+  if (typeof title === 'string' && title.trim()) return title;
+  const spaced = key.replace(/_/g, ' ');
+  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
 }

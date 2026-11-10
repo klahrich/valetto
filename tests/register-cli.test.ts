@@ -2,7 +2,7 @@ import { mkdtemp, readFile, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { runReplyslip } from '../packages/cli/src/cli';
+import { relayOrigin, runReplyslip } from '../packages/cli/src/cli';
 import { joinCodeEnvName } from '../packages/cli/src/register';
 
 const KEY = 'rsk_CANARY_KEY_do_not_print';
@@ -19,6 +19,41 @@ function capture() {
 }
 
 describe('replyslip register', () => {
+  it('defaults --url to https://valetto.tech, then REPLYSLIP_URL, then --url', async () => {
+    const cases: [string[], NodeJS.ProcessEnv, string][] = [
+      [[], {}, 'https://valetto.tech'],
+      [[], { REPLYSLIP_URL: 'http://localhost:3000' }, 'http://localhost:3000'],
+      [['--url', 'https://relay.example'], { REPLYSLIP_URL: 'http://localhost:3000' }, 'https://relay.example'],
+    ];
+    for (const [extra, env, expected] of cases) {
+      const home = await mkdtemp(path.join(tmpdir(), 'replyslip-'));
+      const urls: string[] = [];
+      const fetchImpl: typeof fetch = async (input) => {
+        urls.push(String(input));
+        return new Response(
+          JSON.stringify({
+            api_key: KEY,
+            agent: { id: '11111111-1111-4111-8111-111111111111', created_at: '2026-10-24T00:00:00.000Z' },
+            mcp: { url: `${expected}/api/mcp` },
+          }),
+          { status: 201, headers: { 'content-type': 'application/json' } },
+        );
+      };
+      const io = capture();
+      const code = await runReplyslip(['register', '--join-code', 'rjc_x', '--name', 'DefaultBot', ...extra], {
+        home,
+        env,
+        fetchImpl,
+        stdout: io.stdout,
+        stderr: io.stderr,
+      });
+      expect(code).toBe(0);
+      expect(urls[0]?.startsWith(`${expected}/`)).toBe(true);
+      const file = io.out.find((line) => line.startsWith('key saved to '))!.replace('key saved to ', '');
+      expect((JSON.parse(await readFile(file, 'utf8')) as { relay_url: string }).relay_url).toBe(expected);
+    }
+  });
+
   it('writes mode 600, prints no key, and refuses to overwrite', async () => {
     const home = await mkdtemp(path.join(tmpdir(), 'replyslip-'));
     const io = capture();
@@ -106,6 +141,93 @@ describe('replyslip register', () => {
 });
 
 describe('replyslip watch --key-file', () => {
+  it('treats an empty or blank REPLYSLIP_URL or --url as unset', async () => {
+    for (const env of [{ REPLYSLIP_URL: '' }, { REPLYSLIP_URL: '   ' }]) {
+      expect(relayOrigin([], env)).toBe('https://valetto.tech');
+      expect(relayOrigin(['--url', '  '], env)).toBe('https://valetto.tech');
+      expect(relayOrigin(['--url', ' https://relay.example '], env)).toBe('https://relay.example');
+    }
+    expect(relayOrigin(['--url', '  '], { REPLYSLIP_URL: ' http://localhost:3000 ' })).toBe('http://localhost:3000');
+
+    const home = await mkdtemp(path.join(tmpdir(), 'replyslip-watch-'));
+    const urls: string[] = [];
+    const io = capture();
+    const code = await runReplyslip(['watch', '--once', '--key', 'rsw_blank_env'], {
+      home,
+      env: { REPLYSLIP_URL: '  ' },
+      stdout: io.stdout,
+      stderr: io.stderr,
+      fetchImpl: async (input) => {
+        urls.push(String(input));
+        return new Response('{"wakes":[]}', { status: 200 });
+      },
+    });
+    expect(code, io.err.join('\n')).toBe(0);
+    expect(urls[0]).toBe('https://valetto.tech/api/v1/watcher/poll');
+
+    const regHome = await mkdtemp(path.join(tmpdir(), 'replyslip-'));
+    const regUrls: string[] = [];
+    const reg = capture();
+    const regCode = await runReplyslip(['register', '--join-code', 'rjc_x', '--name', 'BlankBot'], {
+      home: regHome,
+      env: { REPLYSLIP_URL: '' },
+      stdout: reg.stdout,
+      stderr: reg.stderr,
+      fetchImpl: async (input) => {
+        regUrls.push(String(input));
+        return new Response(
+          JSON.stringify({
+            api_key: KEY,
+            agent: { id: '11111111-1111-4111-8111-111111111111', created_at: '2026-10-24T00:00:00.000Z' },
+            mcp: { url: 'https://valetto.tech/api/mcp' },
+          }),
+          { status: 201, headers: { 'content-type': 'application/json' } },
+        );
+      },
+    });
+    expect(regCode, reg.err.join('\n')).toBe(0);
+    expect(regUrls[0]?.startsWith('https://valetto.tech/')).toBe(true);
+  });
+
+  it('defaults --url to https://valetto.tech, then REPLYSLIP_URL, then --url', async () => {
+    const cases: [string[], NodeJS.ProcessEnv, string][] = [
+      [[], {}, 'https://valetto.tech'],
+      [[], { REPLYSLIP_URL: 'http://localhost:3000' }, 'http://localhost:3000'],
+      [['--url', 'https://relay.example'], { REPLYSLIP_URL: 'http://localhost:3000' }, 'https://relay.example'],
+    ];
+    for (const [extra, env, expected] of cases) {
+      const home = await mkdtemp(path.join(tmpdir(), 'replyslip-watch-'));
+      const urls: string[] = [];
+      const fetchImpl: typeof fetch = async (input) => {
+        urls.push(String(input));
+        if (String(input).endsWith('/ack')) return new Response('{"acked":0}', { status: 200 });
+        return new Response('{"wakes":[]}', { status: 200 });
+      };
+      const io = capture();
+      const code = await runReplyslip(['watch', '--once', '--key', 'rsw_default_test', ...extra], {
+        home,
+        env,
+        fetchImpl,
+        stdout: io.stdout,
+        stderr: io.stderr,
+      });
+      expect(code, io.err.join('\n')).toBe(0);
+      expect(urls.length).toBeGreaterThan(0);
+      for (const url of urls) expect(url.startsWith(`${expected}/`), url).toBe(true);
+    }
+  });
+
+  it('with no key and no registered agent, asks to register or pass --key-file', async () => {
+    const io = capture();
+    const home = await mkdtemp(path.join(tmpdir(), 'replyslip-empty-'));
+    const fetchImpl: typeof fetch = async () => {
+      throw new Error('must not poll without a key');
+    };
+    const code = await runReplyslip(['watch', '--once'], { env: {}, home, fetchImpl, stdout: io.stdout, stderr: io.stderr });
+    expect(code).toBe(1);
+    expect(io.err.join('\n')).toContain('--key-file');
+  });
+
   it('sends the file key, prefers it over --key, and does not print it', async () => {
     const home = await mkdtemp(path.join(tmpdir(), 'replyslip-watch-'));
     const keyFile = path.join(home, 'watcher-box.key');

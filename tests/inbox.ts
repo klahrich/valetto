@@ -1,12 +1,53 @@
-import { setEmailSenderForTests, type LoginCodeEmail } from '@/lib/email';
+import {
+  setEmailSenderForTests,
+  type CustomerUpdateEmail,
+  type EarlyAccessNoticeEmail,
+  type FirstAgentAlertEmail,
+  type LoginCodeEmail,
+  type PendingCustomersEmail,
+  type ReviewNeededEmail,
+  type SignupAlertEmail,
+} from '@/lib/email';
+import { installChainedFirstAgentAlertsForTests } from '@/lib/first-agent-alert';
 
 export const inbox: LoginCodeEmail[] = [];
+export const alerts: FirstAgentAlertEmail[] = [];
+export const signupAlerts: SignupAlertEmail[] = [];
+export const pendingNotices: PendingCustomersEmail[] = [];
+export const earlyAccessNotices: EarlyAccessNoticeEmail[] = [];
+export const reviewNotices: ReviewNeededEmail[] = [];
+export const customerUpdates: CustomerUpdateEmail[] = [];
 
 export function installInbox(): void {
   inbox.length = 0;
+  alerts.length = 0;
+  signupAlerts.length = 0;
+  pendingNotices.length = 0;
+  earlyAccessNotices.length = 0;
+  reviewNotices.length = 0;
+  customerUpdates.length = 0;
+  installChainedFirstAgentAlertsForTests();
   setEmailSenderForTests({
     async sendLoginCode(message) {
       inbox.push(message);
+    },
+    async sendFirstAgentAlert(message) {
+      alerts.push(message);
+    },
+    async sendSignupAlert(message) {
+      signupAlerts.push(message);
+    },
+    async sendPendingCustomers(message) {
+      pendingNotices.push(message);
+    },
+    async sendEarlyAccessNotice(message) {
+      earlyAccessNotices.push(message);
+    },
+    async sendReviewNeeded(message) {
+      reviewNotices.push(message);
+    },
+    async sendCustomerUpdate(message) {
+      customerUpdates.push(message);
     },
   });
 }

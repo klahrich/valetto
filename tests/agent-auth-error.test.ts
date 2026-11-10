@@ -6,6 +6,7 @@ import { POST as mcp } from '@/app/api/mcp/route';
 import {
   AGENT_AUTH_MISSING,
   AGENT_AUTH_NOT_BEARER,
+  AGENT_AUTH_OAUTH,
   AGENT_AUTH_REVOKED,
   AGENT_AUTH_REVOKED_WATCHER,
   AGENT_AUTH_UNKNOWN,
@@ -45,6 +46,7 @@ describe('agent auth error descriptions', () => {
     expect(agentAuthErrorDescription(`Basic ${CANARY}`)).toBe(AGENT_AUTH_NOT_BEARER);
     expect(agentAuthErrorDescription(`Bearer rsw_${CANARY}`)).toBe(AGENT_AUTH_WATCHER_KEY);
     expect(agentAuthErrorDescription(`Bearer rsk_${CANARY}`)).toBe(AGENT_AUTH_UNKNOWN);
+    expect(agentAuthErrorDescription(`Bearer rsoa_${CANARY}`)).toBe(AGENT_AUTH_OAUTH);
     expect(agentAuthErrorDescription(`Bearer ${CANARY}`)).toBe(AGENT_AUTH_UNKNOWN);
     expect(agentAuthErrorDescription(`Bearer rsk_${CANARY}`, { agentKeyRevoked: true, watcherKeyRevoked: false })).toBe(
       AGENT_AUTH_REVOKED,
@@ -58,6 +60,7 @@ describe('agent auth error descriptions', () => {
       AGENT_AUTH_WATCHER_KEY,
       AGENT_AUTH_REVOKED,
       AGENT_AUTH_REVOKED_WATCHER,
+      AGENT_AUTH_OAUTH,
       AGENT_AUTH_UNKNOWN,
     ]) {
       expect(description).not.toContain(CANARY);
@@ -82,6 +85,7 @@ describe('agent auth error descriptions', () => {
       AGENT_AUTH_WATCHER_KEY,
       AGENT_AUTH_REVOKED,
       AGENT_AUTH_REVOKED_WATCHER,
+      AGENT_AUTH_OAUTH,
       AGENT_AUTH_UNKNOWN,
     ]) {
       expect(skill).toContain(description);
@@ -117,6 +121,15 @@ describe('agent auth error descriptions', () => {
     expect(unknown.data.error_description).toBe(AGENT_AUTH_UNKNOWN);
     expect(unknown.text).not.toContain(CANARY);
     expect(unknown.challenge).not.toContain(CANARY);
+
+    const oauth = await rejected(`Bearer rsoa_${CANARY}`);
+    expect(oauth.res.status).toBe(401);
+    expect(oauth.data).toEqual({ error: 'invalid_token', error_description: AGENT_AUTH_OAUTH });
+    expect(oauth.data.error_description).not.toBe(AGENT_AUTH_UNKNOWN);
+    expect(oauth.text).not.toContain(CANARY);
+    expect(oauth.challenge).not.toContain(CANARY);
+    expect(oauth.challenge).toContain('error="invalid_token"');
+    expect(oauth.challenge).toContain('resource_metadata=');
 
     const other = await rejected(`Bearer ${CANARY}`);
     expect(other.data.error_description).toBe(AGENT_AUTH_UNKNOWN);

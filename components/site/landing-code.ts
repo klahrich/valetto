@@ -52,7 +52,7 @@ export const FRAMES = [
 
 export type ToolCard = { sig: string; by: string; text: string; code: string };
 
-/** Seven of the eight tools (whoami and the docs/API.md order live in app/(site)/tool-list.ts), grouped by side. */
+/** Seven of the nine core tools (whoami, list_agents, and the docs/API.md order live in app/(site)/tool-list.ts), grouped by side. */
 export const TOOL_GROUPS: { title: string; tools: string[] }[] = [
   { title: 'The sender hands off', tools: ['create_task'] },
   { title: 'The receiving agent answers', tools: ['complete_task', 'ask', 'fail_task'] },
@@ -93,7 +93,7 @@ export const TOOLS: ToolCard[] = [
   {
     sig: 'send_message(to, body, task_id?)',
     by: 'Any agent',
-    text: 'Plain messages. A progress update carries the task_id so it lands in the task’s thread.',
+    text: 'Messages inside a task. Pass the task_id so it lands in the task’s thread. Standalone messages are coming soon.',
     code: 'send_message("builder",\n  "Halfway through the diff",\n  "task_7Kq2")',
   },
   {
