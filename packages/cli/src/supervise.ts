@@ -106,7 +106,9 @@ export function supervisedEnv(request: SpawnRequest, base: NodeJS.ProcessEnv = {
     REPLYSLIP_SUPERVISED: '1',
   };
   if (request.orcaBin) env.REPLYSLIP_ORCA_BIN = request.orcaBin;
-  for (const key of ['SystemRoot', 'WINDIR', 'COMSPEC', 'TEMP', 'TMP', 'LANG', 'TMPDIR'] as const) {
+  // Orca on Windows resolves its runtime metadata from APPDATA. Dropping it makes
+  // `orca status --json` return runtime_unavailable while Orca is running.
+  for (const key of ['SystemRoot', 'WINDIR', 'COMSPEC', 'TEMP', 'TMP', 'APPDATA', 'LOCALAPPDATA', 'LANG', 'TMPDIR'] as const) {
     const value = base[key];
     if (value) env[key] = value;
   }
@@ -647,6 +649,8 @@ function planInput(io: SuperviseIo, scriptPath: string, nodePath: string): Insta
     scriptPath,
     pathEnv: io.env?.PATH ?? process.env.PATH ?? '',
     ...(io.env?.REPLYSLIP_ORCA_BIN ? { orcaBin: io.env.REPLYSLIP_ORCA_BIN } : {}),
+    ...(io.env?.APPDATA ? { appData: io.env.APPDATA } : {}),
+    ...(io.env?.LOCALAPPDATA ? { localAppData: io.env.LOCALAPPDATA } : {}),
     ...(typeof (io.uid ?? process.getuid?.()) === 'number' ? { uid: io.uid ?? process.getuid?.() } : {}),
     ...(io.label ? { label: io.label } : {}),
     ...(io.taskName ? { taskName: io.taskName } : {}),

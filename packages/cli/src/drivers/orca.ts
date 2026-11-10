@@ -2,6 +2,7 @@
 
 import { execFile as execFileCb } from 'node:child_process';
 import type { NudgeResult } from './types.ts';
+import { versionAtLeast } from './herdr.ts';
 
 /** Override the `orca` binary. The value is the executable path, not a shell line. */
 export const ORCA_BIN_ENV = 'REPLYSLIP_ORCA_BIN';
@@ -22,6 +23,20 @@ export const ORCA_WAIT_SUBMIT_SECONDS = '10';
 
 export const ORCA_OLD_HOST_WARNING =
   `[replyslip] orca: this host refused --wait-submit (old-host). Fell back to a plain send and treated input_accepted as delivered. Orca ${MIN_ORCA_VERSION} or newer is the recommended minimum.`;
+
+/** Orca 1.4.190 prints this and sends nothing. It is not the old-host fallback. */
+export const ORCA_UNKNOWN_FLAG_MESSAGE =
+  `Orca rejected --wait-submit with "Unknown flag --wait-submit". Upgrade to Orca ${MIN_ORCA_VERSION} or newer. No input was sent.`;
+
+export const ORCA_UNKNOWN_FLAG_WARNING = `[replyslip] orca: ${ORCA_UNKNOWN_FLAG_MESSAGE}`;
+
+export function orcaTooOldMessage(version: string): string {
+  return `Orca ${version} is older than ${MIN_ORCA_VERSION}. Upgrade to Orca ${MIN_ORCA_VERSION} or newer. --wait-submit was added in that release.`;
+}
+
+export function parseOrcaVersion(text: string): string | null {
+  return text.match(/(\d+\.\d+\.\d+)/)?.[1] ?? null;
+}
 
 /** Longer than `--wait-submit` so a receipt can come back before execFile kills the process. */
 const SEND_TIMEOUT_MS = 20_000;
@@ -153,6 +168,12 @@ export function createOrcaDriver(options?: {
     return { ok: false, error: receipt.error };
   }
 
+  function rejectUnknownFlag(result: OrcaExecResult): NudgeResult | null {
+    if (!isUnknownWaitSubmitFlag(result)) return null;
+    log(ORCA_UNKNOWN_FLAG_WARNING);
+    return { ok: false, error: ORCA_UNKNOWN_FLAG_MESSAGE };
+  }
+
   /**
    * One submit to `handle`. A stale handle re-lists once. An ambiguous failure
    * retries once with `--retry-request` and does not type a second prompt.
@@ -161,6 +182,8 @@ export function createOrcaDriver(options?: {
   async function submit(handle: string, target: string, notice: string, allowRelist: boolean, waitSubmit = true): Promise<NudgeResult> {
     const raw = await send(handle, notice, undefined, waitSubmit);
     if (!waitSubmit) return finishLegacy(raw, handle, target, notice, allowRelist);
+    const unknown = rejectUnknownFlag(raw);
+    if (unknown) return unknown;
     if (isOldHostReceipt(raw)) {
       log(ORCA_OLD_HOST_WARNING);
       return { ok: true };
@@ -171,6 +194,8 @@ export function createOrcaDriver(options?: {
     if (first.stale && allowRelist) return submitReplacement(target, notice, handle, true);
     if (first.ambiguous && first.retryRequest) {
       const retriedRaw = await send(handle, notice, first.retryRequest, true);
+      const retriedUnknown = rejectUnknownFlag(retriedRaw);
+      if (retriedUnknown) return retriedUnknown;
       if (isOldHostRefusal(retriedRaw)) {
         return finishLegacy(await send(handle, notice, undefined, false), handle, target, notice, allowRelist);
       }
@@ -204,12 +229,18 @@ export function createOrcaDriver(options?: {
     id: 'orca',
     async check() {
       const result = await run(['status', '--json'], QUICK_TIMEOUT_MS);
-      if (isDown(result) || result.code !== 0 || result.timedOut) {
+      if (isDown(result)) return { ok: false, message: ORCA_NOT_RUNNING };
+      const payload = parseJson(result.stdout) ?? parseJson(result.stderr);
+      const root = record(payload);
+      const unavailable = root ? runtimeUnavailableDetail(root) : null;
+      if (unavailable) return { ok: false, message: `${ORCA_NOT_RUNNING}. ${unavailable}` };
+      const reported = typeof root?.version === 'string' ? parseOrcaVersion(root.version) : null;
+      if (reported && !versionAtLeast(reported, MIN_ORCA_VERSION)) {
+        return { ok: false, version: reported, message: orcaTooOldMessage(reported) };
+      }
+      if (result.code !== 0 || result.timedOut || root?.ok === false) {
         return { ok: false, message: ORCA_NOT_RUNNING };
       }
-      const payload = parseJson(result.stdout);
-      const root = record(payload);
-      if (root && root.ok === false) return { ok: false, message: ORCA_NOT_RUNNING };
       const version = typeof root?.version === 'string' ? root.version : undefined;
       return { ok: true, version };
     },
@@ -271,6 +302,18 @@ function errorText(payload: unknown, result: OrcaExecResult): string {
   if (typeof error?.message === 'string' && error.message.trim()) return error.message.trim();
   if (result.timedOut) return 'orca terminal send timed out';
   return `orca terminal send exited ${result.code}`;
+}
+
+function isUnknownWaitSubmitFlag(result: OrcaExecResult): boolean {
+  const text = `${result.stdout}\n${result.stderr}`;
+  return /unknown flag:?\s+['"]?--wait-submit(?![\w-])/i.test(text);
+}
+
+function runtimeUnavailableDetail(root: Record<string, unknown>): string | null {
+  const error = record(root.error);
+  if (error?.code !== 'runtime_unavailable') return null;
+  const message = typeof error.message === 'string' ? error.message.trim() : '';
+  return message || null;
 }
 
 function isOldHostRefusal(result: OrcaExecResult): boolean {

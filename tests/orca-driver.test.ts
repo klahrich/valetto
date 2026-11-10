@@ -4,9 +4,12 @@ import {
   MIN_ORCA_VERSION,
   ORCA_NOT_RUNNING,
   ORCA_OLD_HOST_WARNING,
+  ORCA_UNKNOWN_FLAG_MESSAGE,
+  ORCA_UNKNOWN_FLAG_WARNING,
   ORCA_WAIT_SUBMIT_SECONDS,
   createOrcaDriver,
   orcaBinary,
+  orcaTooOldMessage,
   type OrcaExecFile,
   type OrcaExecResult,
 } from '../packages/cli/src/drivers/orca';
@@ -222,6 +225,60 @@ describe('orca driver', () => {
     ]);
     expect(logs).toEqual([ORCA_OLD_HOST_WARNING]);
     expect(ORCA_OLD_HOST_WARNING).toContain(MIN_ORCA_VERSION);
+  });
+
+  it('logs an upgrade message when Orca rejects --wait-submit as an unknown flag', async () => {
+    const logs: string[] = [];
+    const { execFile, calls } = scripted([
+      () => listed([{ handle: 'term_1', tabId: 'tab_a', leafId: 'leaf_a' }]),
+      () => ({ code: 1, stdout: '', stderr: 'Unknown flag --wait-submit\n', timedOut: false }),
+    ]);
+    const driver = createOrcaDriver({ execFile, env: {}, log: (message) => logs.push(message) });
+    expect(await driver.nudge(PANE, WAKE_NOTICE)).toEqual({ ok: false, error: ORCA_UNKNOWN_FLAG_MESSAGE });
+    expect(calls.map((call) => call.args)).toEqual([['terminal', 'list', '--json'], sendArgs('term_1')]);
+    expect(logs).toEqual([ORCA_UNKNOWN_FLAG_WARNING]);
+    expect(ORCA_UNKNOWN_FLAG_WARNING).toContain('Unknown flag --wait-submit');
+    expect(ORCA_UNKNOWN_FLAG_WARNING).toContain(MIN_ORCA_VERSION);
+  });
+
+  it('rejects a reported Orca version older than the recommended minimum', async () => {
+    const old = scripted([() => ok(JSON.stringify({ ok: true, version: '1.4.190' }))]);
+    const driver = createOrcaDriver({ execFile: old.execFile, env: {} });
+    expect(await driver.check()).toEqual({
+      ok: false,
+      version: '1.4.190',
+      message: orcaTooOldMessage('1.4.190'),
+    });
+    expect(old.calls).toHaveLength(1);
+    expect(orcaTooOldMessage('1.4.190')).toContain(MIN_ORCA_VERSION);
+
+    const current = scripted([() => ok(JSON.stringify({ ok: true, version: 'v1.4.199' }))]);
+    const ready = createOrcaDriver({ execFile: current.execFile, env: {} });
+    expect(await ready.check()).toEqual({ ok: true, version: 'v1.4.199' });
+
+    const unversioned = scripted([() => ok(JSON.stringify({ ok: true }))]);
+    const plain = createOrcaDriver({ execFile: unversioned.execFile, env: {} });
+    expect(await plain.check()).toEqual({ ok: true, version: undefined });
+  });
+
+  it('includes the Orca runtime_unavailable message when APPDATA cannot be resolved', async () => {
+    const { execFile } = scripted([
+      () =>
+        fail(
+          JSON.stringify({
+            ok: false,
+            error: {
+              code: 'runtime_unavailable',
+              message: 'APPDATA is not set, so the Orca runtime metadata path cannot be resolved.',
+            },
+          }),
+        ),
+    ]);
+    const driver = createOrcaDriver({ execFile, env: {} });
+    expect(await driver.check()).toEqual({
+      ok: false,
+      message: `${ORCA_NOT_RUNNING}. APPDATA is not set, so the Orca runtime metadata path cannot be resolved.`,
+    });
   });
 
   it('reports when Orca is not running', async () => {

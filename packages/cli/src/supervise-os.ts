@@ -34,6 +34,9 @@ export type InstallPlanInput = {
   scriptPath: string;
   pathEnv: string;
   orcaBin?: string;
+  /** Windows only. Captured at install so Task Scheduler can restore them. */
+  appData?: string;
+  localAppData?: string;
   uid?: number;
   /** Test override. Production uses the fixed label. */
   label?: string;
@@ -66,8 +69,14 @@ function validatePlanInputs(input: InstallPlanInput): { ok: true } | { error: st
   if (input.orcaBin && /[\r\n\0]/.test(input.orcaBin)) {
     return { error: 'REPLYSLIP_ORCA_BIN contains a newline. Supervision was not installed.' };
   }
+  for (const [label, value] of [
+    ['APPDATA', input.appData],
+    ['LOCALAPPDATA', input.localAppData],
+  ] as const) {
+    if (value && /[\r\n\0]/.test(value)) return { error: `${label} contains a newline. Supervision was not installed.` };
+  }
   if (input.platform === 'win32') {
-    for (const value of [input.nodePath, input.scriptPath, input.home, input.orcaBin ?? '']) {
+    for (const value of [input.nodePath, input.scriptPath, input.home, input.orcaBin ?? '', input.appData ?? '', input.localAppData ?? '']) {
       if (value.includes('"')) return { error: 'A path contains a double quote. Supervision was not installed.' };
     }
   }
@@ -243,8 +252,11 @@ export function windowsCmd(input: InstallPlanInput): string {
     `set "PATH=${cmdPercent(input.pathEnv)}"`,
     `set "HOME=${cmdPercent(input.home)}"`,
     `set "USERPROFILE=${cmdPercent(input.home)}"`,
-    'set "REPLYSLIP_SUPERVISED=1"',
   ];
+  // Task Scheduler often omits APPDATA. Orca cannot resolve its runtime metadata without it.
+  if (input.appData) lines.push(`set "APPDATA=${cmdPercent(input.appData)}"`);
+  if (input.localAppData) lines.push(`set "LOCALAPPDATA=${cmdPercent(input.localAppData)}"`);
+  lines.push('set "REPLYSLIP_SUPERVISED=1"');
   if (input.orcaBin) lines.push(`set "REPLYSLIP_ORCA_BIN=${cmdPercent(input.orcaBin)}"`);
   lines.push(`"${cmdPercent(input.nodePath)}" "${cmdPercent(input.scriptPath)}" supervise --once`);
   lines.push('');
