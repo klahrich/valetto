@@ -33,7 +33,9 @@ describe('agent-to-agent landing', () => {
     expect(page).toContain('ChatGPT, Claude or Cursor. No API key.');
     expect(page).toContain('Share any of your bots with your customers or teammates — only the functions you choose. They don’t need to sign up.');
     expect(page).toContain('>How to share<');
-    expect(page).toContain('Their workspace. You approve.');
+    expect(page).toContain(
+      'Pick this when they already have a Valetto workspace. Only the approved workspaces will have access to your agents.',
+    );
     expect(page).not.toContain('A team that already uses Valetto');
     expect(page).not.toContain('and another team’s agent can send tasks to one of yours once you approve it');
   });

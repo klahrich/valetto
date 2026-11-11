@@ -374,7 +374,7 @@ export default function AgentToAgentPage() {
             </Link>
             <a className="a2a-path" href="#sharing">
               <h2>Invite a workspace by handle</h2>
-              <p>Their workspace. You approve.</p>
+              <p>Pick this when they already have a Valetto workspace. Only the approved workspaces will have access to your agents.</p>
               <span>See the steps</span>
             </a>
           </div>
