@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 
+import { accessSync } from 'node:fs';
 import { chmod, mkdir, readdir, readFile, stat, unlink, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import path from 'node:path';
 import { AGENT_NAME_PATTERN } from '../../../lib/constants.ts';
+import { legacyHome, valettoHome } from './home.ts';
 
 export type AgentKeyFile = {
   name: string;
@@ -14,23 +16,58 @@ export type AgentKeyFile = {
   created_at: string;
 };
 
-export function replyslipHome(home = homedir()): string {
-  return path.join(home, '.replyslip');
+/** Where `register` writes a new key file: `~/.valetto/agents/<name>.json`. */
+export function newAgentKeyPath(name: string, home = homedir()): string {
+  return path.join(valettoHome(home), 'agents', `${name}.json`);
 }
 
+function legacyAgentKeyPath(name: string, home: string): string {
+  return path.join(legacyHome(home), 'agents', `${name}.json`);
+}
+
+function fileExists(file: string): boolean {
+  try {
+    accessSync(file);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** The key file that exists for `name`: `~/.valetto/agents` first, then the pre-rename `~/.replyslip/agents`. Null if neither. */
+export function existingAgentKeyPath(name: string, home = homedir()): string | null {
+  const current = newAgentKeyPath(name, home);
+  if (fileExists(current)) return current;
+  const legacy = legacyAgentKeyPath(name, home);
+  if (fileExists(legacy)) return legacy;
+  return null;
+}
+
+/** The key file to read for `name`. When neither exists, the path a new registration would write. */
 export function agentKeyPath(name: string, home = homedir()): string {
-  return path.join(replyslipHome(home), 'agents', `${name}.json`);
+  return existingAgentKeyPath(name, home) ?? newAgentKeyPath(name, home);
 }
 
-/** REPLYSLIP_JOIN_CODE_<NAME>: uppercase the agent name and replace every other character with _. */
+/** VALETTO_JOIN_CODE_<NAME>: uppercase the agent name and replace every other character with _. */
 export function joinCodeEnvName(agentName: string): string {
-  return `REPLYSLIP_JOIN_CODE_${agentName.toUpperCase().replace(/[^A-Z0-9]/g, '_')}`;
+  return `VALETTO_JOIN_CODE_${joinCodeSuffix(agentName)}`;
+}
+
+/** The pre-rename REPLYSLIP_JOIN_CODE_<NAME>. Still read after VALETTO_JOIN_CODE_<NAME>. */
+export function legacyJoinCodeEnvName(agentName: string): string {
+  return `REPLYSLIP_JOIN_CODE_${joinCodeSuffix(agentName)}`;
+}
+
+function joinCodeSuffix(agentName: string): string {
+  return agentName.toUpperCase().replace(/[^A-Z0-9]/g, '_');
 }
 
 export function resolveJoinCode(agentName: string, flag: string | undefined, env: NodeJS.ProcessEnv): string | null {
   if (flag && flag.trim()) return flag.trim();
-  const fromEnv = env[joinCodeEnvName(agentName)];
-  if (fromEnv && fromEnv.trim()) return fromEnv.trim();
+  for (const key of [joinCodeEnvName(agentName), legacyJoinCodeEnvName(agentName)]) {
+    const fromEnv = env[key];
+    if (fromEnv && fromEnv.trim()) return fromEnv.trim();
+  }
   return null;
 }
 
@@ -47,16 +84,22 @@ async function ensurePrivateDir(dir: string): Promise<void> {
   await chmod(dir, 0o700);
 }
 
-export async function writeAgentKeyFile(file: AgentKeyFile, options: { home?: string; force?: boolean }): Promise<string> {
+/**
+ * Writes `~/.valetto/agents/<name>.json`, or `target` when given (rename keeps a key file in its own directory).
+ * An existing pre-rename file under `~/.replyslip` is never moved or deleted here.
+ */
+export async function writeAgentKeyFile(
+  file: AgentKeyFile,
+  options: { home?: string; force?: boolean; target?: string },
+): Promise<string> {
   if (!AGENT_NAME_PATTERN.test(file.name)) {
     throw new Error('Agent name must start with a letter and then use only letters, numbers, underscores, or hyphens.');
   }
   const home = options.home ?? homedir();
-  const root = replyslipHome(home);
-  const agentsDir = path.join(root, 'agents');
-  await ensurePrivateDir(root);
+  const target = options.target ?? newAgentKeyPath(file.name, home);
+  const agentsDir = path.dirname(target);
+  await ensurePrivateDir(path.dirname(agentsDir));
   await ensurePrivateDir(agentsDir);
-  const target = agentKeyPath(file.name, home);
   const body = `${JSON.stringify(file, null, 2)}\n`;
   try {
     await writeFile(target, body, { flag: options.force ? 'w' : 'wx', mode: 0o600 });
@@ -73,15 +116,9 @@ export async function writeAgentKeyFile(file: AgentKeyFile, options: { home?: st
 
 async function refuseExistingKeyFile(name: string, home: string | undefined, force: boolean | undefined): Promise<void> {
   if (force) return;
-  const target = agentKeyPath(name, home ?? homedir());
-  try {
-    await stat(target);
-  } catch (err) {
-    const code = err && typeof err === 'object' && 'code' in err ? (err as { code?: string }).code : '';
-    if (code === 'ENOENT') return;
-    throw err;
-  }
-  throw new Error(`Refusing to overwrite ${target}. Pass --force to replace it.`);
+  const existing = existingAgentKeyPath(name, home ?? homedir());
+  if (!existing) return;
+  throw new Error(`Refusing to overwrite ${existing}. Pass --force to replace it.`);
 }
 
 export type LocalRegisterDelivery = { mode: 'local'; driver: string; target: string };
@@ -152,19 +189,23 @@ export async function registerAgent(options: {
   return { path: filePath, name: options.name, mcpUrl };
 }
 
-/** Names with a key file under ~/.replyslip/agents, sorted. */
+/** Names with a key file under ~/.valetto/agents or the pre-rename ~/.replyslip/agents, sorted and unique. */
 export async function listRegisteredAgents(home = homedir()): Promise<string[]> {
-  let names: string[];
-  try {
-    names = await readdir(path.join(replyslipHome(home), 'agents'));
-  } catch {
-    return [];
+  const found = new Set<string>();
+  for (const root of [valettoHome(home), legacyHome(home)]) {
+    let names: string[];
+    try {
+      names = await readdir(path.join(root, 'agents'));
+    } catch {
+      continue;
+    }
+    for (const file of names) {
+      if (!file.endsWith('.json')) continue;
+      const name = file.slice(0, -'.json'.length);
+      if (AGENT_NAME_PATTERN.test(name)) found.add(name);
+    }
   }
-  return names
-    .filter((file) => file.endsWith('.json'))
-    .map((file) => file.slice(0, -'.json'.length))
-    .filter((name) => AGENT_NAME_PATTERN.test(name))
-    .sort();
+  return [...found].sort();
 }
 
 export type AgentCredentials = { name: string; apiKey: string; agentId: string | null; relayUrl: string | null; path: string };
@@ -182,7 +223,7 @@ export async function readAgentCredentials(
   try {
     text = await readFile(file, 'utf8');
   } catch {
-    throw new Error(`No key file for agent ${name} at ${file}. Register it first: replyslip register --join-code <code> --name ${name}`);
+    throw new Error(`No key file for agent ${name} at ${file}. Register it first: valetto register --join-code <code> --name ${name}`);
   }
   let parsed: Partial<AgentKeyFile>;
   try {
@@ -217,7 +258,8 @@ function httpErrorMessage(payload: unknown, status: number, fallback: string): s
 }
 
 /**
- * Rename this agent on the server, then move ~/.replyslip/agents/<old>.json to the new name.
+ * Rename this agent on the server, then move its key file to the new name in the same directory
+ * (`~/.valetto/agents`, or `~/.replyslip/agents` for a file saved before the rename).
  * The key itself does not change. The local file is only moved after the server accepts the name.
  */
 export async function renameRegisteredAgent(options: {
@@ -238,7 +280,8 @@ export async function renameRegisteredAgent(options: {
     throw new Error(`Agent key file ${credentials.path} has no agent_id, so it cannot be renamed from the CLI.`);
   }
   const previousPath = credentials.path;
-  const nextPath = agentKeyPath(newName, home);
+  // An existing file for the new name is the one later reads would pick, so it is the one replaced under --force.
+  const nextPath = existingAgentKeyPath(newName, home) ?? path.join(path.dirname(previousPath), `${newName}.json`);
   if (previousPath !== nextPath) {
     try {
       const existing = JSON.parse(await readFile(nextPath, 'utf8')) as Partial<AgentKeyFile>;
@@ -280,22 +323,24 @@ export async function renameRegisteredAgent(options: {
 
   const raw = JSON.parse(await readFile(previousPath, 'utf8')) as AgentKeyFile;
   const updated: AgentKeyFile = { ...raw, name: savedName };
-  if (previousPath === nextPath) {
-    await writeAgentKeyFile(updated, { home, force: true });
-    return { name: savedName, path: nextPath, previousPath, shared };
+  const savedPath =
+    savedName === newName ? nextPath : (existingAgentKeyPath(savedName, home) ?? path.join(path.dirname(previousPath), `${savedName}.json`));
+  if (previousPath === savedPath) {
+    await writeAgentKeyFile(updated, { home, force: true, target: savedPath });
+    return { name: savedName, path: savedPath, previousPath, shared };
   }
-  await writeAgentKeyFile(updated, { home, force: true });
+  await writeAgentKeyFile(updated, { home, force: true, target: savedPath });
   try {
     await unlink(previousPath);
   } catch (err) {
     const code = err && typeof err === 'object' && 'code' in err ? (err as { code?: string }).code : '';
     if (code !== 'ENOENT') {
       throw new Error(
-        `Renamed ${savedName} on the server and saved ${nextPath}, but could not remove ${previousPath}. Delete the old file so watch and supervise use the new name.`,
+        `Renamed ${savedName} on the server and saved ${savedPath}, but could not remove ${previousPath}. Delete the old file so watch and supervise use the new name.`,
       );
     }
   }
-  return { name: savedName, path: nextPath, previousPath, shared };
+  return { name: savedName, path: savedPath, previousPath, shared };
 }
 
 function parseMcpJson(text: string): unknown {

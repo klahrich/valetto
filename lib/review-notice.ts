@@ -61,7 +61,7 @@ export function sendReviewNotice(notice: ReviewNotice): void {
         });
       } catch (err: unknown) {
         const reason = err instanceof Error ? err.message : 'unknown error';
-        console.error(`[replyslip] review-needed notice failed: ${reason}`);
+        console.error(`[valetto] review-needed notice failed: ${reason}`);
       }
     }
   });

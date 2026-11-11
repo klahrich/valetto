@@ -4,7 +4,7 @@ import { chmodSync, closeSync, mkdirSync, openSync, readFileSync, renameSync, un
 import path from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { AGENT_NAME_PATTERN } from '../../../lib/constants.ts';
-import { replyslipHome } from './register.ts';
+import { stateHome } from './home.ts';
 import type { HoldReason, ProgressPhase } from './supervise-constants.ts';
 
 export type WatcherProgress = {
@@ -40,7 +40,7 @@ export function emptySuperviseState(): AgentSuperviseState {
 }
 
 export function superviseDir(home?: string): string {
-  return path.join(replyslipHome(home), 'supervise');
+  return path.join(stateHome(home), 'supervise');
 }
 
 function agentFile(home: string | undefined, name: string, suffix: string): string {

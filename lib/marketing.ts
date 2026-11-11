@@ -22,7 +22,7 @@ export class InvalidConsentTextError extends Error {
 }
 
 const USER_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const PUBLIC_ORIGIN = 'https://replyslip.com';
+const PUBLIC_ORIGIN = 'https://valetto.tech';
 
 function unsubscribeSecret(): string {
   const secret = process.env.UNSUBSCRIBE_SECRET?.trim();
@@ -51,10 +51,10 @@ export function userIdFromUnsubscribeToken(token: string): string | null {
 
 /**
  * Absolute one-click unsubscribe link for a future marketing email.
- * Origin is `REPLYSLIP_URL` when that is set, otherwise https://replyslip.com.
+ * Origin is `VALETTO_URL` (or the pre-rename `REPLYSLIP_URL`) when set, otherwise https://valetto.tech.
  */
 export function unsubscribeUrl(userId: string): string {
-  const configured = process.env.REPLYSLIP_URL?.trim();
+  const configured = process.env.VALETTO_URL?.trim() || process.env.REPLYSLIP_URL?.trim();
   const origin = (configured || PUBLIC_ORIGIN).replace(/\/$/, '');
   return `${origin}/api/v1/unsubscribe?token=${encodeURIComponent(unsubscribeToken(userId))}`;
 }
@@ -141,7 +141,7 @@ export async function unsubscribeWithToken(token: string): Promise<boolean> {
 export function unsubscribePage(ok: boolean): Response {
   const title = ok ? 'Unsubscribed' : 'Link not valid';
   const message = ok
-    ? 'You are unsubscribed from ReplySlip marketing emails. Sign-in codes are not affected.'
+    ? 'You are unsubscribed from Valetto marketing emails. Sign-in codes are not affected.'
     : 'This unsubscribe link is not valid.';
   const html = `<!DOCTYPE html>
 <html lang="en">

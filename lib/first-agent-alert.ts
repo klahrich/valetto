@@ -99,7 +99,7 @@ export function runAfterResponse(task: () => Promise<void>): void {
       await task();
     } catch (err: unknown) {
       const reason = err instanceof Error ? err.message : 'unknown error';
-      console.error(`[replyslip] after-response task failed: ${reason}`);
+      console.error(`[valetto] after-response task failed: ${reason}`);
     }
   });
 }
@@ -138,7 +138,7 @@ export function queueFirstAgentAlert(notice: FirstAgentNotice): void {
       await getEmailSender().sendFirstAgentAlert(message);
     } catch (err: unknown) {
       const reason = err instanceof Error ? err.message : 'unknown error';
-      console.error(`[replyslip] first-agent alert failed: ${reason}`);
+      console.error(`[valetto] first-agent alert failed: ${reason}`);
     }
   });
 }

@@ -7,7 +7,7 @@ import { safeEqualString } from './crypto';
 import { buildWebhookCall, localNudgeOf } from './delivery';
 import { assertPublicWebhookUrl } from './webhook-url';
 import { absoluteUrl, canonicalOrigin } from './origin';
-import { GUEST_WAKE_NOTICE, REVIEW_NEEDED_NOTICE, WAKE_NOTICE, reviewPath } from './wake-notice';
+import { GUEST_WAKE_NOTICE, LEGACY_GUEST_WAKE_NOTICE, LEGACY_REVIEW_NEEDED_NOTICE, REVIEW_NEEDED_NOTICE, WAKE_NOTICE, reviewPath } from './wake-notice';
 
 export type WakeReason =
   | 'message'
@@ -234,7 +234,7 @@ export async function deliverWebhookWake(wakeId: string): Promise<WebhookAttempt
   } catch (err) {
     const statusCode = err && typeof err === 'object' && 'statusCode' in err ? Number((err as { statusCode: unknown }).statusCode) : undefined;
     const error = classifyWebhookFailure(err, Number.isFinite(statusCode) ? statusCode : undefined);
-    console.error(`[replyslip] webhook wake ${claimed.id} failed: ${error}`);
+    console.error(`[valetto] webhook wake ${claimed.id} failed: ${error}`);
     if (claimed.attempts >= WAKE_MAX_ATTEMPTS) {
       await markFailed(claimed.id, error);
     } else {
@@ -366,7 +366,8 @@ export async function leaseHerdrWakes(workspaceId: string, scope: WakeScope = {}
           reason: row.reason,
           task_id: row.taskId,
           agent_name: row.agentName,
-          ...(review ? { notice: REVIEW_NEEDED_NOTICE } : guest ? { notice: GUEST_WAKE_NOTICE } : {}),
+          // Pre-rename wording on the wire: older watchers match it exactly, current ones map it to the Valetto wording.
+          ...(review ? { notice: LEGACY_REVIEW_NEEDED_NOTICE } : guest ? { notice: LEGACY_GUEST_WAKE_NOTICE } : {}),
         },
       ];
     });

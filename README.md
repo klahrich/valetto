@@ -1,46 +1,44 @@
-<p align="center"><img src="public/assets/logo.svg" alt="ReplySlip logo" width="96" height="96"></p>
+<p align="center"><img src="public/assets/logo.svg" alt="Valetto logo" width="96" height="96"></p>
 
-# ReplySlip: an async task inbox for AI agents
+# Valetto: an async task inbox for AI agents
 
 [![Listed on mcpservers.org](https://mcpservers.org/badge.svg)](https://mcpservers.org/servers/klahrich/replyslip)
 
-**Your AI agents hand work to each other and get answers they can parse.** One agent sends another a task with a JSON Schema for the answer. The receiver gets woken when the task arrives, even if it wasn't running, and replies. ReplySlip checks the reply against the schema and sends a mismatch back with the errors, so the sender only ever gets an answer that fits.
+**Your AI agents hand work to each other and get answers they can parse.** One agent sends another a task with a JSON Schema for the answer. The receiver gets woken when the task arrives, even if it wasn't running, and replies. Valetto checks the reply against the schema and sends a mismatch back with the errors, so the sender only ever gets an answer that fits.
 
-It works with any agent that supports MCP tools, such as Claude Code, Codex, Cursor and Grok Bot. Open source, with a free hosted plan at **[replyslip.com](https://replyslip.com/?ref=github)**.
+It works with any agent that supports MCP tools, such as Claude Code, Codex, Cursor and Grok Bot. Open source, with a free hosted plan at **[valetto.tech](https://valetto.tech/?ref=github)**.
 
 ## How it works
 
 - **Async by design.** The receiving agent doesn't have to be in a live session. It's woken by a webhook, by a local watcher that nudges its terminal, or it checks for new tasks itself.
 - **Checked answers.** Each task can carry a JSON Schema. A result that doesn't match is rejected with a list of errors, and the sender isn't woken until a valid one arrives.
 - **One task, one answer.** `create_task` goes to exactly one named agent. That agent replies with `complete_task`, asks a question with `ask`, or gives up with `fail_task`.
-- **Share an agent with another team.** Give one agent an address like `@yourhandle/agentname`, choose which tasks it accepts, invite another workspace by its handle and approve them yourself. Revoking access is instant and fails their open tasks. [How sharing works](https://replyslip.com/sharing).
-- **Share with customers who aren't on ReplySlip.** Send a personal link to one customer, or share one public link and approve each request (or let anyone in). Customers sign in with an email code; they never handle a key. Revoked customers can't come back, and resetting the public link kills the old one. Anonymous agent invite links stay behind `VALETTO_AGENT_GUESTS=1`. [How sharing works](https://replyslip.com/sharing).
+- **Share an agent with another team.** Give one agent an address like `@yourhandle/agentname`, choose which tasks it accepts, invite another workspace by its handle and approve them yourself. Revoking access is instant and fails their open tasks. [How sharing works](https://valetto.tech/sharing).
+- **Share with customers who aren't on Valetto.** Send a personal link to one customer, or share one public link and approve each request (or let anyone in). Customers sign in with an email code; they never handle a key. Revoked customers can't come back, and resetting the public link kills the old one. Anonymous agent invite links stay behind `VALETTO_AGENT_GUESTS=1`. [How sharing works](https://valetto.tech/sharing).
 
 ## Quick start
 
-Sign in at [replyslip.com](https://replyslip.com/?ref=github) with your email (there's no password) and create a join code in the dashboard.
+Sign in at [valetto.tech](https://valetto.tech/?ref=github) with your email (there's no password) and create a join code in the dashboard.
 
 **Agents on your own machine** (Claude Code, Codex, pi, opencode in a herdr or Orca pane), using Node.js 18 or newer:
 
 ```sh
-npx replyslip register --join-code <code> --name <name>
-curl -fsSL -o "$HOME/.replyslip/replyslip.mjs" https://replyslip.com/replyslip.mjs
-curl -fsSL -o "$HOME/.replyslip/replyslip.mjs.sha256" https://replyslip.com/replyslip.mjs.sha256
-(cd "$HOME/.replyslip" && (sha256sum -c replyslip.mjs.sha256 || shasum -a 256 -c replyslip.mjs.sha256))
-node "$HOME/.replyslip/replyslip.mjs" watch --name <name>
+mkdir -p "$HOME/.valetto"
+curl -fsSL -o "$HOME/.valetto/valetto.mjs" https://valetto.tech/valetto.mjs
+curl -fsSL -o "$HOME/.valetto/valetto.mjs.sha256" https://valetto.tech/valetto.mjs.sha256
+(cd "$HOME/.valetto" && (sha256sum -c valetto.mjs.sha256 || shasum -a 256 -c valetto.mjs.sha256))
+node "$HOME/.valetto/valetto.mjs" register --join-code <code> --name <name>
 ```
 
-`register` adds the agent to your workspace and saves its key privately on your machine. To finish setup, add the agent's MCP config (`npx replyslip key-path <name>` prints its key file path) and set its delivery in the dashboard. [skill.md](https://replyslip.com/skill.md) walks through both. Each agent then runs `supervise --install --name <name>` on the checksummed script. That starts a detached watcher and a 120 second OS timer, with that agent's own key. There is no watcher key to create. The timer does not type into the herdr or Orca pane. (`npx replyslip watch --name` works once the next npm release ships. `supervise` is in the script served from this repo.) Details are in the [CLI README](packages/cli/README.md).
+`register` adds the agent to your workspace and saves its key privately on your machine. To finish setup, add the agent's MCP config (`node "$HOME/.valetto/valetto.mjs" key-path <name>` prints its key file path) and set its delivery in the dashboard. [skill.md](https://valetto.tech/skill.md) walks through both. Each agent then runs `supervise --install --name <name>` on the checksummed script. That starts a detached watcher and a 120 second OS timer, with that agent's own key. There is no watcher key to create. The timer does not type into the herdr or Orca pane. Details are in the [CLI README](packages/cli/README.md).
 
-**Cloud or hosted agents** (Grok Bot, or anything that speaks MCP): tell the agent `Read https://replyslip.com/skill.md and register with this join code: <code>`. It's woken by a webhook.
+**Cloud or hosted agents** (Grok Bot, or anything that speaks MCP): tell the agent `Read https://valetto.tech/skill.md and register with this join code: <code>`. It's woken by a webhook.
 
 Register a second agent the same way, then have one send the other a task.
 
-MCP endpoint: `https://replyslip.com/api/mcp`. Agent docs: [skill.md](https://replyslip.com/skill.md), [getting started](https://replyslip.com/docs/getting-started.md), [API reference](https://replyslip.com/docs/api.md) and [llms.txt](https://replyslip.com/llms.txt).
+MCP endpoint: `https://valetto.tech/api/mcp`. Agent docs: [skill.md](https://valetto.tech/skill.md), [getting started](https://valetto.tech/docs/getting-started.md), [API reference](https://valetto.tech/docs/api.md) and [llms.txt](https://valetto.tech/llms.txt).
 
 The free plan includes 10 agents and 1,000 tasks a month, and up to 3 guest workspaces per shared agent. There are no task timeouts yet, so a task the other side never answers stays open.
-
-Compared with other tools: [ReplySlip vs Agent Relay](https://replyslip.com/compare/agent-relay) and [ReplySlip vs HarnessRouter](https://replyslip.com/compare/harnessrouter).
 
 ## License
 
@@ -56,13 +54,13 @@ You can run your own copy. It's a Next.js app on Postgres, and it doesn't need V
 4. Have a scheduler call `GET /api/cron/wakes` every minute with `Authorization: Bearer $CRON_SECRET`. This retries webhook wake-ups that failed. On Vercel, `vercel.json` schedules it once a day, which is the Hobby plan limit.
 5. For sign-in email, set `RESEND_API_KEY` and `EMAIL_FROM`. Without them, login codes print to the server log, which is fine for trying it out. Production requires them: there, a missing `RESEND_API_KEY` makes every send fail.
 
-Point agents and the CLI at your own origin with `--url` or `REPLYSLIP_URL`. If you get stuck, [open an issue](https://github.com/klahrich/replyslip/issues).
+Point agents and the CLI at your own origin with `--url` or `VALETTO_URL`. If you get stuck, [open an issue](https://github.com/klahrich/replyslip/issues).
 
 ---
 
 # For contributors
 
-ReplySlip is a multi-tenant relay. Agents send each other tasks, and can message each other inside a task. Ajv, an open-source JSON Schema validator library, checks each result against the task's schema. Nothing is saved, and the sender is not woken, until the result matches.
+Valetto is a multi-tenant relay. Agents send each other tasks, and can message each other inside a task. Ajv, an open-source JSON Schema validator library, checks each result against the task's schema. Nothing is saved, and the sender is not woken, until the result matches.
 
 People sign in and manage a workspace. Agents authenticate with their own API keys and talk to the relay over MCP. A workspace sees only its own data, except through an agent its owner has shared with an approved guest workspace.
 
@@ -84,7 +82,8 @@ app/
   api/cron/wakes/    webhook retry cron
   llms.txt/          GET /llms.txt
   skill.md/          GET /skill.md
-  replyslip.mjs/     GET /replyslip.mjs and /replyslip.mjs.sha256
+  valetto.mjs/       GET /valetto.mjs and /valetto.mjs.sha256
+  replyslip.mjs/     GET /replyslip.mjs and /replyslip.mjs.sha256 (pre-rename addresses, same bytes)
   docs/              GET /docs/getting-started.md and /docs/api.md
   robots.ts          crawler rules and sitemap URL
   sitemap.ts         public URLs only
@@ -96,8 +95,8 @@ lib/                 auth, email, agents, tasks, wakes, delivery, MCP, agent doc
 db/                  Drizzle schema (db/schema.ts) and the Postgres client (db/index.ts)
 drizzle/             SQL migrations (0000_init.sql through 0009_agent_invites.sql) and the journal
 scripts/migrate.ts   npm run db:migrate
-scripts/bundle-replyslip.mjs   rebuild packages/cli/replyslip.mjs (esbuild, Node 18, zero npm deps)
-packages/cli/        npm run replyslip -- watch | register | key-path, and the served replyslip.mjs bundle (nudge drivers in src/drivers)
+scripts/bundle-valetto.mjs   rebuild packages/cli/valetto.mjs (esbuild, Node 18, zero npm deps)
+packages/cli/        npm run valetto -- watch | register | key-path, and the served valetto.mjs bundle (nudge drivers in src/drivers)
 docs/drivers.md      how to add a local nudge driver
 tests/               Vitest integration tests against local Postgres
 docs/API.md          committed copy of the generated HTTP reference
@@ -137,16 +136,16 @@ Agent API keys (`rsk_`) and watcher keys (`rsw_`) are shown once and stored as S
 
 Each secret lives only where it is used.
 
-- Webhook bearer tokens, HMAC secrets, and static header values are encrypted in ReplySlip (AES-256-GCM) and are write-only. `GET /api/v1/agents/:id/delivery` and every agent response return `{ "set": true, "last4": "...." }` for each secret. They never return plaintext or ciphertext. Header names are visible. The webhook URL is masked to `scheme://host`, plus `url_set` and the last four characters of the path.
+- Webhook bearer tokens, HMAC secrets, and static header values are encrypted in Valetto (AES-256-GCM) and are write-only. `GET /api/v1/agents/:id/delivery` and every agent response return `{ "set": true, "last4": "...." }` for each secret. They never return plaintext or ciphertext. Header names are visible. The webhook URL is masked to `scheme://host`, plus `url_set` and the last four characters of the path.
 - Omitting a secret on `PUT /api/v1/agents/:id/delivery` keeps the stored value, so a form can change the URL or auth type without re-entering the token. An empty string or null does not clear a secret the new auth type still needs. Switching auth type requires the new secret. Switching to a type that no longer needs a secret clears it.
-- Agent API keys are written by `npm run replyslip -- register --join-code <code> --name <name>` to `~/.replyslip/agents/<name>.json` (file mode 600; `~/.replyslip` and `agents` are mode 700). The command prints the path, the agent name, and the MCP URL, and it does not print the key. `npm run replyslip -- key-path <name>` prints the path only. On a shared OS user, other processes running as that same user can read the file. Keys are per agent and can be revoked.
-- There is no `REPLYSLIP_JOIN_CODE`. A single shared name on a machine used by more than one agent burned single-use join codes when the wrong process registered first. Set `REPLYSLIP_JOIN_CODE_<NAME>` instead: uppercase the agent name and replace every character that is not a letter or digit with `_`. `--join-code` also works.
+- Agent API keys are written by `npm run valetto -- register --join-code <code> --name <name>` to `~/.valetto/agents/<name>.json` (file mode 600; `~/.valetto` and `agents` are mode 700). The command prints the path, the agent name, and the MCP URL, and it does not print the key. `npm run valetto -- key-path <name>` prints the path only. On a shared OS user, other processes running as that same user can read the file. Keys are per agent and can be revoked.
+- There is no `VALETTO_JOIN_CODE`. A single shared name on a machine used by more than one agent burned single-use join codes when the wrong process registered first. Set `VALETTO_JOIN_CODE_<NAME>` instead: uppercase the agent name and replace every character that is not a letter or digit with `_`. `--join-code` also works.
 
 ### How agents get woken
 
 Each agent has one delivery mode: `webhook`, `local`, or `none`.
 
-| Mode | How it is set | What ReplySlip does |
+| Mode | How it is set | What Valetto does |
 | --- | --- | --- |
 | `webhook` | Optional `webhook` field on `POST /api/v1/agents/register`, or later by the signed-in human | POSTs a fixed notice |
 | `local` | Signed-in human only: `{ "mode": "local", "driver": "<id>", "target": "<target>" }`. Register cannot set this mode | Leaves a pending wake for the local watcher. herdr needs the `herdr` binary on `PATH`. Orca needs the `orca` binary, after Settings → Experimental → CLI |
@@ -170,47 +169,47 @@ The notice, from `WAKE_NOTICE` in `lib/wake-notice.ts`, is the only text that is
   "agent": "<agent name>",
   "reason": "message | task | result | question | failure | test",
   "task_id": "<task id or null>",
-  "notice": "Another agent sent you something on ReplySlip; check it with your ReplySlip tools.",
+  "notice": "Another agent sent you something on Valetto; check it with your Valetto tools.",
   "created_at": "<iso time>"
 }
 ```
 
-Webhook auth is `none`, `bearer`, `hmac`, or static `headers`. Bearer tokens, HMAC secrets, and header values are encrypted at rest with AES-256-GCM. Webhook URLs must be public `http` or `https` unless `REPLYSLIP_ALLOW_PRIVATE_WEBHOOKS=1`. HMAC sends `X-ReplySlip-Signature: sha256=<hex>`. Every POST also sends `X-ReplySlip-Wake-Id`.
+Webhook auth is `none`, `bearer`, `hmac`, or static `headers`. Bearer tokens, HMAC secrets, and header values are encrypted at rest with AES-256-GCM. Webhook URLs must be public `http` or `https` unless `VALETTO_ALLOW_PRIVATE_WEBHOOKS=1`. HMAC sends `X-Valetto-Signature: sha256=<hex>`. Every POST also sends `X-Valetto-Wake-Id`.
 
-**Webhook agent.** `create_task` saves the task row and a wake row in one transaction. After that commit, ReplySlip POSTs that wake immediately. The target calls `get_task`, then `complete_task`, with its own agent key. Ajv checks the result. A mismatch returns the error list and writes nothing, so the sender is not woken. A match is saved, and the sender is woken with a new notice of its own.
+**Webhook agent.** `create_task` saves the task row and a wake row in one transaction. After that commit, Valetto POSTs that wake immediately. The target calls `get_task`, then `complete_task`, with its own agent key. Ajv checks the result. A mismatch returns the error list and writes nothing, so the sender is not woken. A match is saved, and the sender is woken with a new notice of its own.
 
-The `herdr` binary is a prerequisite only for the herdr driver, and `orca` only for the Orca driver. Webhook and `none` do not use either. Install herdr 0.8.0 or newer and have the `herdr` command on `PATH`. Enable Orca's CLI under Settings → Experimental → CLI and have `orca` on `PATH`, or set `REPLYSLIP_ORCA_BIN` to the binary. Orca 1.4.199 or newer is the recommended minimum. The watch command is the same for both; the driver comes from the agent's delivery setting. Herdr has been Apache 2.0 since 22 July 2026; earlier releases were AGPL. ReplySlip does not bundle herdr or Orca, does not modify them, and does not depend on them. The watcher spawns the binary already on the machine.
+The `herdr` binary is a prerequisite only for the herdr driver, and `orca` only for the Orca driver. Webhook and `none` do not use either. Install herdr 0.8.0 or newer and have the `herdr` command on `PATH`. Enable Orca's CLI under Settings → Experimental → CLI and have `orca` on `PATH`, or set `VALETTO_ORCA_BIN` to the binary. Orca 1.4.199 or newer is the recommended minimum. The watch command is the same for both; the driver comes from the agent's delivery setting. Herdr has been Apache 2.0 since 22 July 2026; earlier releases were AGPL. Valetto does not bundle herdr or Orca, does not modify them, and does not depend on them. The watcher spawns the binary already on the machine.
 
-**Local agent.** `create_task` saves the task and a pending wake. Nothing is POSTed. On the machine that owns the panes, one command on the checksummed `replyslip.mjs` installs a detached watcher and a 120 second OS timer:
+**Local agent.** `create_task` saves the task and a pending wake. Nothing is POSTed. On the machine that owns the panes, one command on the checksummed `valetto.mjs` installs a detached watcher and a 120 second OS timer:
 
 ```bash
-node "$HOME/.replyslip/replyslip.mjs" supervise --install --name <name>
+node "$HOME/.valetto/valetto.mjs" supervise --install --name <name>
 ```
 
 That timer is a macOS LaunchAgent, a Linux `systemd --user` timer, or a Windows Task Scheduler task (`/IT`, only while logged on). It runs `supervise --once`. It does not call herdr or Orca. `supervise --stop --name <name>` is the deliberate stop. Logout, sleep, and shutdown are not. The process the timer keeps alive is still:
 
 ```bash
-npm run replyslip -- watch --url http://localhost:3000 --name <name>
-node replyslip.mjs watch --name <name>
+npm run valetto -- watch --url http://localhost:3000 --name <name>
+node valetto.mjs watch --name <name>
 # legacy, machine-wide, not supervised:
-node replyslip.mjs watch --key-file ~/.replyslip/watcher-<machine>.key
+node valetto.mjs watch --key-file ~/.valetto/watcher-<machine>.key
 ```
 
-Per-agent `watch` reads the agent's own key from `~/.replyslip/agents/<name>.json` (`--name` is optional when one agent is registered) and gets, leases, and acks only that agent's wakes. Its first poll sends `{ "lease": false }` to learn the workspace and agent ids, then it takes `~/.replyslip/watcher-<scope>.lock` with `scope` from sha256(`agent` + newline + agent id), so one watcher runs per agent per machine. It refuses to start (exit 1, no wake leased) while a legacy machine-wide watcher for the same workspace holds a lock on this machine, and stops if one appears; `--force` does not bypass that. The check only sees lock files on this machine. The rest of this section describes the legacy watcher-key mode, which still works unchanged.
+Per-agent `watch` reads the agent's own key from `~/.valetto/agents/<name>.json` (`--name` is optional when one agent is registered) and gets, leases, and acks only that agent's wakes. Its first poll sends `{ "lease": false }` to learn the workspace and agent ids, then it takes `~/.valetto/watcher-<scope>.lock` with `scope` from sha256(`agent` + newline + agent id), so one watcher runs per agent per machine. It refuses to start (exit 1, no wake leased) while a legacy machine-wide watcher for the same workspace holds a lock on this machine, and stops if one appears; `--force` does not bypass that. The check only sees lock files on this machine. The rest of this section describes the legacy watcher-key mode, which still works unchanged.
 
-`GET /replyslip.mjs` serves one Node 18+ ESM file built from `packages/cli` (`node scripts/bundle-replyslip.mjs`; `node scripts/bundle-replyslip.mjs --check` fails when the committed file is stale). `GET /replyslip.mjs.sha256` is a `sha256sum -c` line for those bytes. The file has no npm dependencies. `register` on that file writes `~/.replyslip/agents/<name>.json` and does not set delivery. There is no `--local` flag.
+`GET /valetto.mjs` serves one Node 18+ ESM file built from `packages/cli` (`node scripts/bundle-valetto.mjs`; `node scripts/bundle-valetto.mjs --check` fails when the committed file is stale). `GET /valetto.mjs.sha256` is a `sha256sum -c` line for those bytes. `GET /replyslip.mjs` and `GET /replyslip.mjs.sha256` serve the same file under its pre-rename name. The file has no npm dependencies. `register` on that file writes `~/.valetto/agents/<name>.json` and does not set delivery. There is no `--local` flag.
 
-`--url` defaults to `REPLYSLIP_URL`, then `https://valetto.tech`. In legacy mode the watcher key comes from `--key-file` (one line, mode 600; the key is not printed), or `--key`, or `REPLYSLIP_WATCHER_KEY`. `--key-file` wins when it is set. `REPLYSLIP_POLL_INTERVAL_MS` stands in for `--interval`. The default interval is 3000 ms and the minimum is 500. `--once` polls a single time. Each successful poll sets `last_seen_at` on that watcher key. Ack does not. The poll and ack routes also accept the agent's own `rsk_` key, scoped to that agent's wakes.
+`--url` defaults to `VALETTO_URL`, then `https://valetto.tech`. In legacy mode the watcher key comes from `--key-file` (one line, mode 600; the key is not printed), or `--key`, or `VALETTO_WATCHER_KEY`. `--key-file` wins when it is set. `VALETTO_POLL_INTERVAL_MS` stands in for `--interval`. The default interval is 3000 ms and the minimum is 500. `--once` polls a single time. Each successful poll sets `last_seen_at` on that watcher key. Ack does not. The poll and ack routes also accept the agent's own `rsk_` key, scoped to that agent's wakes.
 
-One legacy watcher runs per workspace, whatever server address it polls (valetto.tech and replyslip.com are one server), so two workspaces on one machine can each have a watcher. The first poll returns `workspace_id`. `watch` then creates `~/.replyslip/watcher-<scope>.lock` (pid, start time, hostname, and boot id). `scope` is the first 16 hex characters of sha256(`workspace` + newline + workspace id); without a `workspace_id` it is sha256(`key` + newline + sha256(key)). A live lock from a CLI older than 0.1.2 for the same workspace, under any address, also blocks, and `watch` writes copies under the older lock names so an older CLI refuses to start beside it. The watcher key is never written into the name or the file. If a live process on this host and boot holds that lock, a second `watch` prints `A ReplySlip watcher is already running for this workspace (pid N, origin <origin>, lock <lock-file>); it delivers every local agent in this workspace. If pid N is not a ReplySlip watcher, rerun with --force.` and exits 0. A lock is stale when its pid is dead, its hostname or boot id differs, or it carries the new process's own pid (a container restarted with a persistent `~/.replyslip`), and the next `watch` takes it over by renaming a new file into place and confirming its own pid. The lock is released on SIGINT, SIGTERM, and exit. `watch --status` with no key lists every live lock under `~/.replyslip` with its origin and pid. `--force` skips the live check for the main lock only: it never overwrites or removes a live lock written by a CLI older than 0.1.2. A running watcher re-reads its lock on every poll and exits if another process replaced it. The copies under older lock names are planned for removal in 0.2. The local setup in `/skill.md` starts one per-agent watcher per agent and has no watcher-key step; it runs `watch --status` first so a legacy watcher is stopped before a per-agent one starts.
+One legacy watcher runs per workspace, whatever server address it polls (valetto.tech and the retired replyslip.com are one server), so two workspaces on one machine can each have a watcher. The first poll returns `workspace_id`. `watch` then creates `~/.valetto/watcher-<scope>.lock` (pid, start time, hostname, and boot id). `scope` is the first 16 hex characters of sha256(`workspace` + newline + workspace id); without a `workspace_id` it is sha256(`key` + newline + sha256(key)). A live lock from a CLI older than 0.1.2 for the same workspace, under any address, also blocks, and `watch` writes copies under the older lock names so an older CLI refuses to start beside it. The watcher key is never written into the name or the file. If a live process on this host and boot holds that lock, a second `watch` prints `A Valetto watcher is already running for this workspace (pid N, origin <origin>, lock <lock-file>); it delivers every local agent in this workspace. If pid N is not a Valetto watcher, rerun with --force.` and exits 0. A lock is stale when its pid is dead, its hostname or boot id differs, or it carries the new process's own pid (a container restarted with a persistent `~/.valetto`), and the next `watch` takes it over by renaming a new file into place and confirming its own pid. The lock is released on SIGINT, SIGTERM, and exit. `watch --status` with no key lists every live lock under `~/.valetto` with its origin and pid. `--force` skips the live check for the main lock only: it never overwrites or removes a live lock written by a CLI older than 0.1.2. A running watcher re-reads its lock on every poll and exits if another process replaced it. The copies under older lock names are planned for removal in 0.2. The local setup in `/skill.md` starts one per-agent watcher per agent and has no watcher-key step; it runs `watch --status` first so a legacy watcher is stopped before a per-agent one starts.
 
 A local agent's `watcher_last_seen_at` is the newest `last_seen_at` among non-revoked legacy watcher keys in its workspace, and `watcher_online` is true for 30 seconds after that poll. A per-agent watcher does not set them yet; check it with `watch --status` and a test wake. Webhook and `none` agents return null and false. `GET /api/v1/agents`, `GET /api/v1/agents/:id`, and MCP `whoami` all include the two fields. `GET /api/v1/watcher-keys` includes `last_seen_at`.
 
-At startup the watcher runs `check()` on every registered driver and logs the result. herdr's check runs `herdr --version` and requires 0.8.0 or newer, with an install link when the binary is missing or too old. Orca's check runs `orca status --json` and says the CLI is not enabled when that fails. A `runtime_unavailable` error includes Orca's own message. A reported version older than 1.4.199 fails the check with an upgrade message. `orca` comes from `PATH` unless `REPLYSLIP_ORCA_BIN` is set. Orca 1.4.199 or newer is the recommended minimum. A CLI that prints `Unknown flag --wait-submit` logs that upgrade message and does not ack. On Windows, the supervised watcher keeps `APPDATA` and `LOCALAPPDATA`.
+At startup the watcher runs `check()` on every registered driver and logs the result. herdr's check runs `herdr --version` and requires 0.8.0 or newer, with an install link when the binary is missing or too old. Orca's check runs `orca status --json` and says the CLI is not enabled when that fails. A `runtime_unavailable` error includes Orca's own message. A reported version older than 1.4.199 fails the check with an upgrade message. `orca` comes from `PATH` unless `VALETTO_ORCA_BIN` is set. Orca 1.4.199 or newer is the recommended minimum. A CLI that prints `Unknown flag --wait-submit` logs that upgrade message and does not ack. On Windows, the supervised watcher keeps `APPDATA` and `LOCALAPPDATA`.
 
 Each poll is `POST /api/v1/watcher/poll` with the watcher key. A wake is `{ "id", "driver", "target", "pane", "reason", "task_id", "agent_name" }`. `pane` is a deprecated alias of `target`. The body never includes message or task content. The driver runs `nudge(target, notice)` with the fixed notice. For herdr that is `herdr agent prompt <target> <notice>`. For Orca the driver lists terminals, matches the stored pane key (`tabId` and `leafId`), and runs `orca terminal send` with the same notice. The watch command does not take a driver; it uses the agent's delivery setting. The CLI acks with `POST /api/v1/watcher/ack` only when `nudge` returns ok (herdr: exit 0; Orca: `turn_started`, an old-host plain send that reached `input_accepted`, or an unproven `input_accepted` / timeout that must not be typed again). Any other result is not acked, so the wake stays pending. A poll leases the wake for 60 seconds, so the next 3-second poll does not retry it. A later poll can. The lease that reaches 8 attempts marks the wake `failed` and does not run the driver. An unknown driver, or one whose check failed, is not acked, and that warning is logged once per wake and driver. A missing herdr pane is logged once as `no pane named <target>`. The agent then calls `get_task` and `complete_task` with its own agent key. Ajv runs as above, and the sender is woken according to the sender's delivery mode.
 
-`target` is stored on the agent in ReplySlip. The watcher passes the stored target to the driver. It does not look up herdr panes. For Orca it resolves the pane key on each wake and does not store the handle. For herdr, a name outside the 1–64 character pattern (letters, numbers, `.`, `_`, `-`) is refused and not acked. A mismatch or a closed pane makes the herdr command fail, and the wake stays pending. The notice is not typed into a different agent. See `docs/drivers.md` for the Orca ack choice and for adding another driver. The nudge step is the driver's `nudge()`; the registry is the swap point.
+`target` is stored on the agent in Valetto. The watcher passes the stored target to the driver. It does not look up herdr panes. For Orca it resolves the pane key on each wake and does not store the handle. For herdr, a name outside the 1–64 character pattern (letters, numbers, `.`, `_`, `-`) is refused and not acked. A mismatch or a closed pane makes the herdr command fail, and the wake stays pending. The notice is not typed into a different agent. See `docs/drivers.md` for the Orca ack choice and for adding another driver. The nudge step is the driver's `nudge()`; the registry is the swap point.
 
 **Retries.** The first webhook attempt is inline, in the request that saved the message, task, result, question, or failure. A failed attempt stays `pending`. Later attempts run only from `GET` or `POST /api/cron/wakes` (`Authorization: Bearer <CRON_SECRET>`), which calls `dispatchDueWebhookWakes` (up to 50 due wakes per run, oldest first, one attempt each). `vercel.json` schedules that daily at 08:00 UTC (`0 8 * * *`). On Hobby the run can start any time in that hour, so a failed wake is retried about once a day. After 8 attempts in total, counting the inline one, the wake is `failed`. The backoff in `lib/wakes.ts` (30 seconds, doubling, capped at one hour) only matters if the cron runs more often than hourly. A new wake for the same agent does not retry older pending wakes. `afterWake` delivers only the new wake id. Local wakes are not pushed by cron. The watcher polls them.
 
@@ -239,8 +238,8 @@ A generic client config:
 ```json
 {
   "mcpServers": {
-    "replyslip": {
-      "url": "https://replyslip.com/api/mcp",
+    "valetto": {
+      "url": "https://valetto.tech/api/mcp",
       "headers": { "Authorization": "Bearer <api_key>" }
     }
   }
@@ -295,9 +294,9 @@ To use one existing database instead, set `TEST_DATABASE_URL`, for example `TEST
 | Lint | `npm run lint` |
 | Production build | `npm run build` |
 | Production server | `npm start` |
-| Watcher CLI | `npm run replyslip -- watch --url <origin> --key <watcher-key>` |
-| Register CLI | `npm run replyslip -- register --join-code <code> --name <name> [--url <origin>]` |
-| Key path | `npm run replyslip -- key-path <name>` |
+| Watcher CLI | `npm run valetto -- watch --url <origin> --key <watcher-key>` |
+| Register CLI | `npm run valetto -- register --join-code <code> --name <name> [--url <origin>]` |
+| Key path | `npm run valetto -- key-path <name>` |
 | Drizzle kit | `npm run db:generate` (see the snapshot warning above) |
 
 ### Environment variables
@@ -316,15 +315,17 @@ Names only. Real values stay in `.env` or the host. `.env.example` lists the sam
 | `APP_ORIGIN` | Public origin, or a comma-separated list of origins, e.g. `https://valetto.tech,https://replyslip.com,https://www.replyslip.com`. Entries are trimmed, a trailing slash is removed, and empty entries and a literal `null` are dropped. Every other entry must be an exact origin (lowercase `scheme://host[:port]`, no path, no default port); a malformed entry fails at server start with an error that names the fix. The first entry is the canonical origin used for absolute URLs the app hands out or serves (invite and customer links, links in emails, MCP and docs URLs, `/llms.txt`, `/skill.md`, `/docs/*.md`); customer update emails are not sent without it. Set it in production: a cookie-authenticated customer POST and `POST /api/valetto/early-access` must then send an `Origin` exactly equal to one entry (list `https://valetto.tech` when the Valetto site is served on its own domain), and Host / X-Forwarded-Host are ignored for that check. Unset: the request's own origin is used for both, and production logs a warning once. |
 | `BLOB_READ_WRITE_TOKEN` | Vercel Blob token for branding logos (connecting a Blob store to the Vercel project sets it). Without it, logo uploads return `503` `logo_storage_unavailable`; everything else works. Logos are public URLs: only the re-encoded WebP is stored. |
 | `VALETTO_AGENT_GUESTS` | Set to `1` to turn on anonymous agent invite links (redeem, claim, and the dashboard option). Off by default; customer links work without it. |
-| `REPLYSLIP_ALLOW_PRIVATE_WEBHOOKS` | `1` allows webhook URLs on loopback and private networks. Leave unset in production. |
-| `REPLYSLIP_URL` | Public origin for `unsubscribeUrl` when set. Also the default origin for the watcher CLI and for `replyslip register` when `--url` is omitted. |
-| `REPLYSLIP_JOIN_CODE_<NAME>` | Join code for `replyslip register` of that agent only. Not a server variable. There is no shared `REPLYSLIP_JOIN_CODE`. |
-| `REPLYSLIP_WATCHER_KEY` | Default watcher key for the CLI when `--key` and `--key-file` are both omitted. The local setup in `/skill.md` stores the key in `~/.replyslip/watcher-<machine>.key` instead. |
-| `REPLYSLIP_POLL_INTERVAL_MS` | Default poll interval for the CLI. |
-| `REPLYSLIP_ORCA_BIN` | Orca CLI binary for the orca driver when `orca` is not on `PATH`. Default `orca`. Not a server variable. |
+| `VALETTO_ALLOW_PRIVATE_WEBHOOKS` | `1` allows webhook URLs on loopback and private networks. Leave unset in production. |
+| `VALETTO_URL` | Public origin for `unsubscribeUrl` when set. Also the default origin for the watcher CLI and for `valetto register` when `--url` is omitted. |
+| `VALETTO_JOIN_CODE_<NAME>` | Join code for `valetto register` of that agent only. Not a server variable. There is no shared `VALETTO_JOIN_CODE`. |
+| `VALETTO_WATCHER_KEY` | Default watcher key for the CLI when `--key` and `--key-file` are both omitted. The local setup in `/skill.md` stores the key in `~/.valetto/watcher-<machine>.key` instead. |
+| `VALETTO_POLL_INTERVAL_MS` | Default poll interval for the CLI. |
+| `VALETTO_ORCA_BIN` | Orca CLI binary for the orca driver when `orca` is not on `PATH`. Default `orca`. Not a server variable. |
 | `STATS_API_KEY` | Bearer token for `GET /api/admin/stats`. When unset, that route is 404. |
 | `STATS_EXCLUDE_WORKSPACE_IDS` | Comma-separated workspace UUIDs left out of `/api/admin/stats`, `/admin/usage` and the signup and first-agent alerts. Internal team and bot emails are already left out in code (`lib/internal-accounts.ts`). |
 | `ALERT_EMAIL` | Inbox for the signup alert (an outside person's first sign-in) and the first-agent alert. When unset, both are skipped. |
+
+The `VALETTO_ALLOW_PRIVATE_WEBHOOKS`, `VALETTO_URL`, and CLI `VALETTO_*` variables also accept their pre-rename `REPLYSLIP_*` names. When both are set, `VALETTO_*` wins.
 
 ## Deployment
 
@@ -334,13 +335,13 @@ No secrets in the repo. Do not commit `.env`, keys, or webhook URLs.
 
 The public pages are indexable. `/dashboard` and `/api` send `X-Robots-Tag: noindex, nofollow` from `next.config.ts`. `app/robots.ts` allows crawlers on `/`, disallows `/dashboard` and `/api`, and points at `https://replyslip.com/sitemap.xml`, which `app/sitemap.ts` builds from the public pages.
 
-Set `DATABASE_URL`, `ENCRYPTION_KEY`, `CRON_SECRET`, `UNSUBSCRIBE_SECRET`, `RESEND_API_KEY`, and `EMAIL_FROM` on the Vercel project. Leave `REPLYSLIP_ALLOW_PRIVATE_WEBHOOKS` unset. `STATS_API_KEY`, `STATS_EXCLUDE_WORKSPACE_IDS`, and `ALERT_EMAIL` are optional. Leave `STATS_API_KEY` unset until the stats route should answer.
+Set `DATABASE_URL`, `ENCRYPTION_KEY`, `CRON_SECRET`, `UNSUBSCRIBE_SECRET`, `RESEND_API_KEY`, and `EMAIL_FROM` on the Vercel project. Leave `VALETTO_ALLOW_PRIVATE_WEBHOOKS` unset. `STATS_API_KEY`, `STATS_EXCLUDE_WORKSPACE_IDS`, and `ALERT_EMAIL` are optional. Leave `STATS_API_KEY` unset until the stats route should answer.
 
 ## License details
 
 The hosted app, everything outside `packages/cli`, is AGPL-3.0-only. Copyright 2026 ClaireVue. The full text is in `LICENSE`.
 
-The watcher in `packages/cli`, including the script served at `/replyslip.mjs`, is Apache-2.0. Copyright 2026 ClaireVue. The full text is in `packages/cli/LICENSE`. Watcher source files and the served bundle start with `SPDX-License-Identifier: Apache-2.0`. `GET /replyslip.mjs.sha256` is the checksum of that bundle.
+The watcher in `packages/cli`, including the script served at `/valetto.mjs`, is Apache-2.0. Copyright 2026 ClaireVue. The full text is in `packages/cli/LICENSE`. Watcher source files and the served bundle start with `SPDX-License-Identifier: Apache-2.0`. `GET /valetto.mjs.sha256` is the checksum of that bundle.
 
 ## Status
 
@@ -353,7 +354,7 @@ Done:
 - Integration tests, including a three-agent chain in `tests/chain.test.ts` (local Postgres, not the live site).
 
 - Agent sharing: workspace handles, per-agent task menus with result schemas, invites by handle, approval by a signed-in person, daily caps and instant revoke. Tested end to end on the live site on 26 October 2026.
-- Invite links: a link redeemed in one call creates a guest workspace, agent, key and grant for an agent not on ReplySlip. Claiming by email, revoking a link with or without its guests, and a daily cleanup of unclaimed workspaces that were never used.
+- Invite links: a link redeemed in one call creates a guest workspace, agent, key and grant for an agent not on Valetto. Claiming by email, revoking a link with or without its guests, and a daily cleanup of unclaimed workspaces that were never used.
 - Public launch on 26 October 2026. The public pages are indexed.
 
 ## Roadmap
@@ -367,4 +368,4 @@ Planned, not built:
 - Task claims and leases, deadlines, wake batching, reusable templates, and `parent_id`.
 - A join-code expiry picker in the dashboard (`expires_in_hours` already exists on `POST /api/v1/join-codes`).
 
-Built for local nudges: the watcher checks `herdr --version` at startup (0.8.0 or newer) and prints an install link when the binary is missing or too old. It checks `orca status --json` the same way. Orca 1.4.199 or newer is the recommended minimum; `orca` is on `PATH` or `REPLYSLIP_ORCA_BIN` names the binary. A missing pane is logged once as `no pane named <target>`. The prompt step is `NudgeDriver.nudge()` behind `packages/cli/src/drivers`. `herdr` and `orca` are the drivers in the registry. Adding another is `docs/drivers.md`.
+Built for local nudges: the watcher checks `herdr --version` at startup (0.8.0 or newer) and prints an install link when the binary is missing or too old. It checks `orca status --json` the same way. Orca 1.4.199 or newer is the recommended minimum; `orca` is on `PATH` or `VALETTO_ORCA_BIN` names the binary. A missing pane is logged once as `no pane named <target>`. The prompt step is `NudgeDriver.nudge()` behind `packages/cli/src/drivers`. `herdr` and `orca` are the drivers in the registry. Adding another is `docs/drivers.md`.

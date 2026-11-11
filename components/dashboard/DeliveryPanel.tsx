@@ -327,7 +327,7 @@ export function DeliveryPanel({ agent, onSaved, onClose }: { agent: Agent; onSav
             [
               ['none', 'None', 'The agent checks for tasks itself. Valetto sends nothing.'],
               ['webhook', 'Webhook', 'Valetto sends a POST to a URL you choose each time there is work.'],
-              ['local', 'Local agent via herdr or Orca', 'The watcher on your machine (replyslip watch) types a short notice into a herdr or Orca pane.'],
+              ['local', 'Local agent via herdr or Orca', 'The watcher on your machine (valetto watch) types a short notice into a herdr or Orca pane.'],
             ] as const
           ).map(([value, label, help]) => (
             <label key={value} className={mode === value ? 'dash-mode is-on' : 'dash-mode'}>
@@ -371,7 +371,7 @@ export function DeliveryPanel({ agent, onSaved, onClose }: { agent: Agent; onSav
                     inputMode="url"
                     spellCheck={false}
                     autoComplete="off"
-                    placeholder="https://example.com/replyslip"
+                    placeholder="https://example.com/valetto"
                     value={url}
                     onChange={(e) => setUrl(e.target.value)}
                     autoFocus={replaceUrl}
@@ -414,7 +414,7 @@ export function DeliveryPanel({ agent, onSaved, onClose }: { agent: Agent; onSav
                   : auth === 'bearer'
                     ? 'Sent as Authorization: Bearer <token> on every request.'
                     : auth === 'hmac'
-                      ? 'Each request body is signed with this secret and sent in X-ReplySlip-Signature as sha256=<hex>.'
+                      ? 'Each request body is signed with this secret and sent in X-Valetto-Signature as sha256=<hex>.'
                       : 'Sent as-is on every request. Names stay visible here; values are write-only.'}
               </p>
             </div>
@@ -542,8 +542,8 @@ export function DeliveryPanel({ agent, onSaved, onClose }: { agent: Agent; onSav
           <div className="dash-fields">
             {storedMode === 'local' && agent.watcher_online ? null : (
               <p className="dash-hint">
-                Each local agent runs its own watcher on its machine with <code>replyslip watch</code>, using its own key. {agent.name}{' '}
-                starts it after you save. Check it with <code>replyslip watch --status</code>, then send a test wake.
+                Each local agent runs its own watcher on its machine with <code>valetto watch</code>, using its own key. {agent.name}{' '}
+                starts it after you save. Check it with <code>valetto watch --status</code>, then send a test wake.
               </p>
             )}
             <div className="dash-field">
@@ -716,7 +716,7 @@ function WakeMessage({ state, target, orca }: { state: WakeState; target: string
     case 'timeout':
       return (
         <p className="dash-pending">
-          Still pending after 30 seconds. Is the watcher running (<code translate="no">replyslip watch</code>) and is the {orca ? 'Orca pane key' : 'herdr pane named'}{' '}
+          Still pending after 30 seconds. Is the watcher running (<code translate="no">valetto watch</code>) and is the {orca ? 'Orca pane key' : 'herdr pane named'}{' '}
           <code translate="no">{target || '…'}</code>? The wake stays queued and is delivered when the watcher picks it up.
         </p>
       );

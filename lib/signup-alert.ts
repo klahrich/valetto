@@ -31,7 +31,7 @@ export function queueSignupAlert(notice: SignupNotice): void {
       await getEmailSender().sendSignupAlert(message);
     } catch (err: unknown) {
       const reason = err instanceof Error ? err.message : 'unknown error';
-      console.error(`[replyslip] signup alert failed: ${reason}`);
+      console.error(`[valetto] signup alert failed: ${reason}`);
     }
   });
 }

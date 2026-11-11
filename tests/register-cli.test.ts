@@ -2,8 +2,8 @@ import { mkdtemp, readFile, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { relayOrigin, runReplyslip } from '../packages/cli/src/cli';
-import { joinCodeEnvName } from '../packages/cli/src/register';
+import { relayOrigin, runValetto } from '../packages/cli/src/cli';
+import { joinCodeEnvName, legacyJoinCodeEnvName } from '../packages/cli/src/register';
 
 const KEY = 'rsk_CANARY_KEY_do_not_print';
 
@@ -18,7 +18,7 @@ function capture() {
   };
 }
 
-describe('replyslip register', () => {
+describe('valetto register', () => {
   it('defaults --url to https://valetto.tech, then REPLYSLIP_URL, then --url', async () => {
     const cases: [string[], NodeJS.ProcessEnv, string][] = [
       [[], {}, 'https://valetto.tech'],
@@ -40,7 +40,7 @@ describe('replyslip register', () => {
         );
       };
       const io = capture();
-      const code = await runReplyslip(['register', '--join-code', 'rjc_x', '--name', 'DefaultBot', ...extra], {
+      const code = await runValetto(['register', '--join-code', 'rjc_x', '--name', 'DefaultBot', ...extra], {
         home,
         env,
         fetchImpl,
@@ -73,7 +73,7 @@ describe('replyslip register', () => {
       );
     };
 
-    const code = await runReplyslip(
+    const code = await runValetto(
       ['register', '--name', 'LandingBot', '--description', 'Drafts', '--url', 'https://replyslip.com'],
       {
         home,
@@ -84,7 +84,8 @@ describe('replyslip register', () => {
       },
     );
     expect(code).toBe(0);
-    expect(joinCodeEnvName('LandingBot')).toBe('REPLYSLIP_JOIN_CODE_LANDINGBOT');
+    expect(joinCodeEnvName('LandingBot')).toBe('VALETTO_JOIN_CODE_LANDINGBOT');
+    expect(legacyJoinCodeEnvName('LandingBot')).toBe('REPLYSLIP_JOIN_CODE_LANDINGBOT');
     expect(calls[0]?.authorization).toBe('Bearer rjc_personal');
     expect(calls[0]?.body).toContain('"description":"Drafts"');
     const printed = [...io.out, ...io.err].join('\n');
@@ -98,11 +99,13 @@ describe('replyslip register', () => {
     expect(saved.api_key).toBe(KEY);
     expect(saved.relay_url).toBe('https://replyslip.com');
     expect((await stat(file)).mode & 0o777).toBe(0o600);
-    expect((await stat(path.join(home, '.replyslip'))).mode & 0o777).toBe(0o700);
+    expect(file).toBe(path.join(home, '.valetto', 'agents', 'LandingBot.json'));
+    expect((await stat(path.join(home, '.valetto'))).mode & 0o777).toBe(0o700);
+    await expect(stat(path.join(home, '.replyslip'))).rejects.toMatchObject({ code: 'ENOENT' });
     expect((await stat(path.dirname(file))).mode & 0o777).toBe(0o700);
 
     const again = capture();
-    const second = await runReplyslip(['register', '--join-code', 'rjc_other', '--name', 'LandingBot'], {
+    const second = await runValetto(['register', '--join-code', 'rjc_other', '--name', 'LandingBot'], {
       home,
       env: { REPLYSLIP_JOIN_CODE: 'rjc_shared_burned' },
       fetchImpl,
@@ -116,14 +119,14 @@ describe('replyslip register', () => {
     expect(JSON.parse(await readFile(file, 'utf8')).api_key).toBe(KEY);
 
     const pathOnly = capture();
-    const looked = await runReplyslip(['key-path', 'LandingBot'], { home, stdout: pathOnly.stdout, stderr: pathOnly.stderr });
+    const looked = await runValetto(['key-path', 'LandingBot'], { home, stdout: pathOnly.stdout, stderr: pathOnly.stderr });
     expect(looked).toBe(0);
     expect(pathOnly.out).toEqual([file]);
     expect(pathOnly.err).toEqual([]);
 
     const shared = capture();
     let fetched = false;
-    const ignored = await runReplyslip(['register', '--name', 'OtherBot'], {
+    const ignored = await runValetto(['register', '--name', 'OtherBot'], {
       home,
       env: { REPLYSLIP_JOIN_CODE: 'rjc_shared_burned' },
       fetchImpl: async () => {
@@ -135,7 +138,7 @@ describe('replyslip register', () => {
     });
     expect(ignored).toBe(1);
     expect(fetched).toBe(false);
-    expect(shared.err.join('\n')).toMatch(/REPLYSLIP_JOIN_CODE/);
+    expect(shared.err.join('\n')).toMatch(/VALETTO_JOIN_CODE/);
     expect([...shared.out, ...shared.err].join('\n')).not.toContain('rjc_shared_burned');
   });
 
@@ -154,7 +157,7 @@ describe('replyslip register', () => {
         { status: 201, headers: { 'content-type': 'application/json' } },
       );
     };
-    const code = await runReplyslip(
+    const code = await runValetto(
       ['register', '--join-code', 'rjc_x', '--name', 'OrcaBot', '--driver', 'orca', '--target', 'tab1:leaf-uuid'],
       { home, env: {}, fetchImpl, stdout: io.stdout, stderr: io.stderr },
     );
@@ -171,7 +174,7 @@ describe('replyslip register', () => {
     const home = await mkdtemp(path.join(tmpdir(), 'replyslip-'));
     const io = capture();
     let fetched = false;
-    const code = await runReplyslip(['register', '--join-code', 'rjc_x', '--name', 'OrcaBot', '--driver', 'orca'], {
+    const code = await runValetto(['register', '--join-code', 'rjc_x', '--name', 'OrcaBot', '--driver', 'orca'], {
       home,
       env: {},
       fetchImpl: async () => {
@@ -198,7 +201,7 @@ describe('replyslip register', () => {
         }),
         { status: 201, headers: { 'content-type': 'application/json' } },
       );
-    expect(await runReplyslip(['register', '--join-code', 'rjc_x', '--name', 'OrcaBot'], {
+    expect(await runValetto(['register', '--join-code', 'rjc_x', '--name', 'OrcaBot'], {
       home, env: {}, fetchImpl, stdout: io.stdout, stderr: io.stderr,
     })).toBe(0);
     const who = capture();
@@ -214,7 +217,7 @@ describe('replyslip register', () => {
         { status: 200, headers: { 'content-type': 'application/json' } },
       );
     };
-    expect(await runReplyslip(['whoami', '--name', 'OrcaBot'], {
+    expect(await runValetto(['whoami', '--name', 'OrcaBot'], {
       home, env: {}, fetchImpl: whoFetch, stdout: who.stdout, stderr: who.stderr,
     })).toBe(0);
     expect(who.out).toEqual(['OrcaBot', 'workspace Acme', 'delivery {"mode":"none"}']);
@@ -222,7 +225,7 @@ describe('replyslip register', () => {
   });
 });
 
-describe('replyslip watch --key-file', () => {
+describe('valetto watch --key-file', () => {
   it('treats an empty or blank REPLYSLIP_URL or --url as unset', async () => {
     for (const env of [{ REPLYSLIP_URL: '' }, { REPLYSLIP_URL: '   ' }]) {
       expect(relayOrigin([], env)).toBe('https://valetto.tech');
@@ -234,7 +237,7 @@ describe('replyslip watch --key-file', () => {
     const home = await mkdtemp(path.join(tmpdir(), 'replyslip-watch-'));
     const urls: string[] = [];
     const io = capture();
-    const code = await runReplyslip(['watch', '--once', '--key', 'rsw_blank_env'], {
+    const code = await runValetto(['watch', '--once', '--key', 'rsw_blank_env'], {
       home,
       env: { REPLYSLIP_URL: '  ' },
       stdout: io.stdout,
@@ -250,7 +253,7 @@ describe('replyslip watch --key-file', () => {
     const regHome = await mkdtemp(path.join(tmpdir(), 'replyslip-'));
     const regUrls: string[] = [];
     const reg = capture();
-    const regCode = await runReplyslip(['register', '--join-code', 'rjc_x', '--name', 'BlankBot'], {
+    const regCode = await runValetto(['register', '--join-code', 'rjc_x', '--name', 'BlankBot'], {
       home: regHome,
       env: { REPLYSLIP_URL: '' },
       stdout: reg.stdout,
@@ -286,7 +289,7 @@ describe('replyslip watch --key-file', () => {
         return new Response('{"wakes":[]}', { status: 200 });
       };
       const io = capture();
-      const code = await runReplyslip(['watch', '--once', '--key', 'rsw_default_test', ...extra], {
+      const code = await runValetto(['watch', '--once', '--key', 'rsw_default_test', ...extra], {
         home,
         env,
         fetchImpl,
@@ -305,7 +308,7 @@ describe('replyslip watch --key-file', () => {
     const fetchImpl: typeof fetch = async () => {
       throw new Error('must not poll without a key');
     };
-    const code = await runReplyslip(['watch', '--once'], { env: {}, home, fetchImpl, stdout: io.stdout, stderr: io.stderr });
+    const code = await runValetto(['watch', '--once'], { env: {}, home, fetchImpl, stdout: io.stdout, stderr: io.stderr });
     expect(code).toBe(1);
     expect(io.err.join('\n')).toContain('--key-file');
   });
@@ -322,7 +325,7 @@ describe('replyslip watch --key-file', () => {
       return new Response('{"wakes":[]}', { status: 200 });
     };
     const io = capture();
-    const code = await runReplyslip(
+    const code = await runValetto(
       ['watch', '--once', '--url', 'https://replyslip.com', '--key-file', keyFile, '--key', 'rsw_ignored'],
       {
         home,
@@ -338,7 +341,7 @@ describe('replyslip watch --key-file', () => {
     expect([...io.out, ...io.err].join('\n')).not.toContain('rsw_ignored');
 
     const missing = capture();
-    const failed = await runReplyslip(['watch', '--url', 'https://replyslip.com', '--key-file', path.join(home, 'missing.key')], {
+    const failed = await runValetto(['watch', '--url', 'https://replyslip.com', '--key-file', path.join(home, 'missing.key')], {
       home,
       stdout: missing.stdout,
       stderr: missing.stderr,

@@ -7,7 +7,7 @@ import { mkdtemp } from 'node:fs/promises';
 import { hostname, tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { runReplyslip } from '../packages/cli/src/cli';
+import { runValetto } from '../packages/cli/src/cli';
 import { watch } from '../packages/cli/src/watch';
 import {
   acquireAgentWatcherLock,
@@ -89,12 +89,12 @@ function fakeRelay(agentName: string, wakes: unknown[] = []) {
   return { seen, fetchImpl };
 }
 
-describe('replyslip watch with the agent own key', () => {
+describe('valetto watch with the agent own key', () => {
   it('uses the registered agent key, identifies without leasing, then locks for this agent only', async () => {
     const home = await homeWithAgents('PaneBot');
     const relay = fakeRelay('PaneBot');
     const io = capture();
-    const code = await runReplyslip(['watch', '--once'], { home, env: {}, fetchImpl: relay.fetchImpl, stdout: io.stdout, stderr: io.stderr });
+    const code = await runValetto(['watch', '--once'], { home, env: {}, fetchImpl: relay.fetchImpl, stdout: io.stdout, stderr: io.stderr });
     expect(code).toBe(0);
     expect(relay.seen.map((s) => s.url)).toEqual([`${ORIGIN}/api/v1/watcher/poll`, `${ORIGIN}/api/v1/watcher/poll`]);
     expect(relay.seen[0]!.body).toEqual({ lease: false });
@@ -112,11 +112,11 @@ describe('replyslip watch with the agent own key', () => {
     const home = await homeWithAgents('AlphaBot', 'BetaBot');
     const relay = fakeRelay('BetaBot');
     const ambiguous = capture();
-    expect(await runReplyslip(['watch', '--once'], { home, env: {}, fetchImpl: relay.fetchImpl, stdout: ambiguous.stdout, stderr: ambiguous.stderr })).toBe(1);
+    expect(await runValetto(['watch', '--once'], { home, env: {}, fetchImpl: relay.fetchImpl, stdout: ambiguous.stdout, stderr: ambiguous.stderr })).toBe(1);
     expect(ambiguous.err.join('\n')).toContain('AlphaBot, BetaBot');
     expect(relay.seen).toEqual([]);
     const named = capture();
-    expect(await runReplyslip(['watch', '--once', '--name', 'BetaBot'], { home, env: {}, fetchImpl: relay.fetchImpl, stdout: named.stdout, stderr: named.stderr })).toBe(0);
+    expect(await runValetto(['watch', '--once', '--name', 'BetaBot'], { home, env: {}, fetchImpl: relay.fetchImpl, stdout: named.stdout, stderr: named.stderr })).toBe(0);
     expect(relay.seen[0]!.auth).toBe(`Bearer ${AGENT_KEY}_BetaBot`);
   });
 
@@ -128,12 +128,12 @@ describe('replyslip watch with the agent own key', () => {
         const lock = writeLegacyLock(home, child.pid ?? 0, { preWorkspaceField });
         const relay = fakeRelay('PaneBot', [{ id: 'wake-1', driver: 'herdr', target: 'pane-bot' }]);
         const io = capture();
-        const code = await runReplyslip(['watch', '--once', '--force'], { home, env: {}, fetchImpl: relay.fetchImpl, stdout: io.stdout, stderr: io.stderr });
+        const code = await runValetto(['watch', '--once', '--force'], { home, env: {}, fetchImpl: relay.fetchImpl, stdout: io.stdout, stderr: io.stderr });
         expect(code).toBe(1);
         expect(relay.seen).toHaveLength(1);
         expect(relay.seen[0]!.body).toEqual({ lease: false });
         const message = io.err.join('\n');
-        expect(message).toContain('legacy machine-wide ReplySlip watcher');
+        expect(message).toContain('legacy machine-wide Valetto watcher');
         expect(message).toContain(`pid ${child.pid}`);
         expect(message).toContain(lock);
         expect(message).toContain('stop that watcher first');
@@ -168,7 +168,7 @@ describe('replyslip watch with the agent own key', () => {
           if (sleeps === 1) writeLegacyLock(home, child.pid ?? 0);
         },
       });
-      expect(result.legacyBlocked).toContain('legacy machine-wide ReplySlip watcher');
+      expect(result.legacyBlocked).toContain('legacy machine-wide Valetto watcher');
       // hello + one leasing poll before the legacy lock appeared; none after.
       expect(relay.seen).toHaveLength(2);
       expect(prompts).toEqual([]);
@@ -186,7 +186,7 @@ describe('replyslip watch with the agent own key', () => {
       const keyFile = path.join(home, 'watcher.key');
       writeFileSync(keyFile, 'rsw_legacy_key\n', { mode: 0o600 });
       const io = capture();
-      const code = await runReplyslip(['watch', '--once', '--url', ORIGIN, '--key-file', keyFile], {
+      const code = await runValetto(['watch', '--once', '--url', ORIGIN, '--key-file', keyFile], {
         home,
         env: {},
         stdout: io.stdout,
@@ -194,10 +194,10 @@ describe('replyslip watch with the agent own key', () => {
         fetchImpl: async () => Response.json({ wakes: [], workspace_id: WS }),
       });
       expect(code).toBe(0);
-      expect(io.out.join('\n')).toContain('per-agent ReplySlip watcher is running for agent PaneBot');
+      expect(io.out.join('\n')).toContain('per-agent Valetto watcher is running for agent PaneBot');
 
       const status = capture();
-      await runReplyslip(['watch', '--status'], { home, stdout: status.stdout, stderr: status.stderr });
+      await runValetto(['watch', '--status'], { home, stdout: status.stdout, stderr: status.stderr });
       expect(status.out).toEqual([agentRunningStatusMessage(child.pid ?? 0, ORIGIN, 'PaneBot', WS)]);
     } finally {
       await stop(child);

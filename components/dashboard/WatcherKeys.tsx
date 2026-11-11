@@ -12,7 +12,7 @@ async function fetchWatcherKeys(): Promise<WatcherKey[]> {
 }
 
 /**
- * Legacy keys for the machine-wide `replyslip watch --key-file`. A key belongs to the workspace, not to one agent.
+ * Legacy keys for the machine-wide `valetto watch --key-file`. A key belongs to the workspace, not to one agent.
  * New setups don't need one: each local agent runs `supervise --install --name <name>` with its own key. Existing keys stay listed
  * and revocable; creating one is tucked behind a closed "legacy" disclosure.
  */
@@ -108,7 +108,7 @@ export function WatcherKeys() {
             <li>Stop the old watcher first.</li>
             <li>
               Install one detached watcher per local agent. The same command installs the 120 second OS timer:{' '}
-              <code translate="no">node &quot;$HOME/.replyslip/replyslip.mjs&quot; supervise --install --name &lt;name&gt;</code>
+              <code translate="no">node &quot;$HOME/.valetto/valetto.mjs&quot; supervise --install --name &lt;name&gt;</code>
             </li>
             <li>Revoke the old watcher key below.</li>
           </ol>
@@ -151,7 +151,7 @@ export function WatcherKeys() {
       {created ? (
         <OnceSecret title={`Watcher key for ${created.name}. Copy it now: it won’t be shown again.`} secret={created.secret}>
           <p className="dash-secret-help">
-            Legacy key. Save it to a private file and run <code translate="no">replyslip watch --key-file &lt;file&gt;</code> in another herdr
+            Legacy key. Save it to a private file and run <code translate="no">valetto watch --key-file &lt;file&gt;</code> in another herdr
             or Orca pane. That machine needs herdr 0.8.0+ or Orca 1.4.199+ with its CLI on (Settings → Experimental → CLI).
           </p>
         </OnceSecret>

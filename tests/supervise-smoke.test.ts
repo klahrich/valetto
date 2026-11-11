@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { runCommandWithTimeout } from '../packages/cli/src/drivers/command';
-import { identifyProcess, isReplyslipWatchCommand } from '../packages/cli/src/process-identity';
+import { identifyProcess, isWatcherCommand } from '../packages/cli/src/process-identity';
 import { installSupervision, uninstallSupervision } from '../packages/cli/src/supervise';
 
 describe('supervision subprocess smoke', () => {
@@ -14,7 +14,7 @@ describe('supervision subprocess smoke', () => {
     try {
       const identity = await identifyProcess(child.pid ?? 0);
       expect(identity?.cmdline ?? '').not.toEqual('');
-      expect(isReplyslipWatchCommand(identity?.cmdline ?? '')).toBe(false);
+      expect(isWatcherCommand(identity?.cmdline ?? '')).toBe(false);
       expect(identity?.startedAtMs).toEqual(expect.any(Number));
     } finally {
       child.kill();

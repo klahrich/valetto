@@ -159,7 +159,7 @@ describe('file lock ownership', () => {
 
   it('releases the agent queue when helper cleanup fails', async () => {
     const home = await mkdtemp(path.join(tmpdir(), 'replyslip-queue-'));
-    const file = path.join(home, '.replyslip', 'supervise', 'QueueBot.op');
+    const file = path.join(home, '.valetto', 'supervise', 'QueueBot.op');
     const first = withAgentOp(home, 'QueueBot', async () => {
       const listed = execFileSync('ps', ['-ww', '-eo', 'pid,args'], { encoding: 'utf8' });
       const line = listed.split('\n').find((row) => row.includes(file));

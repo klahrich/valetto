@@ -26,10 +26,14 @@ describe('wakes', () => {
       expect(sent.isError).toBe(false);
       const hit = receiver.hits.at(-1)!;
       expect(hit.raw).not.toContain('CANARY-BODY-message');
-      expect(hit.body.notice).toMatch(/check it with your ReplySlip tools/);
+      expect(hit.body.notice).toMatch(/check it with your Valetto tools/);
       const expected = createHmac('sha256', 'hook-secret').update(hit.raw).digest('hex');
+      expect(hit.headers['x-valetto-signature']).toBe(`sha256=${expected}`);
+      expect(hit.headers['x-valetto-wake-id']).toBe(hit.body.id);
+      // Pre-rename header names are still sent with the same values.
       expect(hit.headers['x-replyslip-signature']).toBe(`sha256=${expected}`);
       expect(hit.headers['x-replyslip-wake-id']).toBe(hit.body.id);
+      expect(hit.headers['user-agent']).toBe('Valetto/0.1');
     } finally {
       await receiver.close();
     }

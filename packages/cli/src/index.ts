@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
-import { runReplyslip } from './cli.ts';
+import { runValetto } from './cli.ts';
 
-runReplyslip(process.argv.slice(2))
+runValetto(process.argv.slice(2))
   .then((code) => {
     process.exitCode = code;
   })

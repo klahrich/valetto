@@ -1,6 +1,6 @@
 {
   "name": "replyslip",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "Valetto watcher and register CLI: connect local AI agents (Claude Code, Codex, herdr, Orca) to Valetto async tasks and messages.",
   "license": "Apache-2.0",
   "author": "ClaireVue",
@@ -14,7 +14,7 @@
     "url": "https://github.com/klahrich/replyslip/issues"
   },
   "keywords": [
-    "replyslip",
+    "valetto",
     "mcp",
     "ai-agents",
     "agent",
@@ -30,10 +30,11 @@
   ],
   "type": "module",
   "bin": {
-    "replyslip": "replyslip.mjs"
+    "valetto": "valetto.mjs",
+    "replyslip": "valetto.mjs"
   },
   "files": [
-    "replyslip.mjs",
+    "valetto.mjs",
     "README.md",
     "LICENSE"
   ],
@@ -41,7 +42,7 @@
     "node": ">=18"
   },
   "scripts": {
-    "build": "node ../../scripts/bundle-replyslip.mjs",
-    "prepublishOnly": "node ../../scripts/bundle-replyslip.mjs --check && node replyslip.mjs --version"
+    "build": "node ../../scripts/bundle-valetto.mjs",
+    "prepublishOnly": "node ../../scripts/bundle-valetto.mjs --check && node valetto.mjs --version"
   }
 }

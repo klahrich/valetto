@@ -251,12 +251,12 @@ exit 2;
 
 const POWERSHELL_LOCK = String.raw`
 $ErrorActionPreference = 'Stop'
-$path = $env:REPLYSLIP_LOCK_PATH
-$wait = [int]$env:REPLYSLIP_LOCK_WAIT_MS
+$path = $env:VALETTO_LOCK_PATH
+$wait = [int]$env:VALETTO_LOCK_WAIT_MS
 Add-Type -TypeDefinition @"
 using System;
 using System.Runtime.InteropServices;
-public static class ReplySlipLock {
+public static class ValettoLock {
   [StructLayout(LayoutKind.Sequential)]
   public struct OVERLAPPED {
     public IntPtr Internal;
@@ -275,22 +275,22 @@ public static class ReplySlipLock {
   public static extern bool CloseHandle(IntPtr h);
 }
 "@
-$handle = [ReplySlipLock]::CreateFileW($path, [uint32]3221225472, [uint32]7, [IntPtr]::Zero, [uint32]4, [uint32]0, [IntPtr]::Zero)
+$handle = [ValettoLock]::CreateFileW($path, [uint32]3221225472, [uint32]7, [IntPtr]::Zero, [uint32]4, [uint32]0, [IntPtr]::Zero)
 if ($handle.ToInt64() -eq -1) { Write-Output 'error open'; exit 1 }
-$ov = New-Object ReplySlipLock+OVERLAPPED
+$ov = New-Object ValettoLock+OVERLAPPED
 $deadline = [DateTime]::UtcNow.AddMilliseconds($wait)
 $locked = $false
 while ($true) {
-  if ([ReplySlipLock]::LockFileEx($handle, [uint32]3, [uint32]0, [uint32]1, [uint32]0, [ref]$ov)) { $locked = $true; break }
+  if ([ValettoLock]::LockFileEx($handle, [uint32]3, [uint32]0, [uint32]1, [uint32]0, [ref]$ov)) { $locked = $true; break }
   if ([DateTime]::UtcNow -ge $deadline) { break }
   Start-Sleep -Milliseconds 10
 }
-if (-not $locked) { [ReplySlipLock]::CloseHandle($handle) | Out-Null; Write-Output 'busy'; exit 2 }
+if (-not $locked) { [ValettoLock]::CloseHandle($handle) | Out-Null; Write-Output 'busy'; exit 2 }
 Write-Output 'ok'
 [Console]::Out.Flush()
 [Console]::In.ReadLine() | Out-Null
-[ReplySlipLock]::UnlockFileEx($handle, [uint32]0, [uint32]1, [uint32]0, [ref]$ov) | Out-Null
-[ReplySlipLock]::CloseHandle($handle) | Out-Null
+[ValettoLock]::UnlockFileEx($handle, [uint32]0, [uint32]1, [uint32]0, [ref]$ov) | Out-Null
+[ValettoLock]::CloseHandle($handle) | Out-Null
 Write-Output 'bye'
 `;
 
@@ -338,7 +338,7 @@ if (helper === 'perl') {
   child = spawn(bin, ['-NoProfile', '-NonInteractive', '-Command', psScript], {
     stdio: ['pipe', 'pipe', 'ignore'],
     windowsHide: true,
-    env: { ...process.env, REPLYSLIP_LOCK_PATH: file, REPLYSLIP_LOCK_WAIT_MS: String(waitMs) },
+    env: { ...process.env, VALETTO_LOCK_PATH: file, VALETTO_LOCK_WAIT_MS: String(waitMs) },
   });
 }
 Atomics.store(view, 2, child.pid ?? 0);

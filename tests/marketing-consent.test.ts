@@ -167,11 +167,11 @@ describe('marketing consent', () => {
     expect(back.marketingConsentAt!.getTime()).toBe(changedRow.marketingConsentAt!.getTime());
 
     const link = unsubscribeRequestUrl(back.id);
-    expect(unsubscribeUrl(back.id)).toMatch(/^https:\/\/replyslip\.com\/api\/v1\/unsubscribe\?token=/);
+    expect(unsubscribeUrl(back.id)).toMatch(/^https:\/\/valetto\.tech\/api\/v1\/unsubscribe\?token=/);
     const gone = await call(unsubscribeGet, link);
     expect(gone.status).toBe(200);
     expect(gone.res.headers.get('content-type')).toContain('text/html');
-    expect(gone.text).toContain('You are unsubscribed from ReplySlip marketing emails.');
+    expect(gone.text).toContain('You are unsubscribed from Valetto marketing emails.');
     const afterLink = await userRow(email);
     expect(afterLink.marketingOptIn).toBe(false);
     expect(afterLink.marketingConsentText).toBe(WORDING);

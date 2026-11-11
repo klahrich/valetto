@@ -1,6 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 
-import { GUEST_WAKE_NOTICE, REVIEW_NEEDED_NOTICE, WAKE_NOTICE } from '../../../lib/wake-notice.ts';
+import {
+  GUEST_WAKE_NOTICE,
+  LEGACY_GUEST_WAKE_NOTICE,
+  LEGACY_REVIEW_NEEDED_NOTICE,
+  REVIEW_NEEDED_NOTICE,
+  WAKE_NOTICE,
+} from '../../../lib/wake-notice.ts';
 import { defaultRegistry, type DriverRegistry } from './drivers/registry.ts';
 import type { CommandRunner, DriverCheck, NudgeDriver } from './drivers/types.ts';
 import { NUDGE_BUDGET_MS } from './supervise-constants.ts';
@@ -28,8 +34,9 @@ export type DueWake = {
 
 /** Poll text never replaces the fixed notice unless it is the guest-task or review-needed constant. */
 export function nudgeText(wake: DueWake): string {
-  if (wake.notice === GUEST_WAKE_NOTICE) return GUEST_WAKE_NOTICE;
-  if (wake.notice === REVIEW_NEEDED_NOTICE) return REVIEW_NEEDED_NOTICE;
+  // The poll sends the pre-rename wording so older watchers still match it. Either wording types the current one.
+  if (wake.notice === GUEST_WAKE_NOTICE || wake.notice === LEGACY_GUEST_WAKE_NOTICE) return GUEST_WAKE_NOTICE;
+  if (wake.notice === REVIEW_NEEDED_NOTICE || wake.notice === LEGACY_REVIEW_NEEDED_NOTICE) return REVIEW_NEEDED_NOTICE;
   return WAKE_NOTICE;
 }
 
@@ -53,7 +60,7 @@ export async function ensureDriverCheck(
   if (cached?.ok) return cached;
   const result = await driver.check();
   checks.set(driver.id, result);
-  if (result.ok) log(`[replyslip] driver ${driver.id}: ok${result.version ? ` (${result.version})` : ''}`);
+  if (result.ok) log(`[valetto] driver ${driver.id}: ok${result.version ? ` (${result.version})` : ''}`);
   return result;
 }
 
@@ -81,7 +88,7 @@ export async function nudgeWakes(options: {
   for (const wake of options.wakes) {
     const resolved = resolveWake(wake);
     if (!resolved) {
-      warnOnce(options.warned, wake.id, 'missing', log, `[replyslip] wake ${wake.id}: missing driver and target; not acked`);
+      warnOnce(options.warned, wake.id, 'missing', log, `[valetto] wake ${wake.id}: missing driver and target; not acked`);
       continue;
     }
     const key = `${wake.id}:${resolved.driver}`;
@@ -92,7 +99,7 @@ export async function nudgeWakes(options: {
         key,
         'unknown',
         log,
-        `[replyslip] wake ${wake.id} driver ${resolved.driver}: unknown driver; not acked`,
+        `[valetto] wake ${wake.id} driver ${resolved.driver}: unknown driver; not acked`,
       );
       continue;
     }
@@ -103,7 +110,7 @@ export async function nudgeWakes(options: {
         key,
         'check',
         log,
-        `[replyslip] wake ${wake.id} driver ${driver.id}: ${check.message ?? 'driver check failed'}; not acked`,
+        `[valetto] wake ${wake.id} driver ${driver.id}: ${check.message ?? 'driver check failed'}; not acked`,
       );
       continue;
     }
@@ -111,7 +118,7 @@ export async function nudgeWakes(options: {
     const result = await driver.nudge(resolved.target, nudgeText(wake));
     if (result.ok) {
       acked.push(wake.id);
-      log(`[replyslip] woke ${wake.agent_name || resolved.target} via ${driver.id} (${wakeLabel(wake)})`);
+      log(`[valetto] woke ${wake.agent_name || resolved.target} via ${driver.id} (${wakeLabel(wake)})`);
       continue;
     }
     warnOnce(
@@ -119,7 +126,7 @@ export async function nudgeWakes(options: {
       key,
       'nudge',
       log,
-      `[replyslip] wake ${wake.id} driver ${driver.id}: ${result.error ?? 'nudge failed'}; not acked`,
+      `[valetto] wake ${wake.id} driver ${driver.id}: ${result.error ?? 'nudge failed'}; not acked`,
     );
   }
   return acked;
@@ -155,16 +162,16 @@ export class AgentWatchUnsupportedError extends Error {
   }
 }
 
-/** The first poll found no ReplySlip API at this origin (404, or a 2xx body that is not JSON). */
+/** The first poll found no Valetto API at this origin (404, or a 2xx body that is not JSON). */
 export class WatcherNotFoundError extends Error {
   constructor(origin: string) {
-    super(`No ReplySlip server at ${origin}. Check --url.`);
+    super(`No Valetto server at ${origin}. Check --url.`);
     this.name = 'WatcherNotFoundError';
   }
 }
 
-/** True when a failed poll means the origin is not a ReplySlip server at all. */
-function notReplyslip(err: WatcherPollError): boolean {
+/** True when a failed poll means the origin is not a Valetto server at all. */
+function notValetto(err: WatcherPollError): boolean {
   return err.step === 'poll' && (err.reason === '404' || err.reason === 'invalid JSON');
 }
 
@@ -327,7 +334,7 @@ export async function watch(options: {
           agentWorkspace = workspaceId;
           unbind = bindWatcherLockLifecycle(hold.release);
           options.progress?.attach({ pid: hold.pid, token: hold.token, startedAt: hold.startedAt });
-          log(`[replyslip] watching ${base} for agent ${name} (workspace ${workspaceId}); only this agent's wakes`);
+          log(`[valetto] watching ${base} for agent ${name} (workspace ${workspaceId}); only this agent's wakes`);
         } else if (options.agent && hold) {
           const check = hold.stillHeld();
           if (!check.held) {
@@ -364,7 +371,7 @@ export async function watch(options: {
           }
           hold = acquired.hold;
           unbind = bindWatcherLockLifecycle(hold.release);
-          log(`[replyslip] watching ${base}${workspaceId ? ` (workspace ${workspaceId})` : ''}`);
+          log(`[valetto] watching ${base}${workspaceId ? ` (workspace ${workspaceId})` : ''}`);
         } else if (!options.agent && hold) {
           // Re-read the lock every poll. If another watcher replaced it (say with --force), stop before nudging.
           const check = hold.stillHeld();
@@ -392,14 +399,14 @@ export async function watch(options: {
             agentName,
           );
         }
-        if (failures > 0) log(`[replyslip] ${base} reachable again`);
+        if (failures > 0) log(`[valetto] ${base} reachable again`);
         failures = 0;
       } catch (err) {
-        if (err instanceof WatcherPollError && !polledOk && notReplyslip(err)) throw new WatcherNotFoundError(base);
+        if (err instanceof WatcherPollError && !polledOk && notValetto(err)) throw new WatcherNotFoundError(base);
         if (!(err instanceof WatcherPollError) || options.once) throw err;
         failures += 1;
         delay = backoffDelay(options.intervalMs, failures);
-        log(`[replyslip] ${err.step} failed (${err.reason}), retrying in ${formatDelay(delay)}`);
+        log(`[valetto] ${err.step} failed (${err.reason}), retrying in ${formatDelay(delay)}`);
       }
       if (options.once) return {};
       options.progress?.note('sleep', delay);
