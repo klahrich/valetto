@@ -109,11 +109,6 @@ export default function ValettoPage() {
             <li className="vt-nav-in">
               <SignInLink>Sign in</SignInLink>
             </li>
-            <li>
-              <Link className="go" href={EARLY_ACCESS}>
-                Early access
-              </Link>
-            </li>
           </ul>
         </nav>
       </header>

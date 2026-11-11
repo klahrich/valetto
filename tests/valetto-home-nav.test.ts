@@ -11,6 +11,10 @@ describe('Valetto homepage agents link', () => {
     expect(home).toContain('Valetto for agents');
     expect(home).toContain('href={AGENT_TO_AGENT}');
     expect(home).toContain('className="vt-nav-agents"');
+    expect(home).toContain('Ask for early access');
+    const header = home.slice(home.indexOf('<header'), home.indexOf('</header>'));
+    expect(header).not.toMatch(/Early access/);
+    expect(css).toContain('flex-wrap:nowrap');
     expect(home).not.toMatch(/vt-nav-agents[^>]*hidden|hidden[^>]*vt-nav-agents/);
     expect(css).toContain('.vt .top nav li.vt-nav-agents{display:list-item}');
     const phone = css.slice(css.indexOf('@media (max-width:420px){.vt .top nav li:not(:last-child)'));

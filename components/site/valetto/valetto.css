@@ -31,16 +31,17 @@
   .vt-hero-stage{margin-top:44px;justify-self:center}
 }
 @media (max-width:420px){.vt .top nav li:not(:last-child){display:none}}
-/* Phones keep Sign in and Valetto for agents. The shared header hides every link but the last below 760px. */
+/* Phones keep Sign in and Valetto for agents on the logo row. The shared header hides every other link below 760px. */
 @media (max-width:760px){
-  .vt .top{flex-wrap:wrap;row-gap:12px}
-  .vt .top nav{max-width:100%}
-  .vt .top nav ul{flex-wrap:wrap;justify-content:flex-end;row-gap:8px}
+  .vt .top{flex-wrap:nowrap;align-items:center;gap:12px}
+  .vt .top nav{max-width:none;min-width:0}
+  .vt .top nav ul{flex-wrap:nowrap;justify-content:flex-end;gap:14px}
   .vt .top nav li.vt-nav-agents{display:list-item}
 }
 @media (max-width:420px){
+  .vt .top{gap:8px}
   .vt .top nav li.vt-nav-in,.vt .top nav li.vt-nav-agents{display:list-item}
-  .vt .top nav ul:has(.vt-nav-in){gap:16px;row-gap:8px}
+  .vt .top nav ul{gap:10px;font-size:.75rem}
 }
 
 /* the phone: the customer's page, styled like a plain shadcn/ui form (white, neutral borders, rounded-lg inputs, one
