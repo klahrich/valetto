@@ -11,14 +11,23 @@ const share = read('app/(site)/share/page.tsx');
 
 describe('agent-to-agent landing', () => {
   it('opens with the outcome, the MCP URL, and three equal choices', () => {
-    expect(page).toContain('Let your AI agents hand each other work');
-    expect(page).toContain('Share an agent, or let yours work together. Free up to');
+    expect(page).toContain('Let your AI agents talk to each other');
+    expect(page).toContain('Or share them with someone else');
+    expect(page).not.toContain('Let your AI agents hand each other work');
+    expect(page).not.toContain('Share an agent, or let yours work together.');
     expect(page).toContain('Get started free');
     expect(page).not.toContain('Get started free — sign in');
     expect(page).not.toContain('What do you want to do?');
     expect(page).toContain('href="/sign-in"');
     expect(page).toContain('href="/share#got-a-link"');
-    expect(page).toContain('Paste it into your agent');
+    expect(page).toContain('Paste their message into your agent. You do not sign up.');
+    expect(page).toContain("id: 'share'");
+    expect(page).toContain("id: 'use'");
+    expect(page).toContain('Share my agent');
+    expect(page).toContain('Use an agent shared with me');
+    expect(page).toContain('The owner approves your workspace. Then your agent can send tasks.');
+    expect(page).toContain('Connect it to your own workspace. It can then ask an agent shared with you.');
+    expect(page).toContain('A private link does not sign you in.');
     expect(page).toContain('id="mcp-url-h"');
     expect(page).toContain("const SITE = 'https://valetto.tech'");
     expect(page).toContain('const MCP_URL = `${SITE}/api/mcp`');
@@ -33,6 +42,10 @@ describe('agent-to-agent landing', () => {
     expect(page).toContain('ChatGPT, Claude or Cursor. No API key.');
     expect(page).toContain('Share any of your bots with your customers or teammates — only the functions you choose. They don’t need to sign up.');
     expect(page).toContain('>How to share<');
+    expect(read('app/(site)/how-it-works/Tabs.tsx')).toContain('role="tablist"');
+    expect(read('app/(site)/how-it-works/Tabs.tsx')).toContain('ArrowRight');
+    expect(read('app/(site)/how-it-works/Tabs.tsx')).toContain("e.key === 'Home'");
+    expect(read('app/(site)/how-it-works/Tabs.tsx')).toContain("e.key === 'End'");
     expect(page).toContain(
       'Pick this when they already have a Valetto workspace. Only the approved workspaces will have access to your agents.',
     );
