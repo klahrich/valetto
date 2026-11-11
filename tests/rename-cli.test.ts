@@ -2,7 +2,7 @@ import { mkdtemp, readFile, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { runReplyslip } from '../packages/cli/src/cli';
+import { runValetto } from '../packages/cli/src/cli';
 import { agentKeyPath } from '../packages/cli/src/register';
 
 const KEY = 'rsk_CANARY_KEY_do_not_print';
@@ -35,20 +35,20 @@ async function seedKey(home: string, name: string, extra: Record<string, unknown
   return target;
 }
 
-describe('replyslip rename', () => {
+describe('valetto rename', () => {
   it('prints help that includes rename, without starting a network call', async () => {
     const io = capture();
     const fetchImpl: typeof fetch = async () => {
       throw new Error('help must not touch the network');
     };
-    expect(await runReplyslip(['rename', '--help'], { ...io, fetchImpl, env: {} })).toBe(0);
-    expect(io.out.join('\n')).toContain('replyslip rename --to <new-name>');
+    expect(await runValetto(['rename', '--help'], { ...io, fetchImpl, env: {} })).toBe(0);
+    expect(io.out.join('\n')).toContain('valetto rename --to <new-name>');
     expect(io.err).toEqual([]);
   });
 
   it('patches the server, moves the key file, and never prints the key', async () => {
     const home = await mkdtemp(path.join(tmpdir(), 'replyslip-'));
-    await (await import('node:fs/promises')).mkdir(path.join(home, '.replyslip', 'agents'), { recursive: true, mode: 0o700 });
+    await (await import('node:fs/promises')).mkdir(path.join(home, '.valetto', 'agents'), { recursive: true, mode: 0o700 });
     await seedKey(home, 'OldBot');
     const urls: string[] = [];
     const auths: string[] = [];
@@ -64,7 +64,7 @@ describe('replyslip rename', () => {
       });
     };
     const io = capture();
-    const code = await runReplyslip(['rename', '--name', 'OldBot', '--to', 'NewBot'], {
+    const code = await runValetto(['rename', '--name', 'OldBot', '--to', 'NewBot'], {
       home,
       env: {},
       fetchImpl,
@@ -88,7 +88,7 @@ describe('replyslip rename', () => {
 
   it('leaves the local file alone when the server rejects the name', async () => {
     const home = await mkdtemp(path.join(tmpdir(), 'replyslip-'));
-    await (await import('node:fs/promises')).mkdir(path.join(home, '.replyslip', 'agents'), { recursive: true, mode: 0o700 });
+    await (await import('node:fs/promises')).mkdir(path.join(home, '.valetto', 'agents'), { recursive: true, mode: 0o700 });
     await seedKey(home, 'OldBot');
     const fetchImpl: typeof fetch = async () =>
       new Response(JSON.stringify({ error: { code: 'name_taken', message: 'An agent named Taken already exists in this workspace.' } }), {
@@ -96,7 +96,7 @@ describe('replyslip rename', () => {
         headers: { 'content-type': 'application/json' },
       });
     const io = capture();
-    const code = await runReplyslip(['rename', '--name', 'OldBot', '--to', 'Taken'], {
+    const code = await runValetto(['rename', '--name', 'OldBot', '--to', 'Taken'], {
       home,
       env: {},
       fetchImpl,

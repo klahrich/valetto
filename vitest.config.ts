@@ -21,7 +21,7 @@ export default defineConfig({
       ENCRYPTION_KEY: TEST_ENCRYPTION_KEY,
       CRON_SECRET: 'test-cron-secret',
       UNSUBSCRIBE_SECRET: TEST_UNSUBSCRIBE_SECRET,
-      REPLYSLIP_ALLOW_PRIVATE_WEBHOOKS: '1',
+      VALETTO_ALLOW_PRIVATE_WEBHOOKS: '1',
     },
   },
   resolve: {

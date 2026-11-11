@@ -5,7 +5,7 @@ import { chmodSync, closeSync, lstatSync, mkdirSync, openSync, readdirSync, read
 import { hostname, homedir, uptime } from 'node:os';
 import path from 'node:path';
 import { acquireFileLockSync, FILE_LOCK_WAIT_MS, FileLockError, lockHeld, releaseFileLock, type HeldFileLock } from './file-lock.ts';
-import { replyslipHome } from './register.ts';
+import { stateHome, stateHomes } from './home.ts';
 
 export type WatcherLockInfo = {
   pid: number;
@@ -19,7 +19,7 @@ export type WatcherLockInfo = {
   alias?: boolean;
   /** Random per-acquire value. With pid and startedAt it says whether a file is this hold's. Older locks omit it. */
   token?: string;
-  /** Set on a per-agent watcher's lock (`replyslip watch` with the agent's own key). Absent on a legacy machine-wide lock. */
+  /** Set on a per-agent watcher's lock (`valetto watch` with the agent's own key). Absent on a legacy machine-wide lock. */
   agentId?: string;
   agentName?: string;
 };
@@ -106,7 +106,7 @@ function scopeHash(material: string): string {
 
 /**
  * The lock scope ignores the server address: one workspace gets one watcher on this machine whichever
- * origin it polls (replyslip.com and valetto.tech are one backend). `sha256("workspace" + newline + id)`,
+ * origin it polls (valetto.tech and the retired replyslip.com are one backend). `sha256("workspace" + newline + id)`,
  * or `sha256("key" + newline + sha256(key))` when the poll did not return a workspace id.
  */
 export function watcherScopeId(workspaceId: string | null | undefined, watcherKey: string): string {
@@ -134,37 +134,37 @@ export const HOSTED_ORIGINS = [
 
 export function watcherLockPath(home: string, scopeId: string): string {
   if (!/^[0-9a-f]{16}$/.test(scopeId)) throw new Error('Invalid watcher lock scope.');
-  return path.join(replyslipHome(home), `watcher-${scopeId}.lock`);
+  return path.join(stateHome(home), `watcher-${scopeId}.lock`);
 }
 
 export function alreadyRunningMessage(pid: number, origin: string, lockPath: string): string {
-  return `A ReplySlip watcher is already running for this workspace (pid ${pid}, origin ${origin}, lock ${lockPath}); it delivers every local agent in this workspace. If pid ${pid} is not a ReplySlip watcher, rerun with --force.`;
+  return `A Valetto watcher is already running for this workspace (pid ${pid}, origin ${origin}, lock ${lockPath}); it delivers every local agent in this workspace. If pid ${pid} is not a Valetto watcher, rerun with --force.`;
 }
 
 /** A second per-agent watcher for the same agent on this machine. */
 export function agentAlreadyRunningMessage(agentName: string, pid: number, origin: string, lockPath: string): string {
-  return `A ReplySlip watcher is already running for agent ${agentName} (pid ${pid}, origin ${origin}, lock ${lockPath}). If pid ${pid} is not a ReplySlip watcher, rerun with --force.`;
+  return `A Valetto watcher is already running for agent ${agentName} (pid ${pid}, origin ${origin}, lock ${lockPath}). If pid ${pid} is not a Valetto watcher, rerun with --force.`;
 }
 
 /** A legacy `watch --key-file` started while per-agent watchers run for the same workspace. */
 export function agentWatchersRunningMessage(agentName: string, pid: number, lockPath: string): string {
-  return `A per-agent ReplySlip watcher is running for agent ${agentName} in this workspace (pid ${pid}, lock ${lockPath}). Each agent now runs its own watcher, so a machine-wide watcher beside it could deliver the same wake twice. Stop the per-agent watchers first, or keep them and do not start this one. If pid ${pid} is not a ReplySlip watcher, rerun with --force.`;
+  return `A per-agent Valetto watcher is running for agent ${agentName} in this workspace (pid ${pid}, lock ${lockPath}). Each agent now runs its own watcher, so a machine-wide watcher beside it could deliver the same wake twice. Stop the per-agent watchers first, or keep them and do not start this one. If pid ${pid} is not a Valetto watcher, rerun with --force.`;
 }
 
 /** The per-agent watcher refuses to start, or stops, while a legacy machine-wide watcher for the workspace runs here. */
 export function legacyWatcherRunningMessage(pid: number, origin: string, lockPath: string): string {
-  return `A legacy machine-wide ReplySlip watcher (workspace watcher key) is running for this workspace on this machine (pid ${pid}, origin ${origin}, lock ${lockPath}). It already types into every local agent's pane, so this per-agent watcher will not start beside it on this machine, to avoid delivering a wake twice. Ask the human to stop that watcher first (Ctrl-C in its pane, or kill ${pid}), then start one \`replyslip watch\` per agent, and revoke the old watcher key in the dashboard under Watchers. If pid ${pid} is not a ReplySlip watcher, delete ${lockPath} and retry.`;
+  return `A legacy machine-wide Valetto watcher (workspace watcher key) is running for this workspace on this machine (pid ${pid}, origin ${origin}, lock ${lockPath}). It already types into every local agent's pane, so this per-agent watcher will not start beside it on this machine, to avoid delivering a wake twice. Ask the human to stop that watcher first (Ctrl-C in its pane, or kill ${pid}), then start one \`valetto watch\` per agent, and revoke the old watcher key in the dashboard under Watchers. If pid ${pid} is not a Valetto watcher, delete ${lockPath} and retry.`;
 }
 
 /** Printed when the poll loop finds its main lock rewritten by another watcher (for example one started with --force). */
 export function lockLostMessage(lockPath: string, holder: WatcherLockInfo | null): string {
   const by = holder ? `pid ${holder.pid}, origin ${holder.origin}` : 'the file was removed';
-  return `[replyslip] lock ${lockPath} is no longer held by this watcher (${by}); stopping so only one watcher delivers this workspace.`;
+  return `[valetto] lock ${lockPath} is no longer held by this watcher (${by}); stopping so only one watcher delivers this workspace.`;
 }
 
 export function agentRunningStatusMessage(pid: number, origin: string, agentName: string, workspaceId?: string): string {
   const scope = workspaceId ? ` in workspace ${workspaceId}` : '';
-  return `A ReplySlip watcher is running for agent ${agentName}${scope} (pid ${pid}, origin ${origin}).`;
+  return `A Valetto watcher is running for agent ${agentName}${scope} (pid ${pid}, origin ${origin}).`;
 }
 
 /** One `watch --status` line: per-agent locks name the agent, legacy machine-wide locks keep the old wording. */
@@ -175,10 +175,10 @@ export function statusLine(lock: WatcherLockInfo): string {
 
 export function runningStatusMessage(pid: number, origin: string, workspaceId?: string): string {
   const scope = workspaceId ? `workspace ${workspaceId}` : 'this workspace';
-  return `A ReplySlip watcher is running for ${scope} (pid ${pid}, origin ${origin}).`;
+  return `A Valetto watcher is running for ${scope} (pid ${pid}, origin ${origin}).`;
 }
 
-export const WATCHER_NOT_RUNNING_MESSAGE = 'No ReplySlip watcher is running for this workspace.';
+export const WATCHER_NOT_RUNNING_MESSAGE = 'No Valetto watcher is running for this workspace.';
 
 /** Boot time rounded to the nearest minute, for hosts without `/proc/sys/kernel/random/boot_id`. */
 export function roundedBootId(nowMs: number, uptimeSeconds: number): string {
@@ -250,7 +250,7 @@ export function pidIsAlive(pid: number): boolean {
 /**
  * Live means this hostname, this boot id, and a live pid. A lock carrying our own pid is live only when this
  * process holds it now: otherwise it was left by an earlier process that had the same pid (a container
- * restarted as pid 1 with a persistent ~/.replyslip has the same hostname and boot id).
+ * restarted as pid 1 with a persistent ~/.valetto has the same hostname and boot id).
  */
 function lockIsCurrent(info: WatcherLockInfo, self: Self, isAlive: (pid: number) => boolean): boolean {
   if (info.hostname !== self.hostname || info.bootId !== self.bootId) return false;
@@ -258,18 +258,23 @@ function lockIsCurrent(info: WatcherLockInfo, self: Self, isAlive: (pid: number)
   return isAlive(info.pid);
 }
 
-/** Live locks under ~/.replyslip. A different hostname, boot id, or a dead pid is left out. */
+/** Lock file names in `dir`, or none when it does not exist. */
+function lockNames(dir: string): string[] {
+  try {
+    return readdirSync(dir).filter((name) => LOCK_NAME.test(name));
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Live locks under ~/.valetto and the pre-rename ~/.replyslip (an older CLI still writes there).
+ * A different hostname, boot id, or a dead pid is left out. One holder found in both is listed once.
+ */
 export function listLiveWatcherLocks(
   home = homedir(),
   self?: { hostname?: string; bootId?: string; pid?: number; isAlive?: (pid: number) => boolean },
 ): WatcherLockInfo[] {
-  const dir = replyslipHome(home);
-  let names: string[] = [];
-  try {
-    names = readdirSync(dir);
-  } catch {
-    return [];
-  }
   const identity: Self = {
     hostname: self?.hostname ?? hostname(),
     bootId: self?.bootId ?? machineBootId(),
@@ -277,10 +282,16 @@ export function listLiveWatcherLocks(
   };
   const isAlive = self?.isAlive ?? pidIsAlive;
   const live: WatcherLockInfo[] = [];
-  for (const name of names) {
-    if (!LOCK_NAME.test(name)) continue;
-    const info = readWatcherLock(path.join(dir, name));
-    if (info && !info.alias && lockIsCurrent(info, identity, isAlive)) live.push(info);
+  const seen = new Set<string>();
+  for (const dir of stateHomes(home)) {
+    for (const name of lockNames(dir)) {
+      const info = readWatcherLock(path.join(dir, name));
+      if (!info || info.alias || !lockIsCurrent(info, identity, isAlive)) continue;
+      const key = `${holdKey(info)}|${info.agentId ?? ''}|${info.workspaceId ?? ''}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      live.push(info);
+    }
   }
   live.sort((a, b) => a.origin.localeCompare(b.origin) || a.pid - b.pid);
   return live;
@@ -387,7 +398,7 @@ function acquireMain(
   if (second !== 'lost') return second;
   const last = readWatcherLock(file);
   if (last && lockIsCurrent(last, self, isAlive)) return running(last, file);
-  throw new Error('Could not acquire the ReplySlip watcher lock.');
+  throw new Error('Could not acquire the Valetto watcher lock.');
 }
 
 /** A live lock, other than `file`, that covers the same workspace: same workspace id, or a pre-0.1.2 name for it. */
@@ -399,22 +410,20 @@ function sameWorkspaceLock(
   self: Self,
   isAlive: (pid: number) => boolean,
 ): { info: WatcherLockInfo; path: string } | null {
-  const dir = replyslipHome(home);
-  let names: string[] = [];
-  try {
-    names = readdirSync(dir);
-  } catch {
-    return null;
-  }
-  for (const name of names) {
-    const full = path.join(dir, name);
-    if (!LOCK_NAME.test(name) || full === file) continue;
-    const info = readWatcherLock(full);
-    if (!info || !lockIsCurrent(info, self, isAlive)) continue;
-    const sameId = Boolean(workspaceId) && info.workspaceId === workspaceId;
-    const legacyName = `watcher-${legacyWatcherScopeId(info.origin, workspaceId, watcherKey)}.lock`;
-    // An alias copy's holder keeps its main lock under this workspace's scope, which is `file`.
-    if (sameId || name === legacyName) return { info, path: info.alias && sameId ? file : full };
+  const [primary] = stateHomes(home);
+  for (const dir of stateHomes(home)) {
+    for (const name of lockNames(dir)) {
+      const full = path.join(dir, name);
+      if (full === file) continue;
+      const info = readWatcherLock(full);
+      if (!info || !lockIsCurrent(info, self, isAlive)) continue;
+      const sameId = Boolean(workspaceId) && info.workspaceId === workspaceId;
+      const legacyName = `watcher-${legacyWatcherScopeId(info.origin, workspaceId, watcherKey)}.lock`;
+      // The same lock name in the other directory is the same scope, written by a CLI that used that directory.
+      const sameScopeElsewhere = dir !== primary && name === path.basename(file);
+      // An alias copy's holder keeps its main lock under this workspace's scope, which is `file`.
+      if (sameId || name === legacyName || sameScopeElsewhere) return { info, path: info.alias && sameId && dir === primary ? file : full };
+    }
   }
   return null;
 }
@@ -511,25 +520,19 @@ export function findLegacyWatcherLock(options: {
   isAlive?: (pid: number) => boolean;
 }): { info: WatcherLockInfo; path: string } | null {
   const home = options.home ?? homedir();
-  const dir = replyslipHome(home);
   const self = selfOf(options);
   const isAlive = options.isAlive ?? pidIsAlive;
-  let names: string[] = [];
-  try {
-    names = readdirSync(dir);
-  } catch {
-    return null;
-  }
   const legacyNames = new Set(
     [normalizeOrigin(options.origin), ...HOSTED_ORIGINS].map((origin) => `watcher-${legacyWatcherScopeId(origin, options.workspaceId, '')}.lock`),
   );
   legacyNames.add(`watcher-${watcherScopeId(options.workspaceId, '')}.lock`);
-  for (const name of names) {
-    if (!LOCK_NAME.test(name)) continue;
-    const full = path.join(dir, name);
-    const info = readWatcherLock(full);
-    if (!info || info.agentId || !lockIsCurrent(info, self, isAlive)) continue;
-    if (info.workspaceId === options.workspaceId || legacyNames.has(name)) return { info, path: full };
+  for (const dir of stateHomes(home)) {
+    for (const name of lockNames(dir)) {
+      const full = path.join(dir, name);
+      const info = readWatcherLock(full);
+      if (!info || info.agentId || !lockIsCurrent(info, self, isAlive)) continue;
+      if (info.workspaceId === options.workspaceId || legacyNames.has(name)) return { info, path: full };
+    }
   }
   return null;
 }
@@ -549,6 +552,18 @@ export function acquireAgentWatcherLock(options: AcquireAgentWatcherLockOptions)
   return withAcquireMutex(home, () => {
   const legacy = findLegacyWatcherLock({ ...options, home, origin });
   if (legacy) return { ok: false, reason: 'legacy', pid: legacy.info.pid, origin: legacy.info.origin, path: legacy.path };
+  let reclaim = options.reclaim;
+  const elsewhere = sameScopeInOtherHome(home, file, self, isAlive);
+  if (elsewhere) {
+    if (reclaim && matchesReclaim(elsewhere.info, reclaim)) {
+      // The proved-foreign lock being reclaimed sits in the other directory. Drop it there; this file is taken normally.
+      assertMutex();
+      removeLock(elsewhere.path);
+      reclaim = undefined;
+    } else if (reclaim || !options.force) {
+      return running(elsewhere.info, elsewhere.path);
+    }
+  }
   const identity: WatcherLockInfo = {
     pid: self.pid,
     startedAt: (options.now ?? new Date()).toISOString(),
@@ -564,10 +579,28 @@ export function acquireAgentWatcherLock(options: AcquireAgentWatcherLockOptions)
     origin,
     watcherKey: '',
     force: options.reclaim ? false : options.force,
-    reclaim: options.reclaim,
+    reclaim,
     onBeforeTakeover: options.onBeforeTakeover,
   });
   });
+}
+
+/**
+ * A live lock with the same name as `file` in the other directory (`~/.replyslip` or `~/.valetto`): the same agent
+ * or workspace, held by a CLI that used that directory. Lets an older and a newer CLI see each other's watcher.
+ */
+function sameScopeInOtherHome(
+  home: string,
+  file: string,
+  self: Self,
+  isAlive: (pid: number) => boolean,
+): { info: WatcherLockInfo; path: string } | null {
+  const [, other] = stateHomes(home);
+  if (path.dirname(file) === other) return null;
+  const full = path.join(other, path.basename(file));
+  const info = readWatcherLock(full);
+  if (!info || info.alias || !lockIsCurrent(info, self, isAlive)) return null;
+  return { info, path: full };
 }
 
 /** Release on SIGINT, SIGTERM, and process exit. Returns a function that removes those listeners. */
@@ -705,7 +738,7 @@ function assertMutex(): void {
 }
 
 function withAcquireMutex<T>(home: string, fn: () => T): T {
-  const file = path.join(replyslipHome(home), 'acquire.mutex');
+  const file = path.join(stateHome(home), 'acquire.mutex');
   const depth = acquireDepth.get(file) ?? 0;
   if (depth > 0) {
     acquireDepth.set(file, depth + 1);

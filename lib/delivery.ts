@@ -469,8 +469,7 @@ export function buildWebhookCall(
   }
   const headers: Record<string, string> = {
     'content-type': 'application/json',
-    'user-agent': 'ReplySlip/0.1',
-    'x-replyslip-wake-id': wakeId,
+    'user-agent': 'Valetto/0.1',
   };
   if (agent.webhookAuthMode === 'bearer') {
     if (!agent.webhookSecretCiphertext) throw new Error('Webhook bearer token is missing');
@@ -479,6 +478,8 @@ export function buildWebhookCall(
     if (!agent.webhookSecretCiphertext) throw new Error('Webhook HMAC secret is missing');
     const secret = decryptSecret(agent.webhookSecretCiphertext);
     const signature = createHmac('sha256', secret).update(body).digest('hex');
+    headers['x-valetto-signature'] = `sha256=${signature}`;
+    // Pre-rename name, still sent so receivers written for ReplySlip keep verifying.
     headers['x-replyslip-signature'] = `sha256=${signature}`;
   } else if (agent.webhookAuthMode === 'headers') {
     if (!agent.webhookHeadersCiphertext) throw new Error('Webhook headers are missing');
@@ -488,6 +489,8 @@ export function buildWebhookCall(
     }
   }
   headers['content-type'] = 'application/json';
+  headers['x-valetto-wake-id'] = wakeId;
+  // Pre-rename name of the same header, still sent for existing receivers.
   headers['x-replyslip-wake-id'] = wakeId;
   return { url: agent.webhookUrl, headers, body };
 }

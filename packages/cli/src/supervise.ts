@@ -6,6 +6,7 @@ import { accessSync, appendFileSync, chmodSync, closeSync, mkdirSync, openSync, 
 import path from 'node:path';
 import { AGENT_NAME_PATTERN } from '../../../lib/constants.ts';
 import { agentKeyPath } from './register.ts';
+import { envValue } from './home.ts';
 import { redactSecrets } from './redact.ts';
 import { identifyProcess, killLockAllowed, killSpawnAllowed, watchCommandForAgent, type ProcessIdentity } from './process-identity.ts';
 import { decideSupervision, type SuperviseDecision } from './supervise-decide.ts';
@@ -69,14 +70,24 @@ export type SuperviseIo = {
   label?: string;
   taskName?: string;
   unitName?: string;
+  legacyLabel?: string;
+  legacyTaskName?: string;
+  legacyUnitName?: string;
 };
 
 export type SuperviseResult = { ok: true; lines: string[] } | { ok: false; message: string };
 
+/** VALETTO_ORCA_BIN, or the pre-rename REPLYSLIP_ORCA_BIN. Copied into the timer as VALETTO_ORCA_BIN. */
+function orcaBinFrom(env: NodeJS.ProcessEnv | undefined): string | undefined {
+  return env ? envValue(env, 'ORCA_BIN') : undefined;
+}
+
 const defaultSleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 export function verifyDistributedScript(scriptPath: string): { ok: true } | { ok: false; message: string } {
-  if (path.basename(scriptPath) !== 'replyslip.mjs') return { ok: true };
+  const base = path.basename(scriptPath);
+  // The served file is valetto.mjs. replyslip.mjs is the same bundle under its pre-rename name.
+  if (base !== 'valetto.mjs' && base !== 'replyslip.mjs') return { ok: true };
   const checksumPath = `${scriptPath}.sha256`;
   let text: string;
   try {
@@ -84,7 +95,7 @@ export function verifyDistributedScript(scriptPath: string): { ok: true } | { ok
   } catch {
     return {
       ok: false,
-      message: `Refusing to install: ${checksumPath} is missing. Download replyslip.mjs and replyslip.mjs.sha256 from the same host, check the file, then run supervise --install again.`,
+      message: `Refusing to install: ${checksumPath} is missing. Download ${base} and ${base}.sha256 from the same host, check the file, then run supervise --install again.`,
     };
   }
   const expected = text.trim().split(/\s+/)[0]?.toLowerCase() ?? '';
@@ -103,9 +114,9 @@ export function supervisedEnv(request: SpawnRequest, base: NodeJS.ProcessEnv = {
     PATH: request.pathEnv,
     HOME: request.home,
     USERPROFILE: request.home,
-    REPLYSLIP_SUPERVISED: '1',
+    VALETTO_SUPERVISED: '1',
   };
-  if (request.orcaBin) env.REPLYSLIP_ORCA_BIN = request.orcaBin;
+  if (request.orcaBin) env.VALETTO_ORCA_BIN = request.orcaBin;
   // Orca on Windows resolves its runtime metadata from APPDATA. Dropping it makes
   // `orca status --json` return runtime_unavailable while Orca is running.
   for (const key of ['SystemRoot', 'WINDIR', 'COMSPEC', 'TEMP', 'TMP', 'APPDATA', 'LOCALAPPDATA', 'LANG', 'TMPDIR'] as const) {
@@ -180,6 +191,9 @@ export async function installSupervision(name: string, io: SuperviseIo = {}): Pr
       message: `${preflightMessage(plan.platform, applied.message)} Unit files were written, but the timer is not confirmed. The watcher was not started.`,
     };
   }
+  // The new timer is confirmed. Only now remove a timer an older CLI installed under the ReplySlip names, so a
+  // failed install never leaves the machine with no timer, and a good one never leaves two.
+  const legacyNotes = await removeLegacyTimer(plan, run);
   let started: SuperviseResult;
   try {
     started = await withAgentOp(home, name, async (op) => {
@@ -206,7 +220,7 @@ export async function installSupervision(name: string, io: SuperviseIo = {}): Pr
     throw err;
   }
   if (!started.ok) return started;
-  const lines = [...plan.notes, `Enrolled ${name}. The timer runs this same script: ${scriptPath}`, ...started.lines];
+  const lines = [...plan.notes, ...legacyNotes, `Enrolled ${name}. The timer runs this same script: ${scriptPath}`, ...started.lines];
   return { ok: true, lines };
 }
 
@@ -224,7 +238,7 @@ export async function stopSupervision(name: string, io: SuperviseIo = {}): Promi
 
 export async function uninstallSupervision(options: { name?: string; all?: boolean }, io: SuperviseIo = {}): Promise<SuperviseResult> {
   const names = options.all ? readEnrolled(io.home) : options.name ? [options.name] : [];
-  if (!options.all && !options.name) return { ok: false, message: 'Usage: replyslip supervise --uninstall --name <name> | --uninstall --all' };
+  if (!options.all && !options.name) return { ok: false, message: 'Usage: valetto supervise --uninstall --name <name> | --uninstall --all' };
   if (options.name) {
     const checked = checkName(options.name);
     if (checked) return { ok: false, message: checked };
@@ -521,7 +535,7 @@ async function startWatcher(
     name,
     home: io.home ?? '',
     pathEnv: io.env?.PATH ?? process.env.PATH ?? '',
-    ...(io.env?.REPLYSLIP_ORCA_BIN ? { orcaBin: io.env.REPLYSLIP_ORCA_BIN } : {}),
+    ...(orcaBinFrom(io.env) ? { orcaBin: orcaBinFrom(io.env) } : {}),
     ...(reclaim ? { reclaim } : {}),
   };
   try {
@@ -628,6 +642,7 @@ async function removeTimer(io: SuperviseIo): Promise<SuperviseResult> {
   if ('error' in plan) return { ok: true, lines: [plan.error] };
   const run = io.run ?? defaultRun;
   const applied = await runPlan(plan.uninstallCommands, run);
+  const legacyNotes = await removeLegacyTimer(plan, run);
   for (const file of plan.files) {
     try {
       unlinkSync(file.path);
@@ -638,7 +653,41 @@ async function removeTimer(io: SuperviseIo): Promise<SuperviseResult> {
     }
   }
   if (!applied.ok) return { ok: false, message: applied.message };
-  return { ok: true, lines: ['Supervision timer removed.'] };
+  return { ok: true, lines: [...legacyNotes, 'Supervision timer removed.'] };
+}
+
+/**
+ * Removes the pre-rename timer (launchd label, systemd unit, or scheduled task with the ReplySlip name) and its
+ * unit files. Every step is best effort. Returns one line when an old timer file was found and removed, or could not be.
+ */
+async function removeLegacyTimer(plan: InstallPlan, run: CommandRun): Promise<string[]> {
+  const existed = plan.legacyFiles.filter((file) => {
+    try {
+      accessSync(file);
+      return true;
+    } catch {
+      return false;
+    }
+  });
+  let commandRemoved = false;
+  for (const step of plan.legacyCommands) {
+    try {
+      if ((await run(step.command, step.args)).code === 0) commandRemoved = true;
+    } catch {
+      // Best effort: the old timer may never have existed here.
+    }
+  }
+  const left: string[] = [];
+  for (const file of plan.legacyFiles) {
+    try {
+      unlinkSync(file);
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== 'ENOENT') left.push(file);
+    }
+  }
+  if (left.length > 0) return [`Could not remove the old ReplySlip timer file ${left.join(', ')}. Delete it by hand.`];
+  if (existed.length > 0 || commandRemoved) return ['Removed the old ReplySlip timer. Only the Valetto timer runs now.'];
+  return [];
 }
 
 function planInput(io: SuperviseIo, scriptPath: string, nodePath: string): InstallPlanInput {
@@ -648,13 +697,16 @@ function planInput(io: SuperviseIo, scriptPath: string, nodePath: string): Insta
     nodePath,
     scriptPath,
     pathEnv: io.env?.PATH ?? process.env.PATH ?? '',
-    ...(io.env?.REPLYSLIP_ORCA_BIN ? { orcaBin: io.env.REPLYSLIP_ORCA_BIN } : {}),
+    ...(orcaBinFrom(io.env) ? { orcaBin: orcaBinFrom(io.env) } : {}),
     ...(io.env?.APPDATA ? { appData: io.env.APPDATA } : {}),
     ...(io.env?.LOCALAPPDATA ? { localAppData: io.env.LOCALAPPDATA } : {}),
     ...(typeof (io.uid ?? process.getuid?.()) === 'number' ? { uid: io.uid ?? process.getuid?.() } : {}),
     ...(io.label ? { label: io.label } : {}),
     ...(io.taskName ? { taskName: io.taskName } : {}),
     ...(io.unitName ? { unitName: io.unitName } : {}),
+    ...(io.legacyLabel ? { legacyLabel: io.legacyLabel } : {}),
+    ...(io.legacyTaskName ? { legacyTaskName: io.legacyTaskName } : {}),
+    ...(io.legacyUnitName ? { legacyUnitName: io.legacyUnitName } : {}),
   };
 }
 
@@ -723,7 +775,7 @@ function agentKeyFileExists(name: string, home: string | undefined): boolean {
 }
 
 function checkName(name: string): string | null {
-  if (!AGENT_NAME_PATTERN.test(name)) return 'Usage: replyslip supervise --install --name <name>';
+  if (!AGENT_NAME_PATTERN.test(name)) return 'Usage: valetto supervise --install --name <name>';
   return null;
 }
 

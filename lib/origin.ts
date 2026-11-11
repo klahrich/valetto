@@ -49,7 +49,7 @@ function assertCanonicalOrigin(name: string, entry: string): string {
     origin = 'null';
   }
   if (origin === 'null') {
-    throw new OriginConfigError(`${name} entry "${entry}" is not an origin. Use scheme://host[:port], e.g. https://replyslip.com.`);
+    throw new OriginConfigError(`${name} entry "${entry}" is not an origin. Use scheme://host[:port], e.g. https://valetto.tech.`);
   }
   if (origin !== entry) {
     throw new OriginConfigError(
@@ -94,8 +94,8 @@ export function configuredOrigins(raw: string | undefined = process.env.APP_ORIG
   if (entries.length === 0 && isProductionDeployment() && !warnState[WARNED]) {
     warnState[WARNED] = true;
     console.warn(
-      '[replyslip] WARNING: APP_ORIGIN is not set in production. The Origin check trusts the request Host and links use ' +
-        'the request origin. Set APP_ORIGIN to the public origin(s), e.g. https://replyslip.com.',
+      '[valetto] WARNING: APP_ORIGIN is not set in production. The Origin check trusts the request Host and links use ' +
+        'the request origin. Set APP_ORIGIN to the public origin(s), e.g. https://valetto.tech.',
     );
   }
   return entries;

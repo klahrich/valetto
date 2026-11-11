@@ -126,27 +126,28 @@ export function SetupPrompt({ tabs = DEFAULT_TABS, localExtra }: { tabs?: readon
           {t.key === 'local' && localExtra === undefined && (
             <>
               <p className="sp-note">
-                Or run it yourself with a join code. Register once, and the CLI saves the agent’s key on this machine:
+                Or run it yourself with a join code. Download the CLI, check it, and register once. The CLI saves the agent’s key on this machine:
               </p>
               <pre className="sp-cmd" translate="no">
-                <code>npx replyslip register --join-code &lt;code&gt; --name &lt;name&gt;</code>
+                <code>{`mkdir -p "$HOME/.valetto"
+curl -fsSL -o "$HOME/.valetto/valetto.mjs" https://valetto.tech/valetto.mjs
+curl -fsSL -o "$HOME/.valetto/valetto.mjs.sha256" https://valetto.tech/valetto.mjs.sha256
+(cd "$HOME/.valetto" && (sha256sum -c valetto.mjs.sha256 || shasum -a 256 -c valetto.mjs.sha256))
+node "$HOME/.valetto/valetto.mjs" register --join-code <code> --name <name>`}</code>
               </pre>
               <p className="sp-note">
                 Next, point the agent’s MCP config at that file (
                 <code translate="no" className="ic">
-                  npx replyslip key-path &lt;name&gt;
+                  node &quot;$HOME/.valetto/valetto.mjs&quot; key-path &lt;name&gt;
                 </code>{' '}
                 prints its path) and set Local delivery in your dashboard. The full steps are in{' '}
                 <a className="link" href="/skill.md">
                   skill.md
                 </a>
-                . Then download the watcher script, check it, and install that agent’s detached watcher. One command also installs the 120 second OS timer:
+                . Then install that agent’s detached watcher. One command also installs the 120 second OS timer:
               </p>
               <pre className="sp-cmd" translate="no">
-                <code>{`curl -fsSL -o "$HOME/.replyslip/replyslip.mjs" https://valetto.tech/replyslip.mjs
-curl -fsSL -o "$HOME/.replyslip/replyslip.mjs.sha256" https://valetto.tech/replyslip.mjs.sha256
-(cd "$HOME/.replyslip" && (sha256sum -c replyslip.mjs.sha256 || shasum -a 256 -c replyslip.mjs.sha256))
-node "$HOME/.replyslip/replyslip.mjs" supervise --install --name <name>`}</code>
+                <code>{`node "$HOME/.valetto/valetto.mjs" supervise --install --name <name>`}</code>
               </pre>
             </>
           )}

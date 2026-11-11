@@ -6,7 +6,7 @@ import { mkdtemp } from 'node:fs/promises';
 import { hostname, tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { runReplyslip } from '../packages/cli/src/cli';
+import { runValetto } from '../packages/cli/src/cli';
 import { acquireFileLockSync, releaseFileLock } from '../packages/cli/src/file-lock';
 import { killLockAllowed, killSpawnAllowed, linuxStartMs, parseWindowsIdentity } from '../packages/cli/src/process-identity';
 import { redactSecrets } from '../packages/cli/src/redact';
@@ -305,36 +305,36 @@ describe('supervision install and tick', () => {
       },
     };
     const io = capture();
-    expect(await runReplyslip(['supervise', '--install', '--name', 'Alpha'], { ...io, home, env: sup.env, supervise: sup })).toBe(0);
-    expect(await runReplyslip(['supervise', '--install', '--name', 'Beta'], { ...io, home, env: sup.env, supervise: sup })).toBe(0);
+    expect(await runValetto(['supervise', '--install', '--name', 'Alpha'], { ...io, home, env: sup.env, supervise: sup })).toBe(0);
+    expect(await runValetto(['supervise', '--install', '--name', 'Beta'], { ...io, home, env: sup.env, supervise: sup })).toBe(0);
     expect(spawned).toEqual([`Alpha ${script}`, `Beta ${script}`]);
     const unitDir = path.join(home, '.config', 'systemd', 'user');
-    const unit = readFileSync(path.join(unitDir, 'replyslip-supervise.service'), 'utf8');
-    const timer = readFileSync(path.join(unitDir, 'replyslip-supervise.timer'), 'utf8');
+    const unit = readFileSync(path.join(unitDir, 'valetto-supervise.service'), 'utf8');
+    const timer = readFileSync(path.join(unitDir, 'valetto-supervise.timer'), 'utf8');
     expect(unit).toContain('supervise --once');
     expect(timer).toContain('OnUnitActiveSec=120s');
     expect(unit).toContain('/usr/bin/node');
-    expect(unit).toContain('REPLYSLIP_ORCA_BIN="/opt/orca"');
+    expect(unit).toContain('VALETTO_ORCA_BIN="/opt/orca"');
     expect(unit).not.toContain(KEY);
     expect(unit).not.toContain('Linger');
     expect(calls.filter((call) => call[0] === 'systemctl' && call.includes('enable')).length).toBe(2);
 
     const tick = capture();
-    expect(await runReplyslip(['supervise', '--once'], { ...tick, home, env: sup.env, supervise: { ...sup, now: () => Date.now() } })).toBe(0);
+    expect(await runValetto(['supervise', '--once'], { ...tick, home, env: sup.env, supervise: { ...sup, now: () => Date.now() } })).toBe(0);
     expect(tick.out.join('\n')).toMatch(/Alpha: starting/);
     expect(tick.out.join('\n')).toMatch(/Beta: starting/);
 
     const stopped = capture();
-    expect(await runReplyslip(['supervise', '--stop', '--name', 'Alpha'], { ...stopped, home, env: sup.env, supervise: sup })).toBe(0);
+    expect(await runValetto(['supervise', '--stop', '--name', 'Alpha'], { ...stopped, home, env: sup.env, supervise: sup })).toBe(0);
     expect(isStopped(home, 'Alpha')).toBe(true);
     expect(isStopped(home, 'Beta')).toBe(false);
     const after = capture();
-    expect(await runReplyslip(['supervise', '--once'], { ...after, home, env: sup.env, supervise: sup })).toBe(0);
+    expect(await runValetto(['supervise', '--once'], { ...after, home, env: sup.env, supervise: sup })).toBe(0);
     expect(after.out.join('\n')).toMatch(/Alpha: stopped/);
     expect(after.out.join('\n')).toMatch(/Beta: starting/);
 
     const again = capture();
-    expect(await runReplyslip(['supervise', '--install', '--name', 'Alpha'], { ...again, home, env: sup.env, supervise: sup })).toBe(0);
+    expect(await runValetto(['supervise', '--install', '--name', 'Alpha'], { ...again, home, env: sup.env, supervise: sup })).toBe(0);
     expect(isStopped(home, 'Alpha')).toBe(false);
     expect(again.out.join('\n')).toMatch(/Watcher started for Alpha/);
   });
@@ -771,7 +771,7 @@ describe('supervision install and tick', () => {
     writeKey(home, 'Bot');
     const io = capture();
     const fetchImpl: typeof fetch = async () => new Response('no', { status: 401 });
-    expect(await runReplyslip(['watch', '--once', '--name', 'Bot'], { ...io, home, env: {}, fetchImpl })).toBe(1);
+    expect(await runValetto(['watch', '--once', '--name', 'Bot'], { ...io, home, env: {}, fetchImpl })).toBe(1);
     expect(readHold(home, 'Bot')).toBe('auth');
     expect(isStopped(home, 'Bot')).toBe(false);
     expect(io.err.join('\n')).not.toContain(KEY);
@@ -855,7 +855,7 @@ describe('supervision install and tick', () => {
     expect(percent).toContain('set "USERPROFILE=C:\\Users\\Ada%%PATH%%"');
     expect(percent).toContain('set "APPDATA=C:\\Users\\Ada%%PATH%%\\AppData\\Roaming"');
     expect(percent).toContain('set "LOCALAPPDATA=C:\\Users\\Ada\\AppData\\Local"');
-    expect(percent).toContain('set "REPLYSLIP_ORCA_BIN=C:\\orca%%PATH%%\\orca.exe"');
+    expect(percent).toContain('set "VALETTO_ORCA_BIN=C:\\orca%%PATH%%\\orca.exe"');
     expect(percent).toContain('"C:\\Users\\Ada%%PATH%%\\.replyslip\\replyslip.mjs"');
     expect(percent).not.toMatch(/(?<!%)%PATH%/);
     expect(plan.commands[0]?.args).toEqual(expect.arrayContaining(['/IT', '/RL', 'LIMITED', '/MO', '2']));
@@ -877,7 +877,7 @@ describe('supervision install and tick', () => {
 
     const logHome = await tempHome();
     appendSuperviseLog(logHome, `bearer ${KEY}`);
-    expect(readFileSync(path.join(logHome, '.replyslip', 'supervise', 'supervise.log'), 'utf8')).not.toContain(KEY);
+    expect(readFileSync(path.join(logHome, '.valetto', 'supervise', 'supervise.log'), 'utf8')).not.toContain(KEY);
 
     const env = supervisedEnv(
       { nodePath: '/usr/bin/node', scriptPath: '/s', name: 'Bot', home: '/home/ada', pathEnv: '/usr/bin', orcaBin: '/opt/orca' },
@@ -890,8 +890,9 @@ describe('supervision install and tick', () => {
       },
     );
     expect(env.REPLYSLIP_WATCHER_KEY).toBeUndefined();
+    expect(env.VALETTO_WATCHER_KEY).toBeUndefined();
     expect(env.PATH).toBe('/usr/bin');
-    expect(env.REPLYSLIP_ORCA_BIN).toBe('/opt/orca');
+    expect(env.VALETTO_ORCA_BIN).toBe('/opt/orca');
     expect(env.APPDATA).toBe('C:\\Users\\Ada\\AppData\\Roaming');
     expect(env.LOCALAPPDATA).toBe('C:\\Users\\Ada\\AppData\\Local');
     expect(JSON.stringify(env)).not.toContain(KEY);

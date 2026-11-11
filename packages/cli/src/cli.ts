@@ -23,46 +23,48 @@ import {
   statusLine,
 } from './watcher-lock.ts';
 import { clearProgress, writeHold, writeProgress, type WatcherProgress } from './watcher-progress.ts';
+import { envValue } from './home.ts';
 
-/** Set by scripts/bundle-replyslip.mjs from packages/cli/package.json. Undefined under tsx. */
-declare const __REPLYSLIP_VERSION__: string | undefined;
+/** Set by scripts/bundle-valetto.mjs from packages/cli/package.json. Undefined under tsx. */
+declare const __VALETTO_VERSION__: string | undefined;
 
-export const REPLYSLIP_VERSION = typeof __REPLYSLIP_VERSION__ === 'string' ? __REPLYSLIP_VERSION__ : 'dev';
+export const VALETTO_VERSION = typeof __VALETTO_VERSION__ === 'string' ? __VALETTO_VERSION__ : 'dev';
 
-const HELP = `replyslip ${REPLYSLIP_VERSION}: watcher and register CLI for Valetto (https://valetto.tech)
+const HELP = `valetto ${VALETTO_VERSION}: watcher and register CLI for Valetto (https://valetto.tech)
 
 Usage:
-  replyslip register --join-code <code> --name <name> [--driver orca|herdr --target <pane>] [--url <origin>] [--description <text>] [--force]
-  replyslip watch [--name <name>] [--url <origin>] [--interval <ms>] [--once] [--force]
-  replyslip watch --status
-  replyslip watch --stop --name <name>
-  replyslip supervise --install --name <name>
-  replyslip supervise --once
-  replyslip supervise --status
-  replyslip supervise --stop --name <name>
-  replyslip supervise --uninstall (--name <name> | --all)
-  replyslip rename --to <new-name> [--name <current-name>] [--url <origin>] [--force]
-  replyslip key-path <name>
-  replyslip whoami --name <name>
-  replyslip --help | --version
+  valetto register --join-code <code> --name <name> [--driver orca|herdr --target <pane>] [--url <origin>] [--description <text>] [--force]
+  valetto watch [--name <name>] [--url <origin>] [--interval <ms>] [--once] [--force]
+  valetto watch --status
+  valetto watch --stop --name <name>
+  valetto supervise --install --name <name>
+  valetto supervise --once
+  valetto supervise --status
+  valetto supervise --stop --name <name>
+  valetto supervise --uninstall (--name <name> | --all)
+  valetto rename --to <new-name> [--name <current-name>] [--url <origin>] [--force]
+  valetto key-path <name>
+  valetto whoami --name <name>
+  valetto --help | --version
 
-watch runs one agent's own watcher with the key register saved in ~/.replyslip/agents/<name>.json.
+watch runs one agent's own watcher with the key register saved in ~/.valetto/agents/<name>.json.
 It wakes only that agent's pane. --name is needed only when more than one agent is registered here.
 Each agent starts its own watcher. You can set local delivery at register with --driver and --target. After that, only the signed-in human can change it.
 rename changes this agent's name on the server and moves that key file. --name is needed only when
 more than one agent is registered here. If a watcher or supervisor was installed under the old name,
 stop it and install again with the new name.
-supervise --install uses this same script. It checks replyslip.mjs.sha256 beside it, installs an OS timer
+supervise --install uses this same script. It checks valetto.mjs.sha256 beside it, installs an OS timer
 (macOS LaunchAgent, Linux systemd --user, or Windows Task Scheduler) that runs supervise --once every 120 seconds,
 and starts the watcher detached. It does not type into a herdr or Orca pane.
 supervise --stop records a deliberate stop. Logout, sleep, and shutdown do not. --install clears that stop.
 
 Legacy, machine-wide (one workspace watcher key for every local agent in the workspace):
-  replyslip watch (--key-file <file> | --key <watcher-key>) [--url <origin>] [--interval <ms>] [--once] [--force]
+  valetto watch (--key-file <file> | --key <watcher-key>) [--url <origin>] [--interval <ms>] [--once] [--force]
 A per-agent watcher refuses to start while a legacy watcher for the same workspace runs on this machine.
 
---url defaults to REPLYSLIP_URL, then the server the agent registered with, then https://valetto.tech.
-Environment: REPLYSLIP_URL, REPLYSLIP_WATCHER_KEY (legacy), REPLYSLIP_POLL_INTERVAL_MS, REPLYSLIP_ORCA_BIN.
+--url defaults to VALETTO_URL, then the server the agent registered with, then https://valetto.tech.
+Environment: VALETTO_URL, VALETTO_WATCHER_KEY (legacy), VALETTO_POLL_INTERVAL_MS, VALETTO_ORCA_BIN.
+Names from before the rename still work: replyslip.mjs, ~/.replyslip, and REPLYSLIP_* variables.
 Agent setup guide: https://valetto.tech/skill.md`;
 
 export type CliIo = {
@@ -85,7 +87,7 @@ function flag(argv: string[], name: string): string | undefined {
 
 export const DEFAULT_RELAY_URL = 'https://valetto.tech';
 
-export const URL_MISSING_MESSAGE = '--url needs a value, for example --url https://valetto.tech. Leave --url off to use REPLYSLIP_URL or https://valetto.tech.';
+export const URL_MISSING_MESSAGE = '--url needs a value, for example --url https://valetto.tech. Leave --url off to use VALETTO_URL or https://valetto.tech.';
 
 /** `--url` given as the last argument or followed by another flag. A blank value (`--url ""`) still falls back. */
 export function urlFlagMissingValue(argv: string[]): boolean {
@@ -95,9 +97,9 @@ export function urlFlagMissingValue(argv: string[]): boolean {
   return value === undefined || value.startsWith('-');
 }
 
-/** --url, then REPLYSLIP_URL, then valetto.tech. Empty or whitespace-only values fall through. Shared by register and watch. */
+/** --url, then VALETTO_URL (or REPLYSLIP_URL), then valetto.tech. Empty or whitespace-only values fall through. Shared by register and watch. */
 export function relayOrigin(argv: string[], env: NodeJS.ProcessEnv): string {
-  return flag(argv, '--url')?.trim() || env.REPLYSLIP_URL?.trim() || DEFAULT_RELAY_URL;
+  return flag(argv, '--url')?.trim() || envValue(env, 'URL')?.trim() || DEFAULT_RELAY_URL;
 }
 
 function positionals(argv: string[]): string[] {
@@ -115,14 +117,14 @@ function positionals(argv: string[]): string[] {
   return values;
 }
 
-export async function runReplyslip(argv: string[], io: CliIo = {}): Promise<number> {
+export async function runValetto(argv: string[], io: CliIo = {}): Promise<number> {
   const stdout = io.stdout ?? ((line) => process.stdout.write(`${line}\n`));
   const stderr = io.stderr ?? ((line) => process.stderr.write(`${line}\n`));
   const env = io.env ?? process.env;
   const [command, ...rest] = positionals(argv);
 
   if (argv.includes('--version') || argv.includes('-v') || command === 'version') {
-    stdout(REPLYSLIP_VERSION);
+    stdout(VALETTO_VERSION);
     return 0;
   }
   if (argv.includes('--help') || argv.includes('-h') || command === 'help') {
@@ -133,7 +135,7 @@ export async function runReplyslip(argv: string[], io: CliIo = {}): Promise<numb
   if (command === 'key-path') {
     const name = rest[0] ?? flag(argv, '--name');
     if (!name || !AGENT_NAME_PATTERN.test(name)) {
-      stderr('Usage: replyslip key-path <name>');
+      stderr('Usage: valetto key-path <name>');
       return 1;
     }
     stdout(agentKeyPath(name, io.home));
@@ -143,7 +145,7 @@ export async function runReplyslip(argv: string[], io: CliIo = {}): Promise<numb
   if (command === 'whoami') {
     const name = flag(argv, '--name') ?? rest[0];
     if (!name || !AGENT_NAME_PATTERN.test(name)) {
-      stderr('Usage: replyslip whoami --name <name>');
+      stderr('Usage: valetto whoami --name <name>');
       return 1;
     }
     try {
@@ -166,7 +168,7 @@ export async function runReplyslip(argv: string[], io: CliIo = {}): Promise<numb
   if (command === 'register') {
     const name = flag(argv, '--name');
     if (!name || !AGENT_NAME_PATTERN.test(name)) {
-      stderr('Usage: replyslip register --join-code <code> --name <name> [--driver orca|herdr --target <pane>] [--url <origin>] [--description <text>] [--force]');
+      stderr('Usage: valetto register --join-code <code> --name <name> [--driver orca|herdr --target <pane>] [--url <origin>] [--description <text>] [--force]');
       return 1;
     }
     const driver = flag(argv, '--driver');
@@ -178,7 +180,7 @@ export async function runReplyslip(argv: string[], io: CliIo = {}): Promise<numb
     const joinCode = resolveJoinCode(name, flag(argv, '--join-code'), env);
     if (!joinCode) {
       stderr(
-        `Pass --join-code or set ${joinCodeEnvName(name)}. A shared REPLYSLIP_JOIN_CODE is ignored: one name on a shared machine burned single-use join codes when the wrong process registered first.`,
+        `Pass --join-code or set ${joinCodeEnvName(name)}. A shared VALETTO_JOIN_CODE is ignored: one name on a shared machine burned single-use join codes when the wrong process registered first.`,
       );
       return 1;
     }
@@ -209,19 +211,19 @@ export async function runReplyslip(argv: string[], io: CliIo = {}): Promise<numb
   if (command === 'rename') {
     const newName = flag(argv, '--to');
     if (!newName || !AGENT_NAME_PATTERN.test(newName.trim())) {
-      stderr('Usage: replyslip rename --to <new-name> [--name <current-name>] [--url <origin>] [--force]');
+      stderr('Usage: valetto rename --to <new-name> [--name <current-name>] [--url <origin>] [--force]');
       return 1;
     }
     let currentName = flag(argv, '--name');
     if (currentName !== undefined && !AGENT_NAME_PATTERN.test(currentName)) {
-      stderr('Usage: replyslip rename --to <new-name> [--name <current-name>] [--url <origin>] [--force]');
+      stderr('Usage: valetto rename --to <new-name> [--name <current-name>] [--url <origin>] [--force]');
       return 1;
     }
     if (!currentName) {
       const registered = await listRegisteredAgents(io.home);
       if (registered.length === 0) {
         stderr(
-          `No agent is registered on this machine (${agentKeyPath('<name>', io.home)}). Register first: replyslip register --join-code <code> --name <name>.`,
+          `No agent is registered on this machine (${agentKeyPath('<name>', io.home)}). Register first: valetto register --join-code <code> --name <name>.`,
         );
         return 1;
       }
@@ -238,7 +240,7 @@ export async function runReplyslip(argv: string[], io: CliIo = {}): Promise<numb
       stderr(err instanceof Error ? err.message : 'Could not read the agent key file.');
       return 1;
     }
-    const relayUrl = flag(argv, '--url')?.trim() || env.REPLYSLIP_URL?.trim() || credentials.relayUrl || DEFAULT_RELAY_URL;
+    const relayUrl = flag(argv, '--url')?.trim() || envValue(env, 'URL')?.trim() || credentials.relayUrl || DEFAULT_RELAY_URL;
     try {
       const saved = await renameRegisteredAgent({
         currentName,
@@ -258,7 +260,7 @@ export async function runReplyslip(argv: string[], io: CliIo = {}): Promise<numb
       }
       if (currentName !== saved.name) {
         stdout(
-          `If a watcher or supervisor was installed for ${currentName}, run: replyslip supervise --stop --name ${currentName} && replyslip supervise --install --name ${saved.name}`,
+          `If a watcher or supervisor was installed for ${currentName}, run: valetto supervise --stop --name ${currentName} && valetto supervise --install --name ${saved.name}`,
         );
       }
       return 0;
@@ -271,14 +273,14 @@ export async function runReplyslip(argv: string[], io: CliIo = {}): Promise<numb
   if (command === 'supervise') return runSupervise(argv, io, stdout, stderr);
 
   if (command !== 'watch') {
-    stderr('Usage: replyslip watch | register | key-path | whoami | rename | supervise');
+    stderr('Usage: valetto watch | register | key-path | whoami | rename | supervise');
     return 1;
   }
 
   if (argv.includes('--stop')) {
     const name = flag(argv, '--name');
     if (!name || !AGENT_NAME_PATTERN.test(name)) {
-      stderr('Usage: replyslip watch --stop --name <name>');
+      stderr('Usage: valetto watch --stop --name <name>');
       return 1;
     }
     return finishSupervise(await stopSupervision(name, superviseIo(io)), stdout, stderr);
@@ -292,8 +294,8 @@ export async function runReplyslip(argv: string[], io: CliIo = {}): Promise<numb
   }
 
   const keyFile = flag(argv, '--key-file');
-  const legacyKey = flag(argv, '--key') ?? env.REPLYSLIP_WATCHER_KEY;
-  const intervalMs = Number(flag(argv, '--interval') ?? env.REPLYSLIP_POLL_INTERVAL_MS ?? '3000');
+  const legacyKey = flag(argv, '--key') ?? envValue(env, 'WATCHER_KEY');
+  const intervalMs = Number(flag(argv, '--interval') ?? envValue(env, 'POLL_INTERVAL_MS') ?? '3000');
   if (!Number.isFinite(intervalMs) || intervalMs < 500) {
     stderr('--interval must be at least 500 milliseconds.');
     return 1;
@@ -303,14 +305,14 @@ export async function runReplyslip(argv: string[], io: CliIo = {}): Promise<numb
   // Per-agent watcher: this agent's own key from the file register wrote. It wakes only this agent's pane.
   let name = flag(argv, '--name');
   if (name !== undefined && !AGENT_NAME_PATTERN.test(name)) {
-    stderr('Usage: replyslip watch [--name <name>]');
+    stderr('Usage: valetto watch [--name <name>]');
     return 1;
   }
   if (!name) {
     const registered = await listRegisteredAgents(io.home);
     if (registered.length === 0) {
       stderr(
-        `No agent is registered on this machine (${agentKeyPath('<name>', io.home)}). Register first: replyslip register --join-code <code> --name <name>. A legacy watcher key still works with --key-file.`,
+        `No agent is registered on this machine (${agentKeyPath('<name>', io.home)}). Register first: valetto register --join-code <code> --name <name>. A legacy watcher key still works with --key-file.`,
       );
       return 1;
     }
@@ -327,7 +329,7 @@ export async function runReplyslip(argv: string[], io: CliIo = {}): Promise<numb
     stderr(err instanceof Error ? err.message : 'Could not read the agent key file.');
     return 1;
   }
-  const url = flag(argv, '--url')?.trim() || env.REPLYSLIP_URL?.trim() || credentials.relayUrl || DEFAULT_RELAY_URL;
+  const url = flag(argv, '--url')?.trim() || envValue(env, 'URL')?.trim() || credentials.relayUrl || DEFAULT_RELAY_URL;
   const reclaimArgs = readReclaim(argv);
   if (reclaimArgs === 'invalid') {
     stderr('Reclaim needs --reclaim-pid, --reclaim-token, and --reclaim-started-at for the exact lock being replaced.');
@@ -367,7 +369,7 @@ export async function runReplyslip(argv: string[], io: CliIo = {}): Promise<numb
   return 0;
 }
 
-/** Legacy machine-wide watcher (`--key-file`, `--key`, or REPLYSLIP_WATCHER_KEY): unchanged behaviour. */
+/** Legacy machine-wide watcher (`--key-file`, `--key`, or VALETTO_WATCHER_KEY): unchanged behaviour. */
 async function watchLegacy(
   argv: string[],
   env: NodeJS.ProcessEnv,
@@ -389,7 +391,7 @@ async function watchLegacy(
     }
   }
   if (!key) {
-    stderr('Set one of --key-file, --key, or REPLYSLIP_WATCHER_KEY.');
+    stderr('Set one of --key-file, --key, or VALETTO_WATCHER_KEY.');
     return 1;
   }
   let result: WatchResult;
@@ -443,6 +445,9 @@ function superviseIo(io: CliIo): SuperviseIo {
     label: io.supervise?.label,
     taskName: io.supervise?.taskName,
     unitName: io.supervise?.unitName,
+    legacyLabel: io.supervise?.legacyLabel,
+    legacyTaskName: io.supervise?.legacyTaskName,
+    legacyUnitName: io.supervise?.legacyUnitName,
   };
 }
 
@@ -461,7 +466,7 @@ async function runSupervise(
   if (argv.includes('--install')) {
     const name = flag(argv, '--name');
     if (!name) {
-      stderr('Usage: replyslip supervise --install --name <name>');
+      stderr('Usage: valetto supervise --install --name <name>');
       return 1;
     }
     return finishSupervise(await installSupervision(name, sup), stdout, stderr);
@@ -469,7 +474,7 @@ async function runSupervise(
   if (argv.includes('--stop')) {
     const name = flag(argv, '--name');
     if (!name) {
-      stderr('Usage: replyslip supervise --stop --name <name>');
+      stderr('Usage: valetto supervise --stop --name <name>');
       return 1;
     }
     return finishSupervise(await stopSupervision(name, sup), stdout, stderr);
@@ -477,7 +482,7 @@ async function runSupervise(
   if (argv.includes('--uninstall')) {
     return finishSupervise(await uninstallSupervision({ name: flag(argv, '--name'), all: argv.includes('--all') }, sup), stdout, stderr);
   }
-  stderr('Usage: replyslip supervise --install --name <name> | --once | --status | --stop --name <name> | --uninstall (--name <name> | --all)');
+  stderr('Usage: valetto supervise --install --name <name> | --once | --status | --stop --name <name> | --uninstall (--name <name> | --all)');
   return 1;
 }
 
@@ -529,7 +534,7 @@ function supervisedLog(
   env: NodeJS.ProcessEnv,
   stderr: (line: string) => void,
 ): (line: string) => void {
-  if (env.REPLYSLIP_SUPERVISED !== '1') return stderr;
+  if (envValue(env, 'SUPERVISED') !== '1') return stderr;
   return (line: string) => {
     appendSuperviseLog(home, `${name}: ${line}`);
   };
@@ -537,7 +542,7 @@ function supervisedLog(
 
 /** A supervised watcher is detached. A hangup from a closing terminal is not a deliberate stop. */
 function ignoreHangup(env: NodeJS.ProcessEnv): () => void {
-  if (env.REPLYSLIP_SUPERVISED !== '1') return () => undefined;
+  if (envValue(env, 'SUPERVISED') !== '1') return () => undefined;
   const onHang = () => undefined;
   try {
     process.on('SIGHUP', onHang);

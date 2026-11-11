@@ -8,7 +8,7 @@ import { mkdtemp, stat } from 'node:fs/promises';
 import { hostname, tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { URL_MISSING_MESSAGE, runReplyslip } from '../packages/cli/src/cli';
+import { URL_MISSING_MESSAGE, runValetto } from '../packages/cli/src/cli';
 import { watch } from '../packages/cli/src/watch';
 import {
   HOSTED_ORIGINS,
@@ -388,7 +388,7 @@ describe('watcher lock', () => {
   it('lists every live lock and refuses a second watch for the same workspace', async () => {
     const home = await mkdtemp(path.join(tmpdir(), 'replyslip-lock-'));
     const idle = capture();
-    expect(await runReplyslip(['watch', '--status'], { home, stdout: idle.stdout, stderr: idle.stderr })).toBe(0);
+    expect(await runValetto(['watch', '--status'], { home, stdout: idle.stdout, stderr: idle.stderr })).toBe(0);
     expect(idle.out).toEqual([WATCHER_NOT_RUNNING_MESSAGE]);
 
     const childA = liveChild();
@@ -396,9 +396,9 @@ describe('watcher lock', () => {
     try {
       writeLock(home, { pid: childA.pid ?? 0, origin: 'https://a.example', workspaceId: 'ws-a', legacy: true });
       writeLock(home, { pid: childB.pid ?? 0, origin: 'https://b.example', workspaceId: 'ws-b', legacy: true });
-      writeFileSync(path.join(home, '.replyslip', 'watcher.lock'), '{"pid":1}\n');
+      writeFileSync(path.join(home, '.valetto', 'watcher.lock'), '{"pid":1}\n');
       const status = capture();
-      expect(await runReplyslip(['watch', '--status'], { home, stdout: status.stdout, stderr: status.stderr })).toBe(0);
+      expect(await runValetto(['watch', '--status'], { home, stdout: status.stdout, stderr: status.stderr })).toBe(0);
       expect(status.out).toEqual([
         runningStatusMessage(childA.pid ?? 0, 'https://a.example'),
         runningStatusMessage(childB.pid ?? 0, 'https://b.example'),
@@ -408,7 +408,7 @@ describe('watcher lock', () => {
       const blockedFile = writeLock(blockedHome, { pid: childA.pid ?? 0, origin: ORIGIN, workspaceId: 'ws-1', legacy: true });
       let fetches = 0;
       const blocked = capture();
-      const code = await runReplyslip(['watch', '--once', '--url', ORIGIN, '--key', KEY], {
+      const code = await runValetto(['watch', '--once', '--url', ORIGIN, '--key', KEY], {
         home: blockedHome,
         stdout: blocked.stdout,
         stderr: blocked.stderr,
@@ -424,7 +424,7 @@ describe('watcher lock', () => {
       expect(readFileSync(blockedFile, 'utf8')).not.toContain(KEY);
 
       const forced = capture();
-      const forcedCode = await runReplyslip(['watch', '--once', '--force', '--url', ORIGIN, '--key', KEY], {
+      const forcedCode = await runValetto(['watch', '--once', '--force', '--url', ORIGIN, '--key', KEY], {
         home: blockedHome,
         stdout: forced.stdout,
         stderr: forced.stderr,
@@ -455,7 +455,7 @@ describe('watcher lock', () => {
           `${JSON.stringify({ pid: child.pid, startedAt: '2026-01-01T00:00:00.000Z', hostname: hostname(), bootId: machineBootId(), origin: old, ...legacyFields })}\n`,
         );
         const io = capture();
-        const code = await runReplyslip(['watch', '--once', '--key', KEY], {
+        const code = await runValetto(['watch', '--once', '--key', KEY], {
           home,
           env: {},
           stdout: io.stdout,
@@ -493,7 +493,7 @@ describe('watcher lock', () => {
     }
     expect(listLiveWatcherLocks(home, { hostname: host, bootId, isAlive }).map((lock) => lock.pid)).toEqual([11]);
     held.hold.release();
-    expect(readdirSync(path.join(home, '.replyslip')).filter((name) => name.endsWith('.lock'))).toEqual([]);
+    expect(readdirSync(path.join(home, '.valetto')).filter((name) => name.endsWith('.lock'))).toEqual([]);
   });
 
   it('without a workspace id, scopes by key so the same key on another address is blocked', async () => {
@@ -529,7 +529,7 @@ describe('watcher lock review fixes', () => {
     // Through the CLI: a leftover own-pid lock does not block watch.
     writeLock(home, { pid: process.pid, startedAt: '2020-01-01T00:00:00.000Z' });
     const io = capture();
-    const code = await runReplyslip(['watch', '--once', '--url', ORIGIN, '--key', KEY], {
+    const code = await runValetto(['watch', '--once', '--url', ORIGIN, '--key', KEY], {
       home,
       stdout: io.stdout,
       stderr: io.stderr,
@@ -552,7 +552,7 @@ describe('watcher lock review fixes', () => {
     try {
       const file = writeLock(home, { pid: child.pid ?? 0 });
       const io = capture();
-      await runReplyslip(['watch', '--once', '--url', ORIGIN, '--key', KEY], {
+      await runValetto(['watch', '--once', '--url', ORIGIN, '--key', KEY], {
         home,
         stdout: io.stdout,
         stderr: io.stderr,
@@ -664,7 +664,7 @@ describe('watcher lock review fixes', () => {
       ['register', '--url', '--name', 'LandingBot', '--join-code', 'join-1'],
     ]) {
       const io = capture();
-      expect(await runReplyslip(argv, { home, env: {}, stdout: io.stdout, stderr: io.stderr, fetchImpl }), argv.join(' ')).toBe(1);
+      expect(await runValetto(argv, { home, env: {}, stdout: io.stdout, stderr: io.stderr, fetchImpl }), argv.join(' ')).toBe(1);
       expect(io.err).toEqual([URL_MISSING_MESSAGE]);
     }
     expect(fetches).toBe(0);

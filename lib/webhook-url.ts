@@ -40,7 +40,7 @@ export function assertPublicWebhookUrl(raw: string): URL {
   if (!url.hostname) {
     throw new HttpError(400, 'invalid_webhook_url', 'Webhook URL must include a host.');
   }
-  const allowPrivate = process.env.REPLYSLIP_ALLOW_PRIVATE_WEBHOOKS === '1';
+  const allowPrivate = (process.env.VALETTO_ALLOW_PRIVATE_WEBHOOKS ?? process.env.REPLYSLIP_ALLOW_PRIVATE_WEBHOOKS) === '1';
   if (!allowPrivate && isPrivateHostname(url.hostname)) {
     throw new HttpError(
       400,

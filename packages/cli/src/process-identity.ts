@@ -17,16 +17,16 @@ export type LockIdentity = { pid: number; token: string; startedAt: string };
 
 /**
  * True only for a detached per-agent watcher command, not for `supervise --once`.
- * `replyslip` must appear, and `watch` must be its own argument.
+ * `valetto` (or the pre-rename `replyslip`) must appear, and `watch` must be its own argument.
  */
-export function isReplyslipWatchCommand(cmdline: string): boolean {
+export function isWatcherCommand(cmdline: string): boolean {
   const parts = commandParts(cmdline);
-  return parts.some((part) => /replyslip/i.test(part)) && parts.some((part) => part === 'watch');
+  return parts.some((part) => /valetto|replyslip/i.test(part)) && parts.some((part) => part === 'watch');
 }
 
 /** True only for this agent's watcher command, not another agent's and not `supervise`. */
 export function watchCommandForAgent(cmdline: string, name: string): boolean {
-  if (!isReplyslipWatchCommand(cmdline)) return false;
+  if (!isWatcherCommand(cmdline)) return false;
   const parts = commandParts(cmdline);
   for (let i = 0; i < parts.length; i += 1) {
     const part = parts[i] ?? '';
@@ -80,7 +80,7 @@ export function killSpawnAllowed(input: {
 
 function identityAllows(identity: ProcessIdentity | null, notAfterIso: string, skewMs: number): { ok: true } | { ok: false; reason: string } {
   if (!identity) return { ok: false, reason: 'unverified-process' };
-  if (!isReplyslipWatchCommand(identity.cmdline)) return { ok: false, reason: 'not-watcher' };
+  if (!isWatcherCommand(identity.cmdline)) return { ok: false, reason: 'not-watcher' };
   if (identity.startedAtMs == null) return { ok: false, reason: 'unverified-process' };
   const bound = Date.parse(notAfterIso);
   if (Number.isNaN(bound)) return { ok: false, reason: 'unverified-process' };

@@ -259,32 +259,32 @@ export function earlyAccessNoticeText(message: Omit<EarlyAccessNoticeEmail, 'to'
 
 class ConsoleEmailSender implements EmailSender {
   async sendLoginCode(message: LoginCodeEmail): Promise<void> {
-    console.info(`[replyslip] sign-in code for ${message.to}: ${message.code}`);
+    console.info(`[valetto] sign-in code for ${message.to}: ${message.code}`);
   }
 
   async sendFirstAgentAlert(message: FirstAgentAlertEmail): Promise<void> {
-    console.info(`[replyslip] first-agent alert for ${message.to}\n${firstAgentAlertText(message)}`);
+    console.info(`[valetto] first-agent alert for ${message.to}\n${firstAgentAlertText(message)}`);
   }
 
   async sendSignupAlert(message: SignupAlertEmail): Promise<void> {
-    console.info(`[replyslip] signup alert for ${message.to}\n${signupAlertText(message)}`);
+    console.info(`[valetto] signup alert for ${message.to}\n${signupAlertText(message)}`);
   }
 
   async sendPendingCustomers(message: PendingCustomersEmail): Promise<void> {
-    console.info(`[replyslip] pending-customers notice\n${pendingCustomersText(message)}`);
+    console.info(`[valetto] pending-customers notice\n${pendingCustomersText(message)}`);
   }
 
   async sendReviewNeeded(message: ReviewNeededEmail): Promise<void> {
-    console.info(`[replyslip] review-needed notice\n${reviewNeededText(message)}`);
+    console.info(`[valetto] review-needed notice\n${reviewNeededText(message)}`);
   }
 
   async sendCustomerUpdate(message: CustomerUpdateEmail): Promise<void> {
     // No recipient address in the log.
-    console.info(`[replyslip] customer update notice\n${customerUpdateText(message)}`);
+    console.info(`[valetto] customer update notice\n${customerUpdateText(message)}`);
   }
 
   async sendEarlyAccessNotice(message: EarlyAccessNoticeEmail): Promise<void> {
-    console.info(`[replyslip] Valetto early-access notice for ${message.to}\n${earlyAccessNoticeText(message)}`);
+    console.info(`[valetto] Valetto early-access notice for ${message.to}\n${earlyAccessNoticeText(message)}`);
   }
 }
 

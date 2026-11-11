@@ -2,8 +2,8 @@ import { execFile } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { promisify } from 'node:util';
 import { describe, expect, it } from 'vitest';
-import { runReplyslip } from '../packages/cli/src/cli';
-import { replyslipScriptPath } from '@/lib/replyslip-script';
+import { runValetto } from '../packages/cli/src/cli';
+import { cliScriptPath } from '@/lib/cli-script';
 
 const execFileAsync = promisify(execFile);
 
@@ -20,9 +20,9 @@ describe('replyslip --help and --version', () => {
       const fetchImpl: typeof fetch = async () => {
         throw new Error('help must not touch the network');
       };
-      expect(await runReplyslip(argv, { ...io, fetchImpl, env: {} })).toBe(0);
+      expect(await runValetto(argv, { ...io, fetchImpl, env: {} })).toBe(0);
       expect(io.out.join('\n')).toContain('Usage:');
-      expect(io.out.join('\n')).toContain('replyslip watch');
+      expect(io.out.join('\n')).toContain('valetto watch');
       expect(io.out.join('\n')).toContain('https://valetto.tech/skill.md');
       expect(io.err).toEqual([]);
     }
@@ -30,7 +30,7 @@ describe('replyslip --help and --version', () => {
 
   it('bundle reports the packages/cli version', async () => {
     const { version } = JSON.parse(readFileSync('packages/cli/package.json', 'utf8')) as { version: string };
-    const ok = await execFileAsync(process.execPath, [replyslipScriptPath(), '--version'], { encoding: 'utf8' });
+    const ok = await execFileAsync(process.execPath, [cliScriptPath(), '--version'], { encoding: 'utf8' });
     expect(ok.stdout.trim()).toBe(version);
   });
 });

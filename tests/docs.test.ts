@@ -30,7 +30,7 @@ describe('agent docs', () => {
     expect(skillRes.status).toBe(200);
     expect(skillRes.headers.get('content-type')).toContain('text/plain');
     const skillBody = await skillRes.text();
-    expect(skillBody).toMatch(/^---\nname: replyslip\ndescription: .+\n---/);
+    expect(skillBody).toMatch(/^---\nname: valetto\ndescription: .+\n---/);
     expect(skillBody).toContain('create_task');
     expect(skillBody).toContain('result_schema');
     expect(skillBody).toContain('complete_task');
@@ -52,7 +52,7 @@ describe('agent docs', () => {
     expect(skillBody).toContain('printf \'%s\\n\' "${ORCA_PANE_KEY-}"');
     expect(skillBody).not.toContain('${origin}');
     expect(skillBody).not.toContain('\r');
-    expect(skillBody).toContain('node "$HOME/.replyslip/replyslip.mjs" register --join-code JOIN_CODE --name AGENT_NAME --url https://preview.example');
+    expect(skillBody).toContain('node "$HOME/.valetto/valetto.mjs" register --join-code JOIN_CODE --name AGENT_NAME --url https://preview.example');
     expect(skillBody).not.toContain('If `ORCA_PANE_KEY` is unset, stop');
     expect(skillBody).not.toContain('Stop here.');
     expect(skillBody).not.toContain('Register cannot');
@@ -60,10 +60,10 @@ describe('agent docs', () => {
     expect(skillBody).toContain("check that the dashboard Pane value equals this pane's `ORCA_PANE_KEY`");
     const checklist = skillBody.slice(skillBody.indexOf('## Setup checklist'), skillBody.indexOf('## Set yourself up as a local agent'));
     expect(checklist).not.toContain('rename_agent');
-    expect(checklist).not.toContain('replyslip -- rename');
+    expect(checklist).not.toContain('valetto -- rename');
     expect(skillBody).toContain('rename_agent');
-    expect(skillBody).toContain('npm run replyslip -- rename --to <new-name>');
-    expect(skillBody).toContain('/replyslip.mjs.sha256');
+    expect(skillBody).toContain('npm run valetto -- rename --to <new-name>');
+    expect(skillBody).toContain('/valetto.mjs.sha256');
     expect(llmsBody).toContain('Setup checklist');
     expect(llmsBody).toContain('Delivery never blocks registration');
     expect(llmsBody).toContain('--url https://preview.example');

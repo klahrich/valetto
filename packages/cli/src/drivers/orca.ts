@@ -3,9 +3,10 @@
 import { execFile as execFileCb } from 'node:child_process';
 import type { NudgeResult } from './types.ts';
 import { versionAtLeast } from './herdr.ts';
+import { envValue } from '../home.ts';
 
-/** Override the `orca` binary. The value is the executable path, not a shell line. */
-export const ORCA_BIN_ENV = 'REPLYSLIP_ORCA_BIN';
+/** Override the `orca` binary. The value is the executable path, not a shell line. The pre-rename REPLYSLIP_ORCA_BIN still works. */
+export const ORCA_BIN_ENV = 'VALETTO_ORCA_BIN';
 
 export const ORCA_NOT_RUNNING =
   "Orca isn't running or its CLI isn't enabled (Settings → Experimental → CLI)";
@@ -22,13 +23,13 @@ export const MIN_ORCA_VERSION = '1.4.199';
 export const ORCA_WAIT_SUBMIT_SECONDS = '10';
 
 export const ORCA_OLD_HOST_WARNING =
-  `[replyslip] orca: this host refused --wait-submit (old-host). Fell back to a plain send and treated input_accepted as delivered. Orca ${MIN_ORCA_VERSION} or newer is the recommended minimum.`;
+  `[valetto] orca: this host refused --wait-submit (old-host). Fell back to a plain send and treated input_accepted as delivered. Orca ${MIN_ORCA_VERSION} or newer is the recommended minimum.`;
 
 /** Orca 1.4.190 prints this and sends nothing. It is not the old-host fallback. */
 export const ORCA_UNKNOWN_FLAG_MESSAGE =
   `Orca rejected --wait-submit with "Unknown flag --wait-submit". Upgrade to Orca ${MIN_ORCA_VERSION} or newer. No input was sent.`;
 
-export const ORCA_UNKNOWN_FLAG_WARNING = `[replyslip] orca: ${ORCA_UNKNOWN_FLAG_MESSAGE}`;
+export const ORCA_UNKNOWN_FLAG_WARNING = `[valetto] orca: ${ORCA_UNKNOWN_FLAG_MESSAGE}`;
 
 export function orcaTooOldMessage(version: string): string {
   return `Orca ${version} is older than ${MIN_ORCA_VERSION}. Upgrade to Orca ${MIN_ORCA_VERSION} or newer. --wait-submit was added in that release.`;
@@ -67,7 +68,7 @@ type Receipt = {
 };
 
 export function orcaBinary(env: NodeJS.ProcessEnv = process.env): string {
-  const override = env[ORCA_BIN_ENV]?.trim();
+  const override = envValue(env, 'ORCA_BIN')?.trim();
   return override || 'orca';
 }
 

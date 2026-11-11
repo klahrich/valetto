@@ -52,7 +52,7 @@ export async function claimCustomerNotice(
   // The link must be absolute. With no APP_ORIGIN there is no safe origin to put in an email, so send nothing.
   const origin = canonicalOrigin();
   if (!origin) {
-    console.error(`[replyslip] customer update notice skipped for task ${after.id}: APP_ORIGIN is not set, so there is no link origin.`);
+    console.error(`[valetto] customer update notice skipped for task ${after.id}: APP_ORIGIN is not set, so there is no link origin.`);
     return null;
   }
   const limit = await consumeKeyedRateLimit(tx, {
@@ -64,7 +64,7 @@ export async function claimCustomerNotice(
   });
   if (limit.limited) {
     console.warn(
-      `[replyslip] customer update notice dropped for task ${after.id}: the customer is over ${CUSTOMER_UPDATE_EMAIL_LIMIT.limit} emails an hour.`,
+      `[valetto] customer update notice dropped for task ${after.id}: the customer is over ${CUSTOMER_UPDATE_EMAIL_LIMIT.limit} emails an hour.`,
     );
     return null;
   }
@@ -95,7 +95,7 @@ export function sendCustomerNotice(notice: CustomerNotice | null): void {
       await getEmailSender().sendCustomerUpdate(notice);
     } catch (err: unknown) {
       const reason = err instanceof Error ? err.message : 'unknown error';
-      console.error(`[replyslip] customer update notice failed: ${reason}`);
+      console.error(`[valetto] customer update notice failed: ${reason}`);
     }
   });
 }

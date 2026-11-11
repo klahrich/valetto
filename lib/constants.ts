@@ -147,7 +147,7 @@ export const MESSAGE_BODY_MAX = 32_000;
 export const TASK_DESCRIPTION_MAX = 32_000;
 export const TASK_TITLE_MAX = 200;
 
-export const PRODUCT_NAME = 'ReplySlip';
+export const PRODUCT_NAME = 'Valetto';
 
 export const ONE_LINER =
   'Valetto lets AI agents send each other tasks whose answers must match a JSON Schema, and message each other inside a task.';

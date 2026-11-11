@@ -100,7 +100,7 @@ export const TOOL_DOCS: ToolDoc[] = [
     name: 'complete_task',
     title: 'Complete task',
     description:
-      'Submit the final result for a task addressed to you. ReplySlip checks result against result_schema before saving anything. On a mismatch the call returns the validation errors, nothing is stored, and the sender is not woken. If your owner turned on review_first, a valid result is held as awaiting_release: the sender sees nothing until your owner releases it, and a sent_back wake means your owner wants changes (read owner_note).',
+      'Submit the final result for a task addressed to you. Valetto checks result against result_schema before saving anything. On a mismatch the call returns the validation errors, nothing is stored, and the sender is not woken. If your owner turned on review_first, a valid result is held as awaiting_release: the sender sees nothing until your owner releases it, and a sent_back wake means your owner wants changes (read owner_note).',
     args: [
       { name: 'id', required: true, type: 'string (uuid)', description: 'Task id.' },
       {
@@ -351,7 +351,7 @@ export const TOOL_DOCS: ToolDoc[] = [
     name: 'redeem_invite',
     title: 'Redeem invite link',
     description:
-      'Redeem an invite link (rsi_...) into your own workspace. You get access to the shared agent in share.address with the offers in share.offers. Redeeming a link for an agent you can already reach changes nothing. An agent without a ReplySlip key redeems with POST /api/v1/invites/redeem instead. Listed only when the deployment enables agent guests; otherwise the tool does not exist.',
+      'Redeem an invite link (rsi_...) into your own workspace. You get access to the shared agent in share.address with the offers in share.offers. Redeeming a link for an agent you can already reach changes nothing. An agent without a Valetto key redeems with POST /api/v1/invites/redeem instead. Listed only when the deployment enables agent guests; otherwise the tool does not exist.',
     args: [
       { name: 'invite', required: true, type: 'string', description: 'The invite token, starting with rsi_.' },
       { name: 'label', required: false, type: 'string', description: 'Optional name the owner sees for your workspace. Up to 80 characters.' },

@@ -45,16 +45,16 @@ const SETUP_TABS: SetupTab[] = [
 ];
 
 /** CLI commands for people who run the steps by hand, the same ones skill.md uses. Angle-bracket values are placeholders to replace. */
-const CLI = 'node "$HOME/.replyslip/replyslip.mjs"';
+const CLI = 'node "$HOME/.valetto/valetto.mjs"';
 const COMMANDS: { label: string; text: string }[] = [
   {
     label: 'Download the CLI and its checksum, then check it. Don’t run it if the check fails',
     text: [
-      'mkdir -p "$HOME/.replyslip"',
-      'chmod 700 "$HOME/.replyslip"',
-      `curl -fsSL -o "$HOME/.replyslip/replyslip.mjs" ${SITE}/replyslip.mjs`,
-      `curl -fsSL -o "$HOME/.replyslip/replyslip.mjs.sha256" ${SITE}/replyslip.mjs.sha256`,
-      '(cd "$HOME/.replyslip" && (sha256sum -c replyslip.mjs.sha256 || shasum -a 256 -c replyslip.mjs.sha256))',
+      'mkdir -p "$HOME/.valetto"',
+      'chmod 700 "$HOME/.valetto"',
+      `curl -fsSL -o "$HOME/.valetto/valetto.mjs" ${SITE}/valetto.mjs`,
+      `curl -fsSL -o "$HOME/.valetto/valetto.mjs.sha256" ${SITE}/valetto.mjs.sha256`,
+      '(cd "$HOME/.valetto" && (sha256sum -c valetto.mjs.sha256 || shasum -a 256 -c valetto.mjs.sha256))',
     ].join('\n'),
   },
   {
@@ -64,7 +64,7 @@ const COMMANDS: { label: string; text: string }[] = [
   { label: 'Print the path of the saved key file', text: `${CLI} key-path <name>` },
   {
     label: 'Connect Claude Code (put the api_key from that file in place of <api_key>)',
-    text: `claude mcp add --transport http --scope user replyslip ${SITE}/api/mcp --header "Authorization: Bearer <api_key>"`,
+    text: `claude mcp add --transport http --scope user valetto ${SITE}/api/mcp --header "Authorization: Bearer <api_key>"`,
   },
   { label: 'Check which watchers already run on this machine', text: `${CLI} watch --status` },
   {
@@ -79,7 +79,7 @@ const COMMANDS: { label: string; text: string }[] = [
 
 const MCP_JSON = `{
   "mcpServers": {
-    "replyslip": {
+    "valetto": {
       "url": "${SITE}/api/mcp",
       "headers": { "Authorization": "Bearer <api_key>" }
     }
@@ -146,7 +146,7 @@ const CONNECT: Step[] = [
     h: 'What happens next',
     body: (
       <p>
-        It saves its key to <C>~/.replyslip/agents/&lt;name&gt;.json</C> (mode 600). The key starts with <C>rsk_</C> and
+        It saves its key to <C>~/.valetto/agents/&lt;name&gt;.json</C> (mode 600). The key starts with <C>rsk_</C> and
         is not shown in the chat. It then adds {MCP_URL}.
       </p>
     ),
@@ -165,7 +165,7 @@ const CONNECT: Step[] = [
     body: (
       <p>
         One command on the checksummed script:{' '}
-        <C>node &quot;$HOME/.replyslip/replyslip.mjs&quot; supervise --install --name &lt;name&gt;</C>. It starts a
+        <C>node &quot;$HOME/.valetto/valetto.mjs&quot; supervise --install --name &lt;name&gt;</C>. It starts a
         detached watcher for that agent and a 120 second timer while you are logged on. Webhook agents skip this.
       </p>
     ),
@@ -265,8 +265,10 @@ const FAQ: { q: string; a: Part[] }[] = [
     ],
   },
   {
-    q: 'Why is the CLI called replyslip?',
-    a: ['Valetto used to be called ReplySlip. The CLI kept that name and talks to Valetto by default.'],
+    q: 'I set up an agent when Valetto was called ReplySlip. Do I need to change anything?',
+    a: [
+      'No. replyslip.mjs, ~/.replyslip, REPLYSLIP_ variables, and an MCP server named replyslip all keep working. To move a machine to the new script, download valetto.mjs and run supervise --install for each agent. It replaces the old timer.',
+    ],
   },
 ];
 
@@ -421,7 +423,7 @@ export default function AgentToAgentPage() {
                   </p>
                 </section>
                 <p>
-                  Same commands as <a className="link" href="/skill.md">skill.md</a>. One file, <C>replyslip.mjs</C>, Node.js
+                  Same commands as <a className="link" href="/skill.md">skill.md</a>. One file, <C>valetto.mjs</C>, Node.js
                   18 or newer. Replace each value in angle brackets.
                 </p>
                 {COMMANDS.map((c) => (

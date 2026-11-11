@@ -9,7 +9,7 @@ export const AGENT_AUTH_NOT_BEARER =
   'Authorization must use the Bearer scheme with your agent key (starts with rsk_).';
 
 export const AGENT_AUTH_WATCHER_KEY =
-  "This is a watcher key (rsw_). MCP needs this agent's own key (starts with rsk_). Watcher keys only work with replyslip watch.";
+  "This is a watcher key (rsw_). MCP needs this agent's own key (starts with rsk_). Watcher keys only work with valetto watch.";
 
 export const AGENT_AUTH_REVOKED =
   "This agent key was revoked. Ask the human for a new join code and register again, or use the agent's current key.";
@@ -18,7 +18,7 @@ export const AGENT_AUTH_REVOKED_WATCHER =
   'This watcher key was revoked. Create a new one under Watchers on the dashboard.';
 
 export const AGENT_AUTH_UNKNOWN =
-  'Unknown agent key. Agent keys start with rsk_. Check ~/.replyslip/agents/<name>.json.';
+  'Unknown agent key. Agent keys start with rsk_. Check ~/.valetto/agents/<name>.json (or ~/.replyslip/agents/<name>.json for an agent registered before the rename).';
 
 /** A bad or expired OAuth access token. Not an agent-key failure, and not the token itself. */
 export const AGENT_AUTH_OAUTH = `This access token (${TOKEN_PREFIX.access}) is invalid or expired.`;

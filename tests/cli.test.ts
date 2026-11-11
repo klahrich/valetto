@@ -122,7 +122,7 @@ describe('replyslip watch', () => {
     const second = await nudgeWakes({ wakes, registry, checks, warned, log: (message) => logs.push(message) });
     expect(first).toEqual([]);
     expect(second).toEqual([]);
-    expect(logs).toEqual(['[replyslip] wake wake-x driver tmux: unknown driver; not acked']);
+    expect(logs).toEqual(['[valetto] wake wake-x driver tmux: unknown driver; not acked']);
   });
 
   it('does not ack a failed nudge', async () => {

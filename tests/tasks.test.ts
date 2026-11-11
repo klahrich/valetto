@@ -56,7 +56,7 @@ describe('tasks over MCP', () => {
       expect(valid.payload.task.result).toEqual({ score: 8 });
       expect(receiver.hits.at(-1)?.body.agent).toBe('Sender');
       expect(receiver.hits.at(-1)?.body.reason).toBe('result');
-      expect(receiver.hits.at(-1)?.body.id).toBe(receiver.hits.at(-1)?.headers['x-replyslip-wake-id']);
+      expect(receiver.hits.at(-1)?.body.id).toBe(receiver.hits.at(-1)?.headers['x-valetto-wake-id']);
 
       const second = await mcpTool(targetKey, 'complete_task', { id: taskId, result: { score: 9 } });
       expect(second.isError).toBe(true);

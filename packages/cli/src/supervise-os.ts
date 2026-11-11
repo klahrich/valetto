@@ -1,7 +1,16 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import path from 'node:path';
-import { SUPERVISE_INTERVAL_MS, SUPERVISE_LABEL, SUPERVISE_TASK_NAME } from './supervise-constants.ts';
+import {
+  LEGACY_SUPERVISE_LABEL,
+  LEGACY_SUPERVISE_TASK_NAME,
+  LEGACY_SUPERVISE_UNIT_NAME,
+  SUPERVISE_INTERVAL_MS,
+  SUPERVISE_LABEL,
+  SUPERVISE_TASK_NAME,
+  SUPERVISE_UNIT_NAME,
+} from './supervise-constants.ts';
+import { superviseDir } from './watcher-progress.ts';
 
 export type SupportedPlatform = 'darwin' | 'linux' | 'win32';
 
@@ -24,6 +33,13 @@ export type InstallPlan = {
   preflight: PlannedCommand[];
   commands: PlannedCommand[];
   uninstallCommands: PlannedCommand[];
+  /**
+   * Removes the timer a pre-rename CLI installed (ReplySlip names). Run after `commands` succeed on install,
+   * and on uninstall. Every step is optional: a machine that never had the old timer just skips it.
+   */
+  legacyCommands: PlannedCommand[];
+  /** Unit or plist files of that pre-rename timer. Deleted with `legacyCommands`. Never a file in `files`. */
+  legacyFiles: string[];
   notes: string[];
 };
 
@@ -41,8 +57,12 @@ export type InstallPlanInput = {
   /** Test override. Production uses the fixed label. */
   label?: string;
   taskName?: string;
-  /** Linux unit file basename. Production uses replyslip-supervise. */
+  /** Linux unit file basename. Production uses valetto-supervise. */
   unitName?: string;
+  /** Test overrides for the pre-rename timer names that install and uninstall remove. */
+  legacyLabel?: string;
+  legacyTaskName?: string;
+  legacyUnitName?: string;
   intervalMs?: number;
 };
 
@@ -53,7 +73,7 @@ export function buildInstallPlan(input: InstallPlanInput): InstallPlan | { error
   if (input.platform === 'linux') return linuxPlan(input);
   if (input.platform === 'win32') return windowsPlan(input);
   return {
-    error: `ReplySlip supervision has no timer for this OS (${input.platform}). Supported: macOS LaunchAgent, Linux systemd --user, Windows Task Scheduler. The watcher was not started.`,
+    error: `Valetto supervision has no timer for this OS (${input.platform}). Supported: macOS LaunchAgent, Linux systemd --user, Windows Task Scheduler. The watcher was not started.`,
   };
 }
 
@@ -67,7 +87,7 @@ function validatePlanInputs(input: InstallPlanInput): { ok: true } | { error: st
     if (!value || /[\r\n\0]/.test(value)) return { error: `${label} contains a newline or is empty. Supervision was not installed.` };
   }
   if (input.orcaBin && /[\r\n\0]/.test(input.orcaBin)) {
-    return { error: 'REPLYSLIP_ORCA_BIN contains a newline. Supervision was not installed.' };
+    return { error: 'VALETTO_ORCA_BIN contains a newline. Supervision was not installed.' };
   }
   for (const [label, value] of [
     ['APPDATA', input.appData],
@@ -94,9 +114,11 @@ function darwinPlan(input: InstallPlanInput): InstallPlan | { error: string } {
   }
   const label = input.label ?? SUPERVISE_LABEL;
   const plistPath = path.join(input.home, 'Library', 'LaunchAgents', `${label}.plist`);
-  const logPath = path.join(input.home, '.replyslip', 'supervise', 'timer.log');
+  const logPath = path.join(superviseDir(input.home), 'timer.log');
   const domain = `gui/${uid}`;
   const target = `${domain}/${label}`;
+  const legacyLabel = input.legacyLabel ?? LEGACY_SUPERVISE_LABEL;
+  const legacyTarget = `${domain}/${legacyLabel}`;
   return {
     platform: 'darwin',
     files: [{ path: plistPath, mode: 0o600, contents: launchdPlist({ ...input, label, logPath }) }],
@@ -110,6 +132,9 @@ function darwinPlan(input: InstallPlanInput): InstallPlan | { error: string } {
       { command: 'launchctl', args: ['bootout', target], optional: true },
       { command: 'launchctl', args: ['disable', target], optional: true },
     ],
+    legacyCommands:
+      legacyLabel === label ? [] : [{ command: 'launchctl', args: ['bootout', legacyTarget], optional: true }],
+    legacyFiles: legacyLabel === label ? [] : [path.join(input.home, 'Library', 'LaunchAgents', `${legacyLabel}.plist`)],
     notes: [
       `macOS LaunchAgent ${label} ticks every ${intervalSec(input)} seconds in the logged-in GUI session (${domain}).`,
       'It does not use KeepAlive. Logging out unloads the agent. The next login loads it again. That is not a deliberate stop.',
@@ -119,8 +144,8 @@ function darwinPlan(input: InstallPlanInput): InstallPlan | { error: string } {
 }
 
 function linuxPlan(input: InstallPlanInput): InstallPlan {
-  const label = input.label ?? SUPERVISE_LABEL;
-  const unit = input.unitName ?? 'replyslip-supervise';
+  const unit = input.unitName ?? SUPERVISE_UNIT_NAME;
+  const legacyUnit = input.legacyUnitName ?? LEGACY_SUPERVISE_UNIT_NAME;
   const dir = path.join(input.home, '.config', 'systemd', 'user');
   const seconds = intervalSec(input);
   return {
@@ -138,8 +163,12 @@ function linuxPlan(input: InstallPlanInput): InstallPlan {
       { command: 'systemctl', args: ['--user', 'disable', '--now', `${unit}.timer`], optional: true },
       { command: 'systemctl', args: ['--user', 'daemon-reload'], optional: true },
     ],
+    // Disable before the files go, so systemd still knows the unit and drops its timers.target.wants link.
+    legacyCommands:
+      legacyUnit === unit ? [] : [{ command: 'systemctl', args: ['--user', 'disable', '--now', `${legacyUnit}.timer`], optional: true }],
+    legacyFiles: legacyUnit === unit ? [] : [path.join(dir, `${legacyUnit}.service`), path.join(dir, `${legacyUnit}.timer`)],
     notes: [
-      `Linux systemd --user timer ${label} runs about every ${seconds} seconds, with AccuracySec=15s, while this user session is up.`,
+      `Linux systemd --user timer ${unit}.timer runs about every ${seconds} seconds, with AccuracySec=15s, while this user session is up.`,
       'Linger is not enabled. After logout the timer stops. The next login starts it again. That is not a deliberate stop.',
       'If systemctl --user cannot reach a session bus, install stops and reports that error. Nothing is marked as a deliberate stop.',
     ],
@@ -148,8 +177,9 @@ function linuxPlan(input: InstallPlanInput): InstallPlan {
 
 function windowsPlan(input: InstallPlanInput): InstallPlan {
   const taskName = input.taskName ?? SUPERVISE_TASK_NAME;
+  const legacyTaskName = input.legacyTaskName ?? LEGACY_SUPERVISE_TASK_NAME;
   const minutes = Math.max(1, Math.round(intervalSec(input) / 60));
-  const cmdPath = path.join(input.home, '.replyslip', 'supervise', 'tick.cmd');
+  const cmdPath = path.join(superviseDir(input.home), 'tick.cmd');
   return {
     platform: 'win32',
     files: [{ path: cmdPath, mode: 0o600, contents: windowsCmd(input) }],
@@ -161,6 +191,10 @@ function windowsPlan(input: InstallPlanInput): InstallPlan {
       },
     ],
     uninstallCommands: [{ command: 'schtasks', args: ['/Delete', '/F', '/TN', taskName], optional: true }],
+    // The old task ran tick.cmd in this same supervise directory, which `files` now rewrites, so only the task goes.
+    legacyCommands:
+      legacyTaskName === taskName ? [] : [{ command: 'schtasks', args: ['/Delete', '/F', '/TN', legacyTaskName], optional: true }],
+    legacyFiles: [],
     notes: [
       `Windows Task Scheduler task "${taskName}" runs every ${minutes} minute(s) with /IT and /RL LIMITED.`,
       '/IT means the task runs only while this user is logged on. Logoff is not a deliberate stop. The next logon resumes the schedule.',
@@ -175,9 +209,9 @@ export function launchdPlist(input: InstallPlanInput & { label: string; logPath:
   const env: [string, string][] = [
     ['PATH', input.pathEnv],
     ['HOME', input.home],
-    ['REPLYSLIP_SUPERVISED', '1'],
+    ['VALETTO_SUPERVISED', '1'],
   ];
-  if (input.orcaBin) env.push(['REPLYSLIP_ORCA_BIN', input.orcaBin]);
+  if (input.orcaBin) env.push(['VALETTO_ORCA_BIN', input.orcaBin]);
   const args = [input.nodePath, input.scriptPath, 'supervise', '--once'];
   return `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -210,23 +244,23 @@ export function systemdService(input: InstallPlanInput): string {
   const exec = ['ExecStart=' + systemdArg(input.nodePath), systemdArg(input.scriptPath), 'supervise', '--once'].join(' ');
   const lines = [
     '[Unit]',
-    'Description=ReplySlip watcher supervision',
+    'Description=Valetto watcher supervision',
     '',
     '[Service]',
     'Type=oneshot',
     exec,
     `Environment=PATH=${systemdEnv(input.pathEnv)}`,
     `Environment=HOME=${systemdEnv(input.home)}`,
-    'Environment=REPLYSLIP_SUPERVISED=1',
+    'Environment=VALETTO_SUPERVISED=1',
   ];
-  if (input.orcaBin) lines.push(`Environment=REPLYSLIP_ORCA_BIN=${systemdEnv(input.orcaBin)}`);
+  if (input.orcaBin) lines.push(`Environment=VALETTO_ORCA_BIN=${systemdEnv(input.orcaBin)}`);
   lines.push('');
   return `${lines.join('\n')}\n`;
 }
 
 export function systemdTimer(unit: string, seconds: number): string {
   return `[Unit]
-Description=ReplySlip watcher supervision tick
+Description=Valetto watcher supervision tick
 
 [Timer]
 OnStartupSec=15s
@@ -256,8 +290,8 @@ export function windowsCmd(input: InstallPlanInput): string {
   // Task Scheduler often omits APPDATA. Orca cannot resolve its runtime metadata without it.
   if (input.appData) lines.push(`set "APPDATA=${cmdPercent(input.appData)}"`);
   if (input.localAppData) lines.push(`set "LOCALAPPDATA=${cmdPercent(input.localAppData)}"`);
-  lines.push('set "REPLYSLIP_SUPERVISED=1"');
-  if (input.orcaBin) lines.push(`set "REPLYSLIP_ORCA_BIN=${cmdPercent(input.orcaBin)}"`);
+  lines.push('set "VALETTO_SUPERVISED=1"');
+  if (input.orcaBin) lines.push(`set "VALETTO_ORCA_BIN=${cmdPercent(input.orcaBin)}"`);
   lines.push(`"${cmdPercent(input.nodePath)}" "${cmdPercent(input.scriptPath)}" supervise --once`);
   lines.push('');
   return lines.join('\r\n');

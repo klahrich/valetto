@@ -36,8 +36,17 @@ export const NUDGE_BUDGET_MS = 90_000;
 /** After a spawn, wait this long before treating a still-unlocked pid as a startup hang. */
 export const STARTUP_GRACE_MS = 60_000;
 
-export const SUPERVISE_LABEL = 'tech.valetto.replyslip-supervise';
-export const SUPERVISE_TASK_NAME = 'ReplySlip Supervise';
+export const SUPERVISE_LABEL = 'tech.valetto.supervise';
+export const SUPERVISE_TASK_NAME = 'Valetto Supervise';
+export const SUPERVISE_UNIT_NAME = 'valetto-supervise';
+
+/**
+ * Timer names written before the rename. `supervise --install` removes them after the new timer is confirmed,
+ * and `--uninstall` removes them too, so one machine never runs both an old and a new timer.
+ */
+export const LEGACY_SUPERVISE_LABEL = 'tech.valetto.replyslip-supervise';
+export const LEGACY_SUPERVISE_TASK_NAME = 'ReplySlip Supervise';
+export const LEGACY_SUPERVISE_UNIT_NAME = 'replyslip-supervise';
 
 export type ProgressPhase = 'poll' | 'nudge' | 'ack' | 'sleep';
 

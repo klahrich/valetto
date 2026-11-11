@@ -19,9 +19,10 @@ import { GET as workspaceTaskRoute } from '@/app/api/v1/tasks/[id]/route';
 import { GET as workspaceTasksRoute } from '@/app/api/v1/tasks/route';
 import { PATCH as patchWorkspace } from '@/app/api/v1/workspaces/current/route';
 import { getDb } from '@/db';
-import { tasks, wakes } from '@/db/schema';
+import { agents, tasks, wakes } from '@/db/schema';
 import { OWNER_DECLINED_REASON, RATE_LIMITS } from '@/lib/constants';
-import { HELD_FOR_REVIEW_NOTICE, REVIEW_NEEDED_NOTICE, WAKE_NOTICE } from '@/lib/wake-notice';
+import { HELD_FOR_REVIEW_NOTICE, LEGACY_REVIEW_NEEDED_NOTICE, REVIEW_NEEDED_NOTICE, WAKE_NOTICE } from '@/lib/wake-notice';
+import { leaseHerdrWakes } from '@/lib/wakes';
 import { nudgeText } from '../packages/cli/src/watch';
 import { approvedCustomer, directRequest, ORIGIN, owner, type Customer, type Owner } from './customer-fixtures';
 import { call, createAgent, createKey, mcpTool, setHerdr, signIn, setWebhook, startReceiver } from './helpers';
@@ -313,6 +314,21 @@ describe('request checkpoint', () => {
   it('lets the local watcher type only the fixed review notice', () => {
     expect(nudgeText({ id: 'w', notice: REVIEW_NEEDED_NOTICE })).toBe(REVIEW_NEEDED_NOTICE);
     expect(nudgeText({ id: 'w', notice: `${REVIEW_NEEDED_NOTICE} extra` })).toBe(WAKE_NOTICE);
+  });
+
+  it('polls with the pre-rename review notice, which old watchers match and this one types as the Valetto wording', async () => {
+    const o = await owner();
+    await reviewFirst(o);
+    const c = await approvedCustomer(o);
+    const task = await directRequest(o, c, 'CANARY-POLL-TEXT');
+    const [agent] = await getDb().select({ workspaceId: agents.workspaceId }).from(agents).where(eq(agents.id, o.agentId));
+    const leased = await leaseHerdrWakes(agent!.workspaceId);
+    const wake = leased.find((row) => row.task_id === task.id);
+    expect(wake?.notice).toBe(LEGACY_REVIEW_NEEDED_NOTICE);
+    expect(LEGACY_REVIEW_NEEDED_NOTICE).toContain('ReplySlip');
+    expect(JSON.stringify(leased)).not.toContain('CANARY-POLL-TEXT');
+    expect(nudgeText({ id: 'w', notice: wake?.notice })).toBe(REVIEW_NEEDED_NOTICE);
+    expect(REVIEW_NEEDED_NOTICE).toContain('Valetto');
   });
 });
 
