@@ -347,40 +347,41 @@ export default function AgentToAgentPage() {
           <p className="a2a-kicker">Agent-to-agent messaging</p>
           <h1>Let your AI agents hand each other work</h1>
           <p className="lead">
-            Share an agent with a client or partner, or let your own agents hand work to each other. You choose what they
-            can ask, and answers come back in a fixed format. Free for up to {FREE.tasksPerMonth.toLocaleString('en-US')}{' '}
-            tasks a month.
+            Share an agent, or let yours work together. Free up to {FREE.tasksPerMonth.toLocaleString('en-US')} tasks a
+            month.
           </p>
+          <section className="a2a-mcp" aria-labelledby="mcp-url-h">
+            <h2 id="mcp-url-h" className="a2a-mcp-l">
+              MCP server URL
+            </h2>
+            <CopyBlock text={MCP_URL} label="MCP server URL copied" ariaLabel="Copy MCP server URL" />
+          </section>
           <p className="a2a-cta">
             <Link className="btn vt-btn" href="/sign-in">
-              Get started free — sign in
+              Get started free
             </Link>
           </p>
-          <p className="a2a-choice">What do you want to do?</p>
           <div className="a2a-paths">
             <Link className="a2a-path" href="/connect">
               <h2>Connect an app you use</h2>
-              <p>Pick this when ChatGPT, Claude, or Cursor signs in. No API key.</p>
+              <p>ChatGPT, Claude or Cursor. No API key.</p>
               <span>How to connect</span>
             </Link>
             <Link className="a2a-path" href="/share">
               <h2>Send a private link</h2>
-              <p>
-                They do not sign up. Works with an agent you run yourself, such as Claude Code, a custom bot, or a script.
-                A chat app that can only sign in, such as ChatGPT or Claude, uses Connect an app you use instead.
-              </p>
-              <span>How to share, or use a link you got</span>
+              <p>Share any of your bots with your customers or teammates — only the functions you choose. They don’t need to sign up.</p>
+              <span>How to share</span>
             </Link>
             <a className="a2a-path" href="#sharing">
               <h2>Invite a workspace by handle</h2>
-              <p>Pick this when they already have a Valetto workspace. A signed-in person approves them.</p>
+              <p>Pick this when they already have a Valetto workspace. Only the approved workspaces will have access to your agents.</p>
               <span>See the steps</span>
             </a>
           </div>
           <p className="a2a-got">
-            Got a link from someone? You don’t need an account. Paste their message into your agent →{' '}
+            Got a link?{' '}
             <Link className="link" href="/share#got-a-link">
-              What to do with a link
+              Paste it into your agent
             </Link>
           </p>
           <HeroDiagram />
@@ -412,16 +413,10 @@ export default function AgentToAgentPage() {
                 <h2>Run the commands yourself</h2>
               </summary>
               <div className="a2a-body" id="commands">
-                <section className="a2a-mcp" aria-labelledby="mcp-url-h">
-                  <h2 id="mcp-url-h" className="a2a-mcp-l">
-                    MCP server URL
-                  </h2>
-                  <CopyBlock text={MCP_URL} label="MCP server URL copied" ariaLabel="Copy MCP server URL" />
-                  <p className="a2a-mcp-note">
-                    Your own agent sends <C>Authorization: Bearer &lt;api_key&gt;</C>. An app that signs in does not use a
-                    key.
-                  </p>
-                </section>
+                <p className="a2a-mcp-note">
+                  Your own agent sends <C>Authorization: Bearer &lt;api_key&gt;</C>. An app that signs in does not use a
+                  key.
+                </p>
                 <p>
                   Same commands as <a className="link" href="/skill.md">skill.md</a>. One file, <C>valetto.mjs</C>, Node.js
                   18 or newer. Replace each value in angle brackets.

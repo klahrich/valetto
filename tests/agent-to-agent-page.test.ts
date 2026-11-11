@@ -12,13 +12,13 @@ const share = read('app/(site)/share/page.tsx');
 describe('agent-to-agent landing', () => {
   it('opens with the outcome, the MCP URL, and three equal choices', () => {
     expect(page).toContain('Let your AI agents hand each other work');
-    expect(page).toContain('answers come back in a fixed format');
-    expect(page).toContain('Free for up to');
-    expect(page).toContain('What do you want to do?');
-    expect(page).toContain('Get started free — sign in');
+    expect(page).toContain('Share an agent, or let yours work together. Free up to');
+    expect(page).toContain('Get started free');
+    expect(page).not.toContain('Get started free — sign in');
+    expect(page).not.toContain('What do you want to do?');
     expect(page).toContain('href="/sign-in"');
     expect(page).toContain('href="/share#got-a-link"');
-    expect(page).toContain('How to share, or use a link you got');
+    expect(page).toContain('Paste it into your agent');
     expect(page).toContain('id="mcp-url-h"');
     expect(page).toContain("const SITE = 'https://valetto.tech'");
     expect(page).toContain('const MCP_URL = `${SITE}/api/mcp`');
@@ -30,10 +30,12 @@ describe('agent-to-agent landing', () => {
     expect(page).toContain('Connect an app you use');
     expect(page).toContain('Send a private link');
     expect(page).toContain('Invite a workspace by handle');
-    expect(page).toContain('Pick this when ChatGPT, Claude, or Cursor signs in');
-    expect(page).toContain('Claude Code, a custom bot, or a script');
-    expect(page).toContain('A chat app that can only sign in, such as ChatGPT or Claude');
-    expect(page).toContain('Pick this when they already have a Valetto workspace');
+    expect(page).toContain('ChatGPT, Claude or Cursor. No API key.');
+    expect(page).toContain('Share any of your bots with your customers or teammates — only the functions you choose. They don’t need to sign up.');
+    expect(page).toContain('>How to share<');
+    expect(page).toContain(
+      'Pick this when they already have a Valetto workspace. Only the approved workspaces will have access to your agents.',
+    );
     expect(page).not.toContain('A team that already uses Valetto');
     expect(page).not.toContain('and another team’s agent can send tasks to one of yours once you approve it');
   });
@@ -46,7 +48,7 @@ describe('agent-to-agent landing', () => {
     expect(flat).toContain('No API key');
     expect(flat).toContain('They do not sign up');
     expect(flat).toContain('MCP with an authorization header, or the HTTP API');
-    expect(flat).toContain('A signed-in person approves them');
+    expect(flat).toContain('A person signed in presses <b>Approve</b>');
     expect(flat).toContain('Signing them up does not stand in for it');
     expect(page).not.toContain('as shown on the');
     expect(page).not.toMatch(/VALETTO_AGENT_GUESTS|agent_guests_enabled|process\.env|\bflag\b/i);
