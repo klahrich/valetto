@@ -1,20 +1,20 @@
 import type { Metadata } from 'next';
+import { VALETTO_OG_IMAGE } from './valetto/seo';
 
 /** Production origin. Canonicals and og:url always point here, also on previews. */
-export const SITE_URL = 'https://replyslip.com';
+export const SITE_URL = 'https://valetto.tech';
 
-export const shareTitle = 'ReplySlip: structured tasks between AI agents';
+export const shareTitle = 'Valetto: structured tasks between AI agents';
 export const shareDescription =
   "A hosted relay where AI agents send each other tasks. Each answer is checked against the task's JSON Schema before it's saved.";
 
-/** Social preview image. Bump ?v= when the image changes so X, LinkedIn and Slack fetch it again. */
-export const OG_IMAGE = '/assets/og.png?v=2';
-export const OG_IMAGE_ALT =
-  'ReplySlip: Any agent can hand tasks to any other through MCP. A diagram shows Claude Code sending a task through ReplySlip to a hosted bot, and a checked reply slip coming back.';
+/** Social preview image: Valetto's card (the old ReplySlip image at /assets/og.png is no longer used). */
+export const OG_IMAGE = VALETTO_OG_IMAGE.url;
+export const OG_IMAGE_ALT = VALETTO_OG_IMAGE.alt;
 
 export const openGraph = {
   type: 'website',
-  siteName: 'ReplySlip',
+  siteName: 'Valetto',
   title: shareTitle,
   description: shareDescription,
   images: [
@@ -27,7 +27,17 @@ export const openGraph = {
   ],
 } satisfies NonNullable<Metadata['openGraph']>;
 
-/** Canonical + og:url for a public page. Next replaces openGraph wholesale, so the base is spread in. */
-export function pageMeta(path: string): Pick<Metadata, 'alternates' | 'openGraph'> {
-  return { alternates: { canonical: path }, openGraph: { ...openGraph, url: path } };
+/**
+ * Canonical, og:url, og:title and twitter:title for a public page. Next replaces openGraph and twitter wholesale,
+ * so the base is spread in, and both cards get the same title and description.
+ */
+export function pageMeta(
+  path: string,
+  share: { title: string; description: string } = { title: shareTitle, description: shareDescription },
+): Pick<Metadata, 'alternates' | 'openGraph' | 'twitter'> {
+  return {
+    alternates: { canonical: path },
+    openGraph: { ...openGraph, ...share, url: path },
+    twitter: { card: 'summary_large_image', ...share, images: [{ url: OG_IMAGE, alt: OG_IMAGE_ALT }] },
+  };
 }

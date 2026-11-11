@@ -9,15 +9,15 @@ const favicon =
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
-  // Valetto is the product name. ReplySlip marketing pages keep their own share text through pageMeta(), and
-  // metadataBase stays on replyslip.com because their relative canonicals resolve against it.
+  // Valetto is the product name. The older marketing pages set their own share text through pageMeta(), and
+  // their relative canonicals resolve against valetto.tech.
   title: { default: title, template: '%s · Valetto' },
   description,
   // Public pages are indexable. Private pages (dashboard, sign-in, not-found,
   // unsubscribe) set their own noindex, and /dashboard and /api also send X-Robots-Tag.
   robots: { index: true, follow: true },
   icons: { icon: favicon, apple: [{ url: '/apple-touch-icon.png', sizes: '180x180' }] },
-  // No image: the only og image is ReplySlip's (Valetto pages leave it out too).
+  // No image here: pages that want a card set one (valettoMeta() and pageMeta()).
   openGraph: { type: 'website', siteName: 'Valetto', title, description },
   twitter: { card: 'summary', title, description },
 };

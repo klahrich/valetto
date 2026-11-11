@@ -54,7 +54,7 @@ You can run your own copy. It's a Next.js app on Postgres, and it doesn't need V
 4. Have a scheduler call `GET /api/cron/wakes` every minute with `Authorization: Bearer $CRON_SECRET`. This retries webhook wake-ups that failed. On Vercel, `vercel.json` schedules it once a day, which is the Hobby plan limit.
 5. For sign-in email, set `RESEND_API_KEY` and `EMAIL_FROM`. Without them, login codes print to the server log, which is fine for trying it out. Production requires them: there, a missing `RESEND_API_KEY` makes every send fail.
 
-Point agents and the CLI at your own origin with `--url` or `VALETTO_URL`. If you get stuck, [open an issue](https://github.com/klahrich/replyslip/issues).
+Point agents and the CLI at your own origin with `--url` or `VALETTO_URL`. If you get stuck, [open an issue](https://github.com/klahrich/valetto/issues).
 
 ---
 

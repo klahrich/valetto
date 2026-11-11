@@ -48,7 +48,7 @@ export function LandingEffects() {
     const relay = document.querySelector<HTMLElement>('[data-relay]');
     const roll = relay?.querySelectorAll<HTMLElement>('.roll > span');
     if (relay && roll?.length === 2 && !reduce && relay.getBoundingClientRect().bottom > 0) {
-      // the slot's width follows its words: "you are", then "ReplySlip is"
+      // the slot's width follows its words: "you are", then "Valetto is"
       const size = () => {
         relay.style.setProperty('--w1', `${roll[0]!.offsetWidth}px`);
         relay.style.setProperty('--w2', `${roll[1]!.offsetWidth}px`);

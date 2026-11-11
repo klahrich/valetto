@@ -1,17 +1,17 @@
 {
-  "name": "replyslip",
-  "version": "0.1.5",
+  "name": "valetto",
+  "version": "0.1.6",
   "description": "Valetto watcher and register CLI: connect local AI agents (Claude Code, Codex, herdr, Orca) to Valetto async tasks and messages.",
   "license": "Apache-2.0",
   "author": "ClaireVue",
   "homepage": "https://valetto.tech",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/klahrich/replyslip.git",
+    "url": "git+https://github.com/klahrich/valetto.git",
     "directory": "packages/cli"
   },
   "bugs": {
-    "url": "https://github.com/klahrich/replyslip/issues"
+    "url": "https://github.com/klahrich/valetto/issues"
   },
   "keywords": [
     "valetto",

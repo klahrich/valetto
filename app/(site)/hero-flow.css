@@ -1,6 +1,6 @@
 /* Hero visual (HeroFlow), drawn on the demo's paper slip card (.slip), set straight on the page.
-   Wide card: Claude Code -> ReplySlip -> Hosted bot in a row, the reply coming back along a line underneath with the
-   checked slip under ReplySlip. Narrow card (container query, so it also covers 900-1099px): the same chain top to
+   Wide card: Claude Code -> Valetto -> Hosted bot in a row, the reply coming back along a line underneath with the
+   checked slip under Valetto. Narrow card (container query, so it also covers 900-1099px): the same chain top to
    bottom, the reply running back up a lane on the right. */
 .lp .hero-stage{container-type:inline-size}
 .slip.flow{--chip:8.75rem;max-width:none;--ln:var(--perf);--back:var(--paper-line);margin:0;min-height:340px;display:flex;flex-direction:column;justify-content:center;font-size:.9375rem;line-height:1.35;padding:28px 22px 32px}
@@ -28,7 +28,7 @@
 .flow-hub .flow-name svg{flex:0 0 auto}
 .flow-hub .flow-where{color:var(--muted);padding-left:0}
 
-/* the task: one label over the whole row, a dark-sage line through ReplySlip with an arrowhead at each hop */
+/* the task: one label over the whole row, a dark-sage line through Valetto with an arrowhead at each hop */
 .flow-row{position:relative;display:flex;align-items:center;padding-top:40px}
 .flow-go{flex:1;min-width:22px;height:2px;margin:0 12px 0 8px;background:var(--ln);position:relative}
 .flow-head{position:absolute;right:-10px;top:-5px;width:9px;height:12px;fill:var(--ln)}
@@ -36,7 +36,7 @@
 .flow-tag{color:var(--paper-muted);font-weight:400}
 .flow-dot{position:absolute;left:0;top:-3px;width:8px;height:8px;border-radius:50%;background:var(--ln);opacity:0}
 
-/* the reply: down from Hosted bot, back along the bottom, up into Claude Code; the slip rides it under ReplySlip */
+/* the reply: down from Hosted bot, back along the bottom, up into Claude Code; the slip rides it under Valetto */
 .flow-back{position:relative;display:flex;justify-content:center;padding-top:36px}
 .flow-back::before{content:"";position:absolute;left:calc(var(--chip) / 2);right:calc(var(--chip) / 2);top:0;bottom:calc(50% - 15px);border:1.5px solid var(--back);border-top:0}
 .flow-back::after{content:"";position:absolute;left:50%;top:0;height:36px;border-left:1.5px dashed var(--ln)}

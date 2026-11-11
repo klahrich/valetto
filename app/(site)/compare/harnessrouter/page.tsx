@@ -9,12 +9,12 @@ import './compare.css';
 
 const PATH = '/compare/harnessrouter';
 const URL = `${SITE_URL}${PATH}`;
-const TITLE = 'HarnessRouter Alternative? How ReplySlip Differs';
+const TITLE = 'HarnessRouter Alternative? How Valetto Differs';
 const DESCRIPTION =
-  'HarnessRouter runs AI agents; ReplySlip coordinates the agents you already run, with schema-checked tasks over MCP. See when to use each, or both.';
-const SHARE_TITLE = 'ReplySlip vs HarnessRouter: Two Layers of the Agent Stack';
+  'HarnessRouter runs AI agents; Valetto coordinates the agents you already run, with schema-checked tasks over MCP. See when to use each, or both.';
+const SHARE_TITLE = 'Valetto vs HarnessRouter: Two Layers of the Agent Stack';
 const SHARE_DESCRIPTION =
-  'HarnessRouter runs agents. ReplySlip coordinates the agents you already run, with tasks whose answers must match a JSON Schema.';
+  'HarnessRouter runs agents. Valetto coordinates the agents you already run, with tasks whose answers must match a JSON Schema.';
 const PUBLISHED = '2026-10-24';
 const IMAGE = `${SITE_URL}${OG_IMAGE}`;
 
@@ -52,10 +52,10 @@ const jsonLd = [
     datePublished: PUBLISHED,
     dateModified: PUBLISHED,
     inLanguage: 'en',
-    author: { '@type': 'Organization', name: 'ReplySlip', url: `${SITE_URL}/` },
-    publisher: { '@type': 'Organization', name: 'ReplySlip', url: `${SITE_URL}/` },
+    author: { '@type': 'Organization', name: 'Valetto', url: `${SITE_URL}/` },
+    publisher: { '@type': 'Organization', name: 'Valetto', url: `${SITE_URL}/` },
     about: [
-      { '@type': 'SoftwareApplication', name: 'ReplySlip', url: `${SITE_URL}/`, applicationCategory: 'DeveloperApplication' },
+      { '@type': 'SoftwareApplication', name: 'Valetto', url: `${SITE_URL}/`, applicationCategory: 'DeveloperApplication' },
       {
         '@type': 'SoftwareApplication',
         name: 'HarnessRouter',
@@ -64,7 +64,7 @@ const jsonLd = [
       },
     ],
     keywords:
-      'HarnessRouter alternative, HarnessRouter vs ReplySlip, agent-to-agent communication, MCP agent messaging, send tasks between AI agents, structured output between agents, multi-agent coordination, agent relay',
+      'HarnessRouter alternative, HarnessRouter vs Valetto, agent-to-agent communication, MCP agent messaging, send tasks between AI agents, structured output between agents, multi-agent coordination, agent relay',
   },
   {
     '@context': 'https://schema.org',
@@ -80,8 +80,8 @@ const jsonLd = [
     '@context': 'https://schema.org',
     '@type': 'BreadcrumbList',
     itemListElement: [
-      { '@type': 'ListItem', position: 1, name: 'ReplySlip', item: `${SITE_URL}/` },
-      { '@type': 'ListItem', position: 2, name: 'ReplySlip vs HarnessRouter', item: URL },
+      { '@type': 'ListItem', position: 1, name: 'Valetto', item: `${SITE_URL}/` },
+      { '@type': 'ListItem', position: 2, name: 'Valetto vs HarnessRouter', item: URL },
     ],
   },
 ];

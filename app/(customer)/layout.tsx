@@ -6,7 +6,7 @@ import { SessionGate } from './_views/SessionGate';
 /*
  * Valetto customer pages (spec 15). Tailwind + shadcn/ui live only under this route group:
  * customer.css is imported here and nowhere else, has no preflight, and every reset rule is
- * scoped to `.vt-root`, so the ReplySlip site and dashboard never load it.
+ * scoped to `.vt-root`, so the Valetto site and dashboard never load it.
  */
 const inter = Inter({ subsets: ['latin'], display: 'swap', variable: '--font-vt' });
 

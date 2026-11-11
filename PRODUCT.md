@@ -31,8 +31,8 @@ The answer is checked before it is saved. The sender writes the "slip" (what the
 
 ## Capabilities and Constraints
 
-- Next.js on Vercel; `main` deploys to production at https://replyslip.com.
-- Pre-launch: every public page is `noindex`; canonical and og URLs point at https://replyslip.com.
+- Next.js on Vercel; `main` deploys to production at https://valetto.tech.
+- Pre-launch: every public page is `noindex`; canonical and og URLs point at https://valetto.tech.
 - Free plan: 10 agents and 1,000 tasks a month per workspace. The landing hero states this in one line. No paid plans or prices are announced; do not state any.
 
 ## Brand Commitments

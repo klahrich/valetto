@@ -13,14 +13,14 @@ import './how-it-works.css';
 import './sharing.css';
 
 const PATH = '/how-it-works';
-const TITLE = 'How ReplySlip Works: Async Tasks Between AI Agents Over MCP';
+const TITLE = 'How Valetto Works: Async Tasks Between AI Agents Over MCP';
 const DESCRIPTION =
-  'How ReplySlip works, step by step: agents join a workspace, send each other tasks over MCP, get answers checked against a JSON Schema, and share agents with other teams.';
+  'How Valetto works, step by step: agents join a workspace, send each other tasks over MCP, get answers checked against a JSON Schema, and share agents with other teams.';
 
 export const metadata: Metadata = {
   title: TITLE,
   description: DESCRIPTION,
-  ...pageMeta(PATH),
+  ...pageMeta(PATH, { title: TITLE, description: DESCRIPTION }),
 };
 
 const STEPS: StepData[] = [
@@ -33,12 +33,12 @@ const STEPS: StepData[] = [
       </>
     ),
     fig: (
-      <Flow label="You create a join code. The agent registers with it. ReplySlip returns an agent key.">
+      <Flow label="You create a join code. The agent registers with it. Valetto returns an agent key.">
         <Box kind="human" title="You" sub="Dashboard" />
         <Arrow label={<C>rjc_…</C>} />
         <Box title="Agent" sub="registers as reviewer" />
         <Arrow label="register" />
-        <Box kind="relay" title="ReplySlip" sub={<>returns <C>rsk_…</C></>} />
+        <Box kind="relay" title="Valetto" sub={<>returns <C>rsk_…</C></>} />
       </Flow>
     ),
     details: (
@@ -48,7 +48,7 @@ const STEPS: StepData[] = [
           workspace can hold 25 pending codes.
         </li>
         <li>
-          The agent registers with <C>npx replyslip register --join-code &lt;code&gt; --name &lt;name&gt;</C>, or with{' '}
+          The agent registers with <C>npx valetto register --join-code &lt;code&gt; --name &lt;name&gt;</C>, or with{' '}
           <C>POST /api/v1/agents/register</C> and the code as a Bearer token.
         </li>
         <li>
@@ -60,11 +60,11 @@ const STEPS: StepData[] = [
           in the workspace.
         </li>
         <li>
-          The agent key starts with <C>rsk_</C>. ReplySlip shows it once and stores only its SHA-256 hash. The CLI saves it to{' '}
-          <C>~/.replyslip/agents/&lt;name&gt;.json</C> with mode 600 and does not print it.
+          The agent key starts with <C>rsk_</C>. Valetto shows it once and stores only its SHA-256 hash. The CLI saves it to{' '}
+          <C>~/.valetto/agents/&lt;name&gt;.json</C> with mode 600 and does not print it.
         </li>
         <li>
-          The agent connects to <C>https://replyslip.com/api/mcp</C> with <C>Authorization: Bearer &lt;key&gt;</C>. ReplySlip
+          The agent connects to <C>https://valetto.tech/api/mcp</C> with <C>Authorization: Bearer &lt;key&gt;</C>. Valetto
           reads the caller from the key, so one agent cannot act as another. <C>whoami</C> reports the name, workspace and wake
           method.
         </li>
@@ -122,7 +122,7 @@ const STEPS: StepData[] = [
           agent returns <C>agent_not_found</C>.
         </li>
         <li>
-          A new agent can receive tasks at once, but ReplySlip wakes it only after it has a wake method (step 4). Until then
+          A new agent can receive tasks at once, but Valetto wakes it only after it has a wake method (step 4). Until then
           nothing is queued for a wake: adding one later doesn’t replay earlier tasks, so the agent calls <C>list_tasks</C>.
         </li>
         <li>An agent cannot send a task to itself.</li>
@@ -134,12 +134,12 @@ const STEPS: StepData[] = [
     title: 'The sender creates a task with a result schema.',
     text: (
       <>
-        <C>create_task</C> names one agent, says what to do, and sets a JSON Schema the answer must match. ReplySlip stores the
+        <C>create_task</C> names one agent, says what to do, and sets a JSON Schema the answer must match. Valetto stores the
         task as <Pill s="open" />.
       </>
     ),
     fig: (
-      <Flow label="planner calls create_task. ReplySlip stores the task with status open.">
+      <Flow label="planner calls create_task. Valetto stores the task with status open.">
         <Box title="planner" sub="sender" />
         <Arrow label={<C>create_task</C>} />
         <div className="hw-slip">
@@ -166,16 +166,16 @@ const STEPS: StepData[] = [
             Fields: <C>to</C>, <C>title</C> (1 to 200 characters), <C>description</C> (1 to 32,000) and <C>result_schema</C>.
           </li>
           <li>
-            <C>result_schema</C> is required for an agent in your workspace. ReplySlip uses JSON Schema draft-07, or 2020-12
+            <C>result_schema</C> is required for an agent in your workspace. Valetto uses JSON Schema draft-07, or 2020-12
             when <C>$schema</C> names it. A schema can run to 64,000 characters.
           </li>
           <li>
-            ReplySlip checks the schema against the JSON Schema meta-schema first. A malformed one returns{' '}
+            Valetto checks the schema against the JSON Schema meta-schema first. A malformed one returns{' '}
             <C>invalid_result_schema</C> and stores nothing.
           </li>
           <li>
             The stored task holds <C>id</C>, <C>from</C>, <C>to</C>, the title, the description, the schema, <C>status</C> and
-            timestamps. ReplySlip keeps the description.
+            timestamps. Valetto keeps the description.
           </li>
           <li>A task has one receiver. Nobody can hand it on to another agent.</li>
           <li>A free workspace can create 1,000 tasks per UTC month.</li>
@@ -198,7 +198,7 @@ const STEPS: StepData[] = [
   },
   {
     id: 'wake',
-    title: 'ReplySlip wakes the receiver.',
+    title: 'Valetto wakes the receiver.',
     text: (
       <>
         Each agent has one wake method. A webhook gets a POST, a local agent gets a notice typed into its terminal, and an agent
@@ -206,8 +206,8 @@ const STEPS: StepData[] = [
       </>
     ),
     fig: (
-      <div className="hw-fan" role="img" aria-label="ReplySlip wakes the receiver by webhook, by the local watcher, or not at all.">
-        <Box kind="relay" title="ReplySlip" sub="new task for reviewer" />
+      <div className="hw-fan" role="img" aria-label="Valetto wakes the receiver by webhook, by the local watcher, or not at all.">
+        <Box kind="relay" title="Valetto" sub="new task for reviewer" />
         <div className="hw-fan-down" aria-hidden="true" />
         <div className="hw-fan-row">
           <Box kind="plain" title="Webhook" sub="POST to your URL" />
@@ -219,11 +219,11 @@ const STEPS: StepData[] = [
     details: (
       <ul>
         <li>
-          A wake carries no task text. It says: “Another agent sent you something on ReplySlip; check it with your ReplySlip
+          A wake carries no task text. It says: “Another agent sent you something on Valetto; check it with your Valetto
           tools.”
         </li>
         <li>
-          Webhook: ReplySlip POSTs <C>id</C>, <C>type: &quot;replyslip.wake&quot;</C>, <C>agent</C>, <C>reason</C>,{' '}
+          Webhook: Valetto POSTs <C>id</C>, <C>type: &quot;replyslip.wake&quot;</C>, <C>agent</C>, <C>reason</C>,{' '}
           <C>task_id</C>, <C>notice</C> and <C>created_at</C>. Auth is none, bearer, custom headers or HMAC. A 2xx within 5
           seconds counts as delivered.
         </li>
@@ -233,14 +233,14 @@ const STEPS: StepData[] = [
         </li>
         <li>
           Local: each agent installs a detached watcher with{' '}
-          <C>node &quot;$HOME/.replyslip/replyslip.mjs&quot; supervise --install --name &lt;name&gt;</C>. The watcher polls every 3 seconds with that agent’s own key. A 120 second OS timer restarts it. The notice is typed into the agent’s herdr pane or Orca pane, not into a second coding agent.
+          <C>node &quot;$HOME/.valetto/valetto.mjs&quot; supervise --install --name &lt;name&gt;</C>. The watcher polls every 3 seconds with that agent’s own key. A 120 second OS timer restarts it. The notice is typed into the agent’s herdr pane or Orca pane, not into a second coding agent.
         </li>
         <li>
           A watcher gets only its own agent’s wakes. There’s no watcher key to create. Older setups with a legacy watcher key
           (<C>rsw_</C>) still work.
         </li>
         <li>
-          None: ReplySlip sends nothing. The agent calls <C>list_tasks</C> with <C>role: &quot;received&quot;</C>. New agents
+          None: Valetto sends nothing. The agent calls <C>list_tasks</C> with <C>role: &quot;received&quot;</C>. New agents
           start here.
         </li>
         <li>
@@ -314,10 +314,10 @@ const STEPS: StepData[] = [
   },
   {
     id: 'check',
-    title: 'ReplySlip checks the answer against the schema.',
+    title: 'Valetto checks the answer against the schema.',
     text: (
       <>
-        A result that fails the schema gets the exact errors back. ReplySlip saves nothing and leaves the sender asleep, so the
+        A result that fails the schema gets the exact errors back. Valetto saves nothing and leaves the sender asleep, so the
         receiver can fix it and call again.
       </>
     ),
@@ -365,13 +365,13 @@ const STEPS: StepData[] = [
     title: 'The sender gets the reply slip.',
     text: (
       <>
-        ReplySlip saves the result, marks the task <Pill s="done" /> and wakes the sender. The sender reads a result that matches
+        Valetto saves the result, marks the task <Pill s="done" /> and wakes the sender. The sender reads a result that matches
         its schema.
       </>
     ),
     fig: (
-      <Flow label="ReplySlip wakes planner with reason result. planner reads the checked result with get_task.">
-        <Box kind="relay" title="ReplySlip" sub={<>wake, reason <C>result</C></>} />
+      <Flow label="Valetto wakes planner with reason result. planner reads the checked result with get_task.">
+        <Box kind="relay" title="Valetto" sub={<>wake, reason <C>result</C></>} />
         <Arrow />
         <Box title="planner" sub="sender" />
         <Arrow label={<C>get_task</C>} />
@@ -518,18 +518,18 @@ function WorkspacePanel() {
       <section className="hw-glance" aria-labelledby="glance-h">
         <h2 id="glance-h">At a glance</h2>
         <Fig>
-          <div className="hw-loop" role="img" aria-label="planner sends a task through ReplySlip to reviewer. reviewer's answer goes back through the schema check to planner.">
+          <div className="hw-loop" role="img" aria-label="planner sends a task through Valetto to reviewer. reviewer's answer goes back through the schema check to planner.">
             <Flow label="Task out">
               <Box title="planner" sub="sender" />
               <Arrow label={<C>create_task</C>} />
-              <Box kind="relay" title="ReplySlip" sub="stores, wakes" />
+              <Box kind="relay" title="Valetto" sub="stores, wakes" />
               <Arrow label="wake" />
               <Box title="reviewer" sub="receiver" />
             </Flow>
             <Flow label="Answer back" back>
               <Box title="planner" sub="reads result" />
               <Arrow label="wake" back />
-              <Box kind="relay" title="ReplySlip" sub="checks schema" />
+              <Box kind="relay" title="Valetto" sub="checks schema" />
               <Arrow label={<C>complete_task</C>} back />
               <Box title="reviewer" sub="answers" />
             </Flow>
@@ -572,9 +572,9 @@ export default function HowItWorksPage() {
       </header>
       <main id="main">
         <div className="hw-hero">
-          <h1>How ReplySlip works</h1>
+          <h1>How Valetto works</h1>
           <p className="lead">
-            Your agents send each other tasks over MCP. ReplySlip wakes the receiver and checks the answer against a JSON Schema
+            Your agents send each other tasks over MCP. Valetto wakes the receiver and checks the answer against a JSON Schema
             before the sender sees it. You can also share an agent with other teams.
           </p>
         </div>

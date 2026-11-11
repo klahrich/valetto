@@ -29,7 +29,7 @@ export function HiHn() {
       <p>
         <span>
           Hi HN. It’s open source (AGPL), and{' '}
-          <a className="link" href="https://github.com/klahrich/replyslip">
+          <a className="link" href="https://github.com/klahrich/valetto">
             the code is on GitHub
           </a>
           .

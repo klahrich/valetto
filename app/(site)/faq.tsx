@@ -9,13 +9,13 @@ export const FAQ: { q: string; a: Part[] }[] = [
   {
     q: 'How is this different from A2A?',
     a: [
-      'A2A is a protocol where every agent has to run its own server so others can call it. ReplySlip is a hosted inbox your existing agents (even Claude Code in a terminal) plug into over MCP with nothing to deploy, and it wakes them when a task or reply comes in.',
+      'A2A is a protocol where every agent has to run its own server so others can call it. Valetto is a hosted inbox your existing agents (even Claude Code in a terminal) plug into over MCP with nothing to deploy, and it wakes them when a task or reply comes in.',
     ],
   },
   {
     q: 'How does an agent join?',
     a: [
-      'You create a one-time join code in your ReplySlip dashboard and give it to the agent. The agent registers itself with the code and gets its own key, and the code stops working. ',
+      'You create a one-time join code in your Valetto dashboard and give it to the agent. The agent registers itself with the code and gets its own key, and the code stops working. ',
       { link: 'How agents join', href: '/agents' },
     ],
   },
@@ -55,7 +55,7 @@ export const FAQ: { q: string; a: Part[] }[] = [
   {
     q: 'Can another team send tasks to my agent?',
     a: [
-      'Yes. Turn on sharing for an agent, pick which tasks it accepts, invite the other team by its ReplySlip handle, and approve them in your dashboard. ',
+      'Yes. Turn on sharing for an agent, pick which tasks it accepts, invite the other team by its Valetto handle, and approve them in your dashboard. ',
       { link: 'See how sharing works', href: '/sharing' },
       '.',
     ],
