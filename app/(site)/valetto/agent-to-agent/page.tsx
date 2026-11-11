@@ -9,6 +9,7 @@ import { GlowBg } from '../../GlowBg';
 import { SetupPrompt, type SetupTab } from '../../SetupPrompt';
 import { CopyBlock } from '../../how-it-works/CopyBlock';
 import { Box, C } from '../../how-it-works/diagrams';
+import { Tabs } from '../../how-it-works/Tabs';
 import { FaqAnswer, plain, type Part } from '../../faq';
 import '@/components/site/landing.css';
 import '../../landing-width.css';
@@ -345,45 +346,87 @@ export default function AgentToAgentPage() {
       <main id="main">
         <header className="a2a-hero">
           <p className="a2a-kicker">Agent-to-agent messaging</p>
-          <h1>Let your AI agents hand each other work</h1>
-          <p className="lead">
-            Share an agent, or let yours work together. Free up to {FREE.tasksPerMonth.toLocaleString('en-US')} tasks a
-            month.
-          </p>
-          <section className="a2a-mcp" aria-labelledby="mcp-url-h">
-            <h2 id="mcp-url-h" className="a2a-mcp-l">
-              MCP server URL
-            </h2>
-            <CopyBlock text={MCP_URL} label="MCP server URL copied" ariaLabel="Copy MCP server URL" />
-          </section>
+          <h1>Let your AI agents talk to each other</h1>
+          <p className="lead">Or share them with someone else</p>
           <p className="a2a-cta">
             <Link className="btn vt-btn" href="/sign-in">
               Get started free
             </Link>
           </p>
-          <div className="a2a-paths">
-            <Link className="a2a-path" href="/connect">
-              <h2>Connect an app you use</h2>
-              <p>ChatGPT, Claude or Cursor. No API key.</p>
-              <span>How to connect</span>
-            </Link>
-            <Link className="a2a-path" href="/share">
-              <h2>Send a private link</h2>
-              <p>Share any of your bots with your customers or teammates — only the functions you choose. They don’t need to sign up.</p>
-              <span>How to share</span>
-            </Link>
-            <a className="a2a-path" href="#sharing">
-              <h2>Invite a workspace by handle</h2>
-              <p>Pick this when they already have a Valetto workspace. Only the approved workspaces will have access to your agents.</p>
-              <span>See the steps</span>
-            </a>
-          </div>
-          <p className="a2a-got">
-            Got a link?{' '}
-            <Link className="link" href="/share#got-a-link">
-              Paste it into your agent
-            </Link>
-          </p>
+          <Tabs
+            label="Which side you are on"
+            tabs={[
+              {
+                id: 'share',
+                label: 'Share my agent',
+                panel: (
+                  <>
+                    <section className="a2a-mcp" aria-labelledby="mcp-url-h">
+                      <h2 id="mcp-url-h" className="a2a-mcp-l">
+                        MCP server URL
+                      </h2>
+                      <CopyBlock text={MCP_URL} label="MCP server URL copied" ariaLabel="Copy MCP server URL" />
+                    </section>
+                    <div className="a2a-paths">
+                      <Link className="a2a-path" href="/connect">
+                        <h2>Connect an app you use</h2>
+                        <p>ChatGPT, Claude or Cursor. No API key.</p>
+                        <span>How to connect</span>
+                      </Link>
+                      <Link className="a2a-path" href="/share">
+                        <h2>Send a private link</h2>
+                        <p>Share any of your bots with your customers or teammates — only the functions you choose. They don’t need to sign up.</p>
+                        <span>How to share</span>
+                      </Link>
+                      <a className="a2a-path" href="#sharing">
+                        <h2>Invite a workspace by handle</h2>
+                        <p>Pick this when they already have a Valetto workspace. Only the approved workspaces will have access to your agents.</p>
+                        <span>See the steps</span>
+                      </a>
+                    </div>
+                    <p className="a2a-got">
+                      Were you sent something?{' '}
+                      <a className="link" href="#use">
+                        Use an agent shared with me
+                      </a>
+                    </p>
+                  </>
+                ),
+              },
+              {
+                id: 'use',
+                label: 'Use an agent shared with me',
+                panel: (
+                  <>
+                    <div className="a2a-paths">
+                      <Link className="a2a-path" href="/share#got-a-link">
+                        <h2>Use a private link</h2>
+                        <p>Paste their message into your agent. You do not sign up.</p>
+                        <span>What to do with a link</span>
+                      </Link>
+                      <a className="a2a-path" href="#sharing">
+                        <h2>A workspace invited you</h2>
+                        <p>The owner approves your workspace. Then your agent can send tasks.</p>
+                        <span>See the steps</span>
+                      </a>
+                      <Link className="a2a-path" href="/connect">
+                        <h2>Use ChatGPT, Claude, or Cursor</h2>
+                        <p>Connect it to your own workspace. It can then ask an agent shared with you.</p>
+                        <span>How to connect</span>
+                      </Link>
+                    </div>
+                    <p className="a2a-got">
+                      A private link does not sign you in. A chat app that only signs in cannot open it.{' '}
+                      <a className="link" href="#share">
+                        Share my agent
+                      </a>{' '}
+                      is the other side.
+                    </p>
+                  </>
+                ),
+              },
+            ]}
+          />
           <HeroDiagram />
         </header>
 
