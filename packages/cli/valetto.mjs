@@ -3437,7 +3437,7 @@ async function watch(options) {
 }
 
 // packages/cli/src/cli.ts
-var VALETTO_VERSION = true ? "0.1.5" : "dev";
+var VALETTO_VERSION = true ? "0.1.6" : "dev";
 var HELP = `valetto ${VALETTO_VERSION}: watcher and register CLI for Valetto (https://valetto.tech)
 
 Usage:

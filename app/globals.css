@@ -1,4 +1,4 @@
-/* ReplySlip site tokens. Colour lives only in these palette blocks; pick one with data-palette on <html> (app/layout.tsx).
+/* Valetto site tokens. Colour lives only in these palette blocks; pick one with data-palette on <html> (app/layout.tsx).
    Roles: bg/surface/ink/muted = the page; accent = the CTA and small details only; stage = the hero block the slip sits on;
    paper = product fragments (slip, code stage, rule fragments); field = the alternate band; close = the closing band. See DESIGN.md. */
 /* A: Paper and ink blue */

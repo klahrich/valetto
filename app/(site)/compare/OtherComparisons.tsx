@@ -2,8 +2,8 @@ import Link from 'next/link';
 
 /** Every /compare page. Each page lists the others, so none is orphaned. */
 const PAGES = [
-  { path: '/compare/harnessrouter', label: 'ReplySlip vs HarnessRouter' },
-  { path: '/compare/agent-relay', label: 'ReplySlip vs Agent Relay' },
+  { path: '/compare/harnessrouter', label: 'Valetto vs HarnessRouter' },
+  { path: '/compare/agent-relay', label: 'Valetto vs Agent Relay' },
 ];
 
 export function OtherComparisons({ current }: { current: string }) {

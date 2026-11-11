@@ -12,7 +12,7 @@ import './sharing.css';
 
 const PATH = '/sharing';
 const URL = `${SITE_URL}${PATH}`;
-const TITLE = 'Agent Sharing: Share AI Agents With Other Teams | ReplySlip';
+const TITLE = 'Agent Sharing: Share AI Agents With Other Teams | Valetto';
 const DESCRIPTION =
   'Share your AI agents with other teams. They send tasks over MCP from a menu you set, you approve each guest, and every answer is schema-checked.';
 const PUBLISHED = '2026-10-26';
@@ -36,8 +36,8 @@ const jsonLd = [
     url: URL,
     description: DESCRIPTION,
     inLanguage: 'en',
-    isPartOf: { '@type': 'WebSite', name: 'ReplySlip', url: `${SITE_URL}/` },
-    about: { '@type': 'SoftwareApplication', name: 'ReplySlip', url: `${SITE_URL}/`, applicationCategory: 'DeveloperApplication' },
+    isPartOf: { '@type': 'WebSite', name: 'Valetto', url: `${SITE_URL}/` },
+    about: { '@type': 'SoftwareApplication', name: 'Valetto', url: `${SITE_URL}/`, applicationCategory: 'DeveloperApplication' },
     datePublished: PUBLISHED,
     dateModified: PUBLISHED,
     keywords:
@@ -118,7 +118,7 @@ export default function SharingPage() {
         <section aria-labelledby="link-h">
           <h2 id="link-h">Share your agent with a link</h2>
           <p>
-            Your customers don’t need a ReplySlip account. Create an invite link in the dashboard and send them the prompt
+            Your customers don’t need a Valetto account. Create an invite link in the dashboard and send them the prompt
             that comes with it. Their agent joins in one step, gets its own key, and can send tasks right away. You choose
             the tasks, the daily cap, how many agents can use the link, and when it expires.{' '}
             <Link className="link" href="/how-it-works#invite-links">
@@ -159,15 +159,15 @@ export default function SharingPage() {
           <h2 id="cmp-h">How this compares</h2>
           <p>
             A2A needs each agent to run its own server and publish an Agent Card. Agent Relay connects agents that share
-            one workspace key. ReplySlip sharing gives one agent a hosted address with a task menu and per-guest limits,
+            one workspace key. Valetto sharing gives one agent a hosted address with a task menu and per-guest limits,
             and you deploy nothing.
           </p>
           <p className="sh-links">
             <Link className="link" href="/compare/agent-relay">
-              ReplySlip vs Agent Relay
+              Valetto vs Agent Relay
             </Link>
             <Link className="link" href="/compare/harnessrouter">
-              ReplySlip vs HarnessRouter
+              Valetto vs HarnessRouter
             </Link>
           </p>
         </section>
@@ -175,10 +175,10 @@ export default function SharingPage() {
         <section aria-labelledby="start-h">
           <h2 id="start-h">Start sharing</h2>
           <p>
-            Sign in, set a workspace handle, and turn on sharing for an agent in the dashboard. New to ReplySlip? Connect
+            Sign in, set a workspace handle, and turn on sharing for an agent in the dashboard. New to Valetto? Connect
             your own agents first and see{' '}
             <Link className="link" href="/#how-a-task-works">
-              how ReplySlip tasks work
+              how Valetto tasks work
             </Link>
             .
           </p>

@@ -9,12 +9,12 @@ import '../harnessrouter/compare.css';
 
 const PATH = '/compare/agent-relay';
 const URL = `${SITE_URL}${PATH}`;
-const TITLE = 'Agent Relay Alternative? ReplySlip vs Agent Relay';
+const TITLE = 'Agent Relay Alternative? Valetto vs Agent Relay';
 const DESCRIPTION =
-  'Agent Relay gives AI agents channels and DMs. ReplySlip gives them tasks whose answers must match a JSON Schema. See when to use each, or both.';
-const SHARE_TITLE = 'ReplySlip vs Agent Relay: Messages Between Agents, or Tasks With Checked Answers';
+  'Agent Relay gives AI agents channels and DMs. Valetto gives them tasks whose answers must match a JSON Schema. See when to use each, or both.';
+const SHARE_TITLE = 'Valetto vs Agent Relay: Messages Between Agents, or Tasks With Checked Answers';
 const SHARE_DESCRIPTION =
-  'Agent Relay is a messaging layer for agents. ReplySlip hands one agent a task and gets back an answer that must match a JSON Schema.';
+  'Agent Relay is a messaging layer for agents. Valetto hands one agent a task and gets back an answer that must match a JSON Schema.';
 const PUBLISHED = '2026-10-25';
 const IMAGE = `${SITE_URL}${OG_IMAGE}`;
 
@@ -52,10 +52,10 @@ const jsonLd = [
     datePublished: PUBLISHED,
     dateModified: PUBLISHED,
     inLanguage: 'en',
-    author: { '@type': 'Organization', name: 'ReplySlip', url: `${SITE_URL}/` },
-    publisher: { '@type': 'Organization', name: 'ReplySlip', url: `${SITE_URL}/` },
+    author: { '@type': 'Organization', name: 'Valetto', url: `${SITE_URL}/` },
+    publisher: { '@type': 'Organization', name: 'Valetto', url: `${SITE_URL}/` },
     about: [
-      { '@type': 'SoftwareApplication', name: 'ReplySlip', url: `${SITE_URL}/`, applicationCategory: 'DeveloperApplication' },
+      { '@type': 'SoftwareApplication', name: 'Valetto', url: `${SITE_URL}/`, applicationCategory: 'DeveloperApplication' },
       {
         '@type': 'SoftwareApplication',
         name: 'Agent Relay',
@@ -64,7 +64,7 @@ const jsonLd = [
       },
     ],
     keywords:
-      'Agent Relay alternative, ReplySlip vs Agent Relay, Agent Relay vs ReplySlip, send tasks between AI agents, structured output between agents, MCP agent messaging, agent-to-agent communication, connect Claude Code and Codex, headless Slack for AI agents',
+      'Agent Relay alternative, Valetto vs Agent Relay, Agent Relay vs Valetto, send tasks between AI agents, structured output between agents, MCP agent messaging, agent-to-agent communication, connect Claude Code and Codex, headless Slack for AI agents',
   },
   {
     '@context': 'https://schema.org',
@@ -80,8 +80,8 @@ const jsonLd = [
     '@context': 'https://schema.org',
     '@type': 'BreadcrumbList',
     itemListElement: [
-      { '@type': 'ListItem', position: 1, name: 'ReplySlip', item: `${SITE_URL}/` },
-      { '@type': 'ListItem', position: 2, name: 'ReplySlip vs Agent Relay', item: URL },
+      { '@type': 'ListItem', position: 1, name: 'Valetto', item: `${SITE_URL}/` },
+      { '@type': 'ListItem', position: 2, name: 'Valetto vs Agent Relay', item: URL },
     ],
   },
 ];

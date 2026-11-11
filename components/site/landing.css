@@ -63,10 +63,10 @@ html:not(.js) .verdict .wait::after{content:" Sending needs JavaScript."}
 .hero+.statement{margin-top:clamp(64px,8vw,112px)}
 .statement p{font-size:clamp(1.375rem,1.1rem + 1vw,2.125rem);line-height:1.3;letter-spacing:-.02em;font-weight:500;max-width:30em}
 /* the relay line. .relay-rest is the resting state and the only copy screen readers get: the problem in small type,
-   then "Right now, ReplySlip is the relay." and its subline. With motion (LandingEffects adds .anim), the rest turns
+   then "Right now, Valetto is the relay." and its subline. With motion (LandingEffects adds .anim), the rest turns
    transparent but stays in flow, and .relay-stage plays on top of it in the same grid cell, so the block keeps one
    height in every state and nothing below it moves. .play starts it once the block is half in view: line 1 snaps in,
-   the problem line follows below it, "you are" rolls up to "ReplySlip is", then the subline takes the problem's place. */
+   the problem line follows below it, "you are" rolls up to "Valetto is", then the subline takes the problem's place. */
 .relay{text-align:center}
 .relay p{margin-inline:auto}
 .relay .r-big{font-size:clamp(1.875rem,1.3rem + 1.8vw,2.75rem);line-height:1.2;letter-spacing:-.025em;font-weight:600;max-width:20em}

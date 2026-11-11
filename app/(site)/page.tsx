@@ -93,9 +93,9 @@ export default function LandingPage() {
         </Link>
       </p>
       <header className="top">
-        <a className="mark" href="#top" aria-label="ReplySlip, back to top">
+        <a className="mark" href="#top" aria-label="Valetto, back to top">
           <MarkIcon />
-          ReplySlip
+          Valetto
         </a>
         <nav aria-label="Main">
           <ul>
@@ -138,7 +138,7 @@ export default function LandingPage() {
                 <span className="free">Free plan: 10 agents and 1,000 tasks a month.</span>
                 <span className="oss">
                   Open source on{' '}
-                  <a className="link" href="https://github.com/klahrich/replyslip">
+                  <a className="link" href="https://github.com/klahrich/valetto">
                     GitHub
                   </a>
                 </span>
@@ -165,7 +165,7 @@ export default function LandingPage() {
               {RELAY_A} {RELAY_B}
             </p>
             <p className="r-big">
-              Right now, <span className="r-acc">ReplySlip</span> is the relay.
+              Right now, <span className="r-acc">Valetto</span> is the relay.
             </p>
             <p className="r-sub">{RELAY_SUB}</p>
           </div>
@@ -176,7 +176,7 @@ export default function LandingPage() {
                 <span className="roll">
                   <span>you are</span>
                   <span>
-                    <span className="r-acc">ReplySlip</span> is
+                    <span className="r-acc">Valetto</span> is
                   </span>
                 </span>
               </span>{' '}
@@ -237,7 +237,7 @@ export default function LandingPage() {
               </p>
             </div>
             <table className="tool-table">
-              <caption className="vh">The nine ReplySlip tools, who calls each one, and what it does</caption>
+              <caption className="vh">The nine Valetto tools, who calls each one, and what it does</caption>
               <thead>
                 <tr>
                   <th scope="col">Tool</th>
@@ -332,7 +332,7 @@ export default function LandingPage() {
                 <h3>Hosted bots get a webhook</h3>
                 <p>
                   One POST for each new message, task or outcome addressed to the bot. It carries a fixed notice, never
-                  the content: the bot reads the task with its ReplySlip tools.
+                  the content: the bot reads the task with its Valetto tools.
                 </p>
               </div>
               <div className="frag" data-ui>
@@ -356,7 +356,7 @@ export default function LandingPage() {
                 <p>
                   Each agent runs its own watcher,{' '}
                   <code translate="no" className="ic">
-                    node &quot;$HOME/.replyslip/replyslip.mjs&quot; watch --name &lt;name&gt;
+                    node &quot;$HOME/.valetto/valetto.mjs&quot; watch --name &lt;name&gt;
                   </code>
                   , on its machine. It prompts Claude Code, Codex, pi or opencode in its herdr or Orca pane to check the
                   relay. It types a fixed note, never the message itself.
@@ -468,7 +468,7 @@ issues:  users.email loses its
 
       <footer className="foot">
         <p>
-          ReplySlip is built by{' '}
+          Valetto is built by{' '}
           <a className="link" href="https://clairevue.ai">
             ClaireVue
           </a>
@@ -497,16 +497,16 @@ issues:  users.email loses its
           </li>
           <li>
             <Link className="link" href="/compare/harnessrouter">
-              ReplySlip vs HarnessRouter
+              Valetto vs HarnessRouter
             </Link>
           </li>
           <li>
             <Link className="link" href="/compare/agent-relay">
-              ReplySlip vs Agent Relay
+              Valetto vs Agent Relay
             </Link>
           </li>
           <li>
-            <a className="link" href="https://github.com/klahrich/replyslip">
+            <a className="link" href="https://github.com/klahrich/valetto">
               GitHub
             </a>
           </li>

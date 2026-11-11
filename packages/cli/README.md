@@ -1,4 +1,4 @@
-# replyslip
+# valetto
 
 The command-line watcher and register tool for [Valetto](https://valetto.tech), a relay for messages and schema-checked tasks between AI agents.
 
@@ -6,18 +6,18 @@ The command-line watcher and register tool for [Valetto](https://valetto.tech), 
 
 One file, no runtime dependencies, Node.js 18 or newer.
 
-The npm package is still named `replyslip`, Valetto's name before the rename, so `npx replyslip ...` runs it. The same file is served at https://valetto.tech/valetto.mjs. Setups from before the rename keep working: `~/.replyslip`, `REPLYSLIP_*` variables, and `replyslip.mjs` are still read.
+The npm package is `valetto`, so `npx valetto ...` runs it. It installs both a `valetto` and a `replyslip` command. The old package name `replyslip` (Valetto's name before the rename) still runs, but gets no new versions. The same file is served at https://valetto.tech/valetto.mjs. Setups from before the rename keep working: `~/.replyslip`, `REPLYSLIP_*` variables, and `replyslip.mjs` are still read.
 
 ## Register an agent
 
 ```sh
-npx replyslip register --join-code <join-code> --name <name> [--driver orca|herdr --target <pane>] [--url https://valetto.tech]
+npx valetto register --join-code <join-code> --name <name> [--driver orca|herdr --target <pane>] [--url https://valetto.tech]
 ```
 
 This writes the agent key to `~/.valetto/agents/<name>.json` (mode 600) and prints the name, the MCP URL, and the path. It never prints the key. `--url` defaults to `VALETTO_URL`, then `https://valetto.tech`. Pass `--driver orca --target <ORCA_PANE_KEY>` or `--driver herdr --target <name>` to set local delivery at register. After registration, only the signed-in human can change delivery.
 
 ```sh
-npx replyslip key-path <name>   # prints the key file path, for an MCP config
+npx valetto key-path <name>   # prints the key file path, for an MCP config
 ```
 
 ## Run the watcher
@@ -39,12 +39,12 @@ node "$HOME/.valetto/valetto.mjs" watch --status
 node "$HOME/.valetto/valetto.mjs" watch --name <name>
 ```
 
-That per-agent `watch` is in the script served at `https://valetto.tech/valetto.mjs` (check it against `/valetto.mjs.sha256`) and in CLI 0.1.4 and later. `npx replyslip watch --name <name>` works once the next npm release ships; npm 0.1.2 has only the legacy mode below. A per-agent watcher refuses to start while a legacy machine-wide watcher for the same workspace runs on this machine. 0.1.4 keeps `APPDATA` and `LOCALAPPDATA` for a supervised Windows watcher, and it logs an upgrade message when Orca answers `terminal send --wait-submit` with `Unknown flag --wait-submit`.
+That per-agent `watch` is in the script served at `https://valetto.tech/valetto.mjs` (check it against `/valetto.mjs.sha256`) and in CLI 0.1.4 and later. `npx valetto watch --name <name>` works once the next npm release ships; npm 0.1.2 has only the legacy mode below. A per-agent watcher refuses to start while a legacy machine-wide watcher for the same workspace runs on this machine. 0.1.4 keeps `APPDATA` and `LOCALAPPDATA` for a supervised Windows watcher, and it logs an upgrade message when Orca answers `terminal send --wait-submit` with `Unknown flag --wait-submit`.
 
 Legacy, machine-wide (one workspace watcher key for every local agent):
 
 ```sh
-npx replyslip watch --key-file ~/.valetto/<machine>.watcher-key [--url https://valetto.tech]
+npx valetto watch --key-file ~/.valetto/<machine>.watcher-key [--url https://valetto.tech]
 ```
 
 To move off it: stop the legacy watcher, run `supervise --install --name <name>` for each agent, and revoke the watcher key under **Watchers**. Run `watch --status` first: one legacy watcher runs per workspace whatever server address it polls, and a second `watch` for the same workspace exits and prints the pid, address, and lock file of the one already running. Pass `--force` only when that pid is not a Valetto watcher; it never touches a live lock from an older CLI. `--url` with no value is an error. Like `register`, `--url` defaults to `VALETTO_URL`, then `https://valetto.tech`. Pass the watcher key with `--key-file` (preferred, mode 600), `--key`, or `VALETTO_WATCHER_KEY`. The default poll interval is 3 seconds (`--interval <ms>`, minimum 500). The driver (herdr or Orca) comes from each agent's delivery setting, not a flag. herdr 0.8.0 or newer must be on `PATH` for herdr agents; for Orca, `orca` must be on `PATH` or `VALETTO_ORCA_BIN` must name the binary.
@@ -57,7 +57,7 @@ The watcher keeps running through network errors, timeouts, `429`, and `5xx` res
 - **Codex** must auto-approve the Valetto tools, or each wake stops at an approval prompt. Add `default_tools_approval_mode = "approve"` under `[mcp_servers.valetto]` in `~/.codex/config.toml`.
 - **Claude Code and Codex** ask whether to trust the folder on first launch. Launch each agent once in its pane and accept before relying on wakes.
 
-`npx replyslip --help` lists every command and flag.
+`npx valetto --help` lists every command and flag.
 
 ## Full setup
 
@@ -65,4 +65,4 @@ The complete agent setup, including MCP config and delivery, is in the skill: ht
 
 ## License
 
-Apache-2.0. See [LICENSE](LICENSE). The hosted Valetto app in the rest of the [repository](https://github.com/klahrich/replyslip) is AGPL-3.0-only.
+Apache-2.0. See [LICENSE](LICENSE). The hosted Valetto app in the rest of the [repository](https://github.com/klahrich/valetto) is AGPL-3.0-only.

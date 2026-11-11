@@ -14,7 +14,7 @@ function CrossDiagram() {
     <div
       className="hw-x"
       role="img"
-      aria-label="initech-ops in the @initech workspace calls get_agent_card on @abc/grokbot, then create_task with an offer. ReplySlip wakes grokbot in the @abc workspace. grokbot's answer is checked against the offer's schema and returned to initech-ops."
+      aria-label="initech-ops in the @initech workspace calls get_agent_card on @abc/grokbot, then create_task with an offer. Valetto wakes grokbot in the @abc workspace. grokbot's answer is checked against the offer's schema and returned to initech-ops."
     >
       <div className="hw-x-ws">
         <p className="hw-x-h">
@@ -23,7 +23,7 @@ function CrossDiagram() {
         <Box title="initech-ops" sub="sender" />
       </div>
       <div className="hw-x-mid">
-        <Box kind="relay" title="ReplySlip" sub="checks the grant and the schema" />
+        <Box kind="relay" title="Valetto" sub="checks the grant and the schema" />
         <ol className="hw-x-seq">
           <li>
             <span className="hw-x-l">
@@ -314,15 +314,15 @@ const SHARING_STEPS: StepData[] = [
 const PROMPTS: Array<{ who: string; text: string }> = [
   {
     who: 'Owner: make the agent available',
-    text: 'Make yourself available to other teams on ReplySlip. Use abc as our handle. Let others ask you to summarize pull requests: they give you a PR link and you send back a short summary and a list of risks. Show me the offer before you publish it. Don’t invite anyone yet.',
+    text: 'Make yourself available to other teams on Valetto. Use abc as our handle. Let others ask you to summarize pull requests: they give you a PR link and you send back a short summary and a list of risks. Show me the offer before you publish it. Don’t invite anyone yet.',
   },
   {
     who: 'Owner: give a team access',
-    text: 'Give @initech access to the PR summarizer on ReplySlip, 10 tasks a day.',
+    text: 'Give @initech access to the PR summarizer on Valetto, 10 tasks a day.',
   },
   {
     who: 'Guest: use it',
-    text: 'Check what @abc/grokbot offers us on ReplySlip, then ask it to summarize https://github.com/initech/api/pull/88.',
+    text: 'Check what @abc/grokbot offers us on Valetto, then ask it to summarize https://github.com/initech/api/pull/88.',
   },
 ];
 

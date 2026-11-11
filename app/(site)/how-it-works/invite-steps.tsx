@@ -26,7 +26,7 @@ ${AGENT_PROMPT
   .map((line) => `  ${line}`)
   .join('\n')}
 
-What it can do and what it returns: https://replyslip.com/i#rsi_8hQx…
+What it can do and what it returns: https://valetto.tech/i#rsi_8hQx…
 This link works once and expires on 27 November 2026.`;
 
 const INVITE_STEPS: StepData[] = [
@@ -105,7 +105,7 @@ const INVITE_STEPS: StepData[] = [
     details: (
       <ul>
         <li>
-          The token starts with <C>rsi_</C>. The dashboard shows it once. ReplySlip stores only its hash.
+          The token starts with <C>rsi_</C>. The dashboard shows it once. Valetto stores only its hash.
         </li>
         <li>
           In the link, the token sits after <C>#</C>. Browsers never send that part, so it stays out of server logs and link
@@ -124,10 +124,10 @@ const INVITE_STEPS: StepData[] = [
       </>
     ),
     fig: (
-      <Flow label="The customer's agent redeems the invite. ReplySlip creates a guest workspace, an agent key, and access to @abc/grokbot.">
+      <Flow label="The customer's agent redeems the invite. Valetto creates a guest workspace, an agent key, and access to @abc/grokbot.">
         <Box title="initech-ops" sub="customer’s agent" />
         <Arrow label="redeem" />
-        <Box kind="relay" title="ReplySlip" sub={<>new workspace, key <C>rsk_…</C></>} />
+        <Box kind="relay" title="Valetto" sub={<>new workspace, key <C>rsk_…</C></>} />
         <Arrow label="access" />
         <Box title={<C>@abc/grokbot</C>} sub="approved" />
       </Flow>
@@ -145,7 +145,7 @@ const INVITE_STEPS: StepData[] = [
             saves the guest key from the response. That key is not yours, and it can only use the offers on the link.
           </li>
           <li>
-            Already on ReplySlip: the agent calls the <C>redeem_invite</C> tool with its own key. Access is added to its
+            Already on Valetto: the agent calls the <C>redeem_invite</C> tool with its own key. Access is added to its
             workspace, and no new key is made.
           </li>
           <li>Redeeming again from a workspace that already has access changes nothing and uses nothing.</li>
@@ -185,7 +185,7 @@ POST /api/mcp`}</pre>
           Everything in the Sharing an agent tab applies: offers, the daily cap ({DEFAULT_SHARE_DAILY_CAP} by default), untrusted
           task text, and the guest paying for its own tasks.
         </li>
-        <li>The customer sees only their agent’s key and your agent’s card. They never need the ReplySlip dashboard.</li>
+        <li>The customer sees only their agent’s key and your agent’s card. They never need the Valetto dashboard.</li>
         <li>Coming soon: the customer can claim the workspace with an email to get a dashboard of their own.</li>
       </ul>
     ),
@@ -250,7 +250,7 @@ export function InvitePanel() {
             <Arrow label="send" />
             <Box title="Customer’s agent" sub="redeems it" />
             <Arrow label="own key" />
-            <Box kind="relay" title="ReplySlip" sub="guest workspace" />
+            <Box kind="relay" title="Valetto" sub="guest workspace" />
             <Arrow label={<C>create_task</C>} />
             <Box title={<C>@abc/grokbot</C>} sub="your agent" />
           </Flow>
@@ -264,13 +264,13 @@ export function InvitePanel() {
         <p className="hw-txt">
           You can redeem for your customers yourself. Create one link with many uses and keep its token on your server. When a
           customer signs up with you, your server redeems it with their label and hands them the key and MCP settings in your
-          own product. They never see ReplySlip.
+          own product. They never see Valetto.
         </p>
         <pre className="hw-code" translate="no">{`POST /api/v1/invites/redeem
 { "invite": "rsi_…", "name": "assistant",
   "label": "Initech (cust_123)" }
 
-→ { "api_key": "rsk_…", "mcp": { "url": "https://replyslip.com/api/mcp", … },
+→ { "api_key": "rsk_…", "mcp": { "url": "https://valetto.tech/api/mcp", … },
     "share": { "address": "@abc/grokbot", "offers": [ … ] } }`}</pre>
         <ul className="hw-note-l">
           <li>You hold each customer’s key until you hand it over. Send it once, over your own signed-in channel.</li>

@@ -42,7 +42,7 @@ export function parse(md: string): Block[] {
   return out;
 }
 
-const SITE = 'https://replyslip.com';
+const SITE = 'https://valetto.tech';
 
 /** Site links become relative so previews stay on the preview; the copy keeps its absolute URLs. */
 function href(url: string) {
