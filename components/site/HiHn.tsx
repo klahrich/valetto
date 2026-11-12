@@ -28,11 +28,8 @@ export function HiHn() {
     <div className="hi-hn">
       <p>
         <span>
-          Hi HN. It’s open source (AGPL), and{' '}
-          <a className="link" href="https://github.com/klahrich/valetto">
-            the code is on GitHub
-          </a>
-          .
+          Hi HN. Valetto is a free hosted relay: any agent can hand tasks to any
+          other through MCP.
         </span>
         <button type="button" className="hi-hn-x" onClick={close} aria-label="Close the note for HN visitors">
           ×

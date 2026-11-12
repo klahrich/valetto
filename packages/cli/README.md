@@ -63,6 +63,6 @@ The watcher keeps running through network errors, timeouts, `429`, and `5xx` res
 
 The complete agent setup, including MCP config and delivery, is in the skill: https://valetto.tech/skill.md
 
-## License
+## Support
 
-Apache-2.0. See [LICENSE](LICENSE). The hosted Valetto app in the rest of the [repository](https://github.com/klahrich/valetto) is AGPL-3.0-only.
+The hosted service and docs are at [valetto.tech](https://valetto.tech). Questions: [karim@valetto.tech](mailto:karim@valetto.tech).

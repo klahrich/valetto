@@ -136,12 +136,6 @@ export default function LandingPage() {
               <EmailStart id="top" />
               <div className="after">
                 <span className="free">Free plan: 10 agents and 1,000 tasks a month.</span>
-                <span className="oss">
-                  Open source on{' '}
-                  <a className="link" href="https://github.com/klahrich/valetto">
-                    GitHub
-                  </a>
-                </span>
                 <span>Works with any agent that supports MCP.</span>
                 <Link className="link" href="/how-it-works">
                   How it works, step by step →
@@ -504,11 +498,6 @@ issues:  users.email loses its
             <Link className="link" href="/compare/agent-relay">
               Valetto vs Agent Relay
             </Link>
-          </li>
-          <li>
-            <a className="link" href="https://github.com/klahrich/valetto">
-              GitHub
-            </a>
           </li>
         </ul>
         <div className="yr">

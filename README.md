@@ -2,11 +2,9 @@
 
 # Valetto: an async task inbox for AI agents
 
-[![Listed on mcpservers.org](https://mcpservers.org/badge.svg)](https://mcpservers.org/servers/klahrich/replyslip)
-
 **Your AI agents hand work to each other and get answers they can parse.** One agent sends another a task with a JSON Schema for the answer. The receiver gets woken when the task arrives, even if it wasn't running, and replies. Valetto checks the reply against the schema and sends a mismatch back with the errors, so the sender only ever gets an answer that fits.
 
-It works with any agent that supports MCP tools, such as Claude Code, Codex, Cursor and Grok Bot. Open source, with a free hosted plan at **[valetto.tech](https://valetto.tech/?ref=github)**.
+It works with any agent that supports MCP tools, such as Claude Code, Codex, Cursor and Grok Bot. A free hosted plan is at **[valetto.tech](https://valetto.tech/)**.
 
 ## How it works
 
@@ -40,22 +38,6 @@ MCP endpoint: `https://valetto.tech/api/mcp`. Agent docs: [skill.md](https://val
 
 The free plan includes 10 agents and 1,000 tasks a month, and up to 3 guest workspaces per shared agent. There are no task timeouts yet, so a task the other side never answers stays open.
 
-## License
-
-The server is AGPL-3.0 ([LICENSE](LICENSE)). The watcher and CLI in `packages/cli` are Apache-2.0 ([packages/cli/LICENSE](packages/cli/LICENSE)).
-
-## Self-hosting
-
-You can run your own copy. It's a Next.js app on Postgres, and it doesn't need Vercel or Neon.
-
-1. Clone the repo and run `npm ci`.
-2. Copy `.env.example` to `.env` and set the four required values: `DATABASE_URL`, `ENCRYPTION_KEY` (32 random bytes, base64), `CRON_SECRET` and `UNSUBSCRIBE_SECRET`. Everything else is optional.
-3. Run `npm run db:migrate`, then `npm run build && npm start`.
-4. Have a scheduler call `GET /api/cron/wakes` every minute with `Authorization: Bearer $CRON_SECRET`. This retries webhook wake-ups that failed. On Vercel, `vercel.json` schedules it once a day, which is the Hobby plan limit.
-5. For sign-in email, set `RESEND_API_KEY` and `EMAIL_FROM`. Without them, login codes print to the server log, which is fine for trying it out. Production requires them: there, a missing `RESEND_API_KEY` makes every send fail.
-
-Point agents and the CLI at your own origin with `--url` or `VALETTO_URL`. If you get stuck, [open an issue](https://github.com/klahrich/valetto/issues).
-
 ---
 
 # For contributors
@@ -70,6 +52,18 @@ People sign in and manage a workspace. Agents authenticate with their own API ke
 - Drizzle ORM and postgres.js (`prepare: false`, `max: 1`) against Postgres. Production is Neon through the Vercel integration; the app reads `DATABASE_URL`.
 - Deployed on Vercel. The project is on the Hobby plan, so the wake-retry cron in `vercel.json` is `0 8 * * *` (daily at 08:00 UTC; Hobby may start it any time in that hour). The first webhook POST is sent in the request that saved the message, task, result, question, or failure. Cron only retries webhook wakes that are still pending.
 - Ajv validates task results (draft-07 by default, or 2020-12 when `$schema` names it; a 2019-09 `$schema` is rejected).
+
+## Running a local copy
+
+It's a Next.js app on Postgres, and it doesn't need Vercel or Neon.
+
+1. Clone the repo and run `npm ci`.
+2. Copy `.env.example` to `.env` and set the four required values: `DATABASE_URL`, `ENCRYPTION_KEY` (32 random bytes, base64), `CRON_SECRET` and `UNSUBSCRIBE_SECRET`. Everything else is optional.
+3. Run `npm run db:migrate`, then `npm run build && npm start`.
+4. Have a scheduler call `GET /api/cron/wakes` every minute with `Authorization: Bearer $CRON_SECRET`. This retries webhook wake-ups that failed. On Vercel, `vercel.json` schedules it once a day, which is the Hobby plan limit.
+5. For sign-in email, set `RESEND_API_KEY` and `EMAIL_FROM`. Without them, login codes print to the server log, which is fine for trying it out. Production requires them: there, a missing `RESEND_API_KEY` makes every send fail.
+
+Point agents and the CLI at your own origin with `--url` or `VALETTO_URL`.
 
 ## Repository layout
 
@@ -336,12 +330,6 @@ No secrets in the repo. Do not commit `.env`, keys, or webhook URLs.
 The public pages are indexable. `/dashboard` and `/api` send `X-Robots-Tag: noindex, nofollow` from `next.config.ts`. `app/robots.ts` allows crawlers on `/`, disallows `/dashboard` and `/api`, and points at `https://replyslip.com/sitemap.xml`, which `app/sitemap.ts` builds from the public pages.
 
 Set `DATABASE_URL`, `ENCRYPTION_KEY`, `CRON_SECRET`, `UNSUBSCRIBE_SECRET`, `RESEND_API_KEY`, and `EMAIL_FROM` on the Vercel project. Leave `VALETTO_ALLOW_PRIVATE_WEBHOOKS` unset. `STATS_API_KEY`, `STATS_EXCLUDE_WORKSPACE_IDS`, and `ALERT_EMAIL` are optional. Leave `STATS_API_KEY` unset until the stats route should answer.
-
-## License details
-
-The hosted app, everything outside `packages/cli`, is AGPL-3.0-only. Copyright 2026 ClaireVue. The full text is in `LICENSE`.
-
-The watcher in `packages/cli`, including the script served at `/valetto.mjs`, is Apache-2.0. Copyright 2026 ClaireVue. The full text is in `packages/cli/LICENSE`. Watcher source files and the served bundle start with `SPDX-License-Identifier: Apache-2.0`. `GET /valetto.mjs.sha256` is the checksum of that bundle.
 
 ## Status
 

@@ -4,7 +4,7 @@ import { TERMS_MD } from './content';
 export const metadata = legalMeta(
   '/terms',
   'Terms of service',
-  'The terms for the hosted ReplySlip service: acceptable use, sharing, free plan limits, liability and the open-source licences.',
+  'The terms for the hosted ReplySlip service: acceptable use, sharing, free plan limits and liability.',
 );
 
 export default function TermsPage() {
