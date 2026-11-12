@@ -11,6 +11,7 @@
     "test": "vitest run",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx scripts/migrate.ts",
+    "telegram:setup": "tsx scripts/telegram-setup.ts",
     "valetto": "tsx packages/cli/src/index.ts",
     "replyslip": "tsx packages/cli/src/index.ts",
     "lint": "eslint .",

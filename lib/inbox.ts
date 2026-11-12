@@ -7,6 +7,7 @@ import { keyedHash, safeEqualHex } from './crypto';
 import { EXTERNAL_GUEST_DENIED } from './external-guest';
 import { HttpError } from './errors';
 import { bearerToken } from './http';
+import { TELEGRAM_SENDER_ROLE, telegramSendersFor, type ExternalSender } from './telegram';
 
 /** Default page size for list_messages. */
 export const MESSAGE_LIST_DEFAULT = 50;
@@ -32,6 +33,8 @@ export type InboxMessage = {
   created_at: string;
   unread: boolean;
   read_at: string | null;
+  /** Present only when a person outside Valetto sent it, for example through Telegram. */
+  external_sender?: ExternalSender;
 };
 
 function invalidCursor(): HttpError {
@@ -123,6 +126,19 @@ function iso(value: Date | string | null): string | null {
   return date.toISOString();
 }
 
+type InboxRow = { message: MessageRow; fromName: string; fromRole: string; toName: string };
+
+/** Rows as InboxMessage, with external_sender for messages relayed from Telegram (looked up only when there are any). */
+async function presentAll(db: Db, rows: InboxRow[]): Promise<InboxMessage[]> {
+  const external = rows.filter((row) => row.fromRole === TELEGRAM_SENDER_ROLE).map((row) => row.message.id);
+  const senders = external.length ? await telegramSendersFor(db, external) : new Map<string, ExternalSender>();
+  return rows.map((row) => {
+    const presented = present(row.message, row.fromName, row.toName);
+    const sender = senders.get(row.message.id);
+    return sender ? { ...presented, external_sender: sender } : presented;
+  });
+}
+
 function present(message: MessageRow, fromName: string, toName: string): InboxMessage {
   const readAt = iso(message.readAt);
   return {
@@ -185,6 +201,7 @@ export async function listMessages(
     .select({
       message: messages,
       fromName: fromAgent.name,
+      fromRole: fromAgent.role,
       toName: toAgent.name,
       seq: sql<string>`${messages.inboxSeq}::text`,
     })
@@ -201,7 +218,7 @@ export async function listMessages(
       ? encodePage({ a: caller.agentId, s: seqText(last.seq), id: last.message.id, u: unread ? 1 : 0 })
       : null;
   return {
-    messages: rows.map((row) => present(row.message, row.fromName, row.toName)),
+    messages: await presentAll(db, rows),
     next_cursor: nextCursor,
     unread_cursor: await unreadCursor(db, caller),
   };
@@ -251,6 +268,7 @@ export async function markMessagesRead(
       .select({
         message: messages,
         fromName: fromAgent.name,
+        fromRole: fromAgent.role,
         toName: toAgent.name,
       })
       .from(messages)
@@ -260,7 +278,7 @@ export async function markMessagesRead(
       .orderBy(asc(messages.inboxSeq), asc(messages.id));
     if (rows.length !== wanted.length) throw new HttpError(404, 'not_found', 'No message was found.');
     return {
-      messages: rows.map((row) => present(row.message, row.fromName, row.toName)),
+      messages: await presentAll(tx, rows),
       unread_cursor: await unreadCursor(tx, caller),
     };
   });

@@ -5,6 +5,7 @@ import { api, errorText } from './api';
 import { LocalTime } from './LocalTime';
 import { OnceSecret } from './CopyButton';
 import { DeliveryPanel } from './DeliveryPanel';
+import { TelegramLinkPanel } from './TelegramLink';
 import { WakeUrlPanel } from './WakeUrl';
 import type { Agent, AgentKey, NewAgentKey } from './types';
 
@@ -321,6 +322,8 @@ export function Agents({
                 )}
 
                 {!revoked ? <WakeUrlPanel agentId={a.id} agentName={a.name} /> : null}
+
+                {!revoked ? <TelegramLinkPanel agentId={a.id} agentName={a.name} /> : null}
 
                 {!revoked ? (
                   <div className="dash-agent-danger">

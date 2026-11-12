@@ -23,6 +23,8 @@ import { assertWithinLimit } from './plans';
 import { assertFreeTextFields, assertSentGrantLive, parseRecipient, resolveSharedTask } from './sharing';
 import { CROSS_WORKSPACE_TASK_NOTICE, HELD_FOR_REVIEW_NOTICE } from './wake-notice';
 import { deliverWebhookWake, enqueueWake, type WakeReason } from './wakes';
+import { insertMessageWithWake } from './message-insert';
+import { deliverTelegramReply, recordTelegramReply, telegramReplyTarget } from './telegram';
 import { claimReviewNotice, sendReviewNotice } from './review-notice';
 import { claimCustomerNotice, sendCustomerNotice } from './customer-notice';
 import { sendersFor } from './task-senders';
@@ -250,6 +252,22 @@ export async function sendMessage(
   const db = getDb();
   const written = await db.transaction(async (tx) => {
     const original = inReplyTo ? await loadReplyTarget(tx, caller, inReplyTo) : null;
+    // A reply to a message that came in from Telegram goes back to that chat (lib/telegram.ts).
+    const telegram = original ? await telegramReplyTarget(tx, caller, original) : null;
+    if (original && telegram) {
+      if (input.taskId) {
+        throw new HttpError(400, 'invalid_recipient', 'A reply to a Telegram message cannot be on a task.');
+      }
+      if (address && address.name !== telegram.senderAgent.name) {
+        throw new HttpError(400, 'invalid_recipient', 'to must be the sender of the message named in in_reply_to.');
+      }
+      const message = await recordTelegramReply(tx, caller, telegram, { body: input.body, inReplyTo: original.id });
+      return {
+        payload: serializeMessage(message, caller.agentName, telegram.senderAgent.name),
+        wakeId: null,
+        telegram: { chatId: telegram.chatId, messageId: message.id },
+      };
+    }
     const recipient = address
       ? await activeAgentByName(tx, caller.workspaceId, address.name)
       : await activeAgentById(tx, caller.workspaceId, original!.fromAgentId);
@@ -286,28 +304,28 @@ export async function sendMessage(
       // A thread message is a change to the task: list_tasks updated_since and its sort key off updated_at.
       await tx.update(tasks).set({ updatedAt: new Date() }).where(eq(tasks.id, task.id));
     }
-    const [message] = await tx
-      .insert(messages)
-      .values({
-        workspaceId: caller.workspaceId,
-        fromAgentId: caller.agentId,
-        toAgentId: recipient.id,
-        body: input.body,
-        taskId,
-        inReplyTo: original?.id ?? null,
-      })
-      .returning();
-    if (!message) throw new HttpError(500, 'internal_error', 'Something went wrong.');
-    const wakeId = await enqueueWake(tx, {
+    const { message, wakeId } = await insertMessageWithWake(tx, {
       workspaceId: caller.workspaceId,
-      agentId: recipient.id,
-      reason: 'message',
+      fromAgentId: caller.agentId,
+      toAgentId: recipient.id,
+      body: input.body,
       taskId,
-      messageId: message.id,
+      inReplyTo: original?.id ?? null,
     });
     const fromName = caller.agentName;
-    return { payload: serializeMessage(message, fromName, recipient.name), wakeId };
+    return { payload: serializeMessage(message, fromName, recipient.name), wakeId, telegram: null };
   });
+  if (written.telegram) {
+    // After commit. A failed send is logged and reported here, never thrown: the reply is stored either way.
+    const sent = await deliverTelegramReply({
+      chatId: written.telegram.chatId,
+      agentId: caller.agentId,
+      agentName: caller.agentName,
+      messageId: written.telegram.messageId,
+      body: input.body,
+    });
+    return { ...written.payload, telegram: { delivered: sent.delivered, parts: sent.parts } };
+  }
   await afterWake(written.wakeId);
   return written.payload;
 }

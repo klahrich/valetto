@@ -133,7 +133,10 @@ export const agents = pgTable(
     revokedAt: ts('revoked_at'),
     /** When true, other workspaces can be granted tasks to this agent at @handle/name. */
     shared: boolean('shared').notNull().default(false),
-    /** agent, or customer_sender: the hidden keyless `valetto` agent a customer workspace sends tasks as. */
+    /**
+     * agent; customer_sender: the hidden keyless `valetto` agent a customer workspace sends tasks as; or
+     * telegram_sender: the hidden keyless `telegram` agent that Telegram chats message this workspace's agents as.
+     */
     role: text('role').notNull().default('agent'),
     /** Total customer tasks per rolling 24 hours across every guest of this shared agent. */
     customerDailyCap: integer('customer_daily_cap').notNull().default(300),
@@ -156,7 +159,10 @@ export const agents = pgTable(
       .on(table.workspaceId)
       .where(sql`${table.role} = 'customer_sender' and ${table.revokedAt} is null`),
     check('agents_delivery_mode_check', sql`${table.deliveryMode} in ('none', 'webhook', 'herdr', 'local')`),
-    check('agents_role_check', sql`${table.role} in ('agent', 'customer_sender')`),
+    uniqueIndex('agents_one_telegram_sender')
+      .on(table.workspaceId)
+      .where(sql`${table.role} = 'telegram_sender' and ${table.revokedAt} is null`),
+    check('agents_role_check', sql`${table.role} in ('agent', 'customer_sender', 'telegram_sender')`),
     check('agents_customer_daily_cap_check', sql`${table.customerDailyCap} >= 1 and ${table.customerDailyCap} <= 10000`),
     check('agents_customer_access_mode_check', sql`${table.customerAccessMode} in ('open_link', 'approve_each')`),
     check('agents_review_mode_check', sql`${table.reviewMode} is null or ${table.reviewMode} in ('auto', 'review_first')`),
@@ -1151,6 +1157,135 @@ export const oauthRefreshTokens = pgTable(
   ],
 );
 
+/**
+ * Telegram connect links (lib/telegram.ts). The owner shares https://t.me/<bot>?start=<code>; /start <code> in a
+ * private chat binds that chat to the agent. Only sha256(code) is stored. At most one active link per agent.
+ * Revoking a link disconnects every chat that joined through it.
+ */
+export const telegramLinks = pgTable(
+  'telegram_links',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id')
+      .notNull()
+      .references(() => workspaces.id),
+    agentId: uuid('agent_id')
+      .notNull()
+      .references(() => agents.id, { onDelete: 'cascade' }),
+    codeHash: text('code_hash').notNull(),
+    codePrefix: text('code_prefix').notNull(),
+    createdAt: ts('created_at').notNull().defaultNow(),
+    revokedAt: ts('revoked_at'),
+    /** Last /start that used this link. */
+    lastUsedAt: ts('last_used_at'),
+  },
+  (table) => [
+    uniqueIndex('telegram_links_code_hash_unique').on(table.codeHash),
+    uniqueIndex('telegram_links_one_active_per_agent')
+      .on(table.agentId)
+      .where(sql`${table.revokedAt} is null`),
+  ],
+);
+
+/**
+ * Which agents a Telegram chat can talk to. A private chat can link many agents (/start <code> adds one, /stop <name>
+ * removes one); a group links exactly one. last_used_at picks the agent for a message that names none.
+ */
+export const telegramChats = pgTable(
+  'telegram_chats',
+  {
+    chatId: bigint('chat_id', { mode: 'number' }).notNull(),
+    agentId: uuid('agent_id')
+      .notNull()
+      .references(() => agents.id, { onDelete: 'cascade' }),
+    workspaceId: uuid('workspace_id')
+      .notNull()
+      .references(() => workspaces.id),
+    linkId: uuid('link_id')
+      .notNull()
+      .references(() => telegramLinks.id, { onDelete: 'cascade' }),
+    /** private or group (Telegram group and supergroup). */
+    chatType: text('chat_type').notNull(),
+    /** The Telegram user who linked the agent. Display name only: never a phone number. */
+    telegramUserId: bigint('telegram_user_id', { mode: 'number' }),
+    displayName: text('display_name'),
+    boundAt: ts('bound_at').notNull().defaultNow(),
+    lastUsedAt: ts('last_used_at'),
+  },
+  (table) => [
+    primaryKey({ columns: [table.chatId, table.agentId] }),
+    check('telegram_chats_chat_type_check', sql`${table.chatType} in ('private', 'group')`),
+    index('telegram_chats_agent_idx').on(table.agentId),
+    index('telegram_chats_link_idx').on(table.linkId),
+  ],
+);
+
+/**
+ * Each Telegram message the bot sent for an agent's reply, so a Telegram reply to it goes back to that agent with
+ * in_reply_to set to the Valetto message it carried.
+ */
+export const telegramSent = pgTable(
+  'telegram_sent',
+  {
+    chatId: bigint('chat_id', { mode: 'number' }).notNull(),
+    telegramMessageId: bigint('telegram_message_id', { mode: 'number' }).notNull(),
+    agentId: uuid('agent_id')
+      .notNull()
+      .references(() => agents.id, { onDelete: 'cascade' }),
+    messageId: uuid('message_id')
+      .notNull()
+      .references(() => messages.id, { onDelete: 'cascade' }),
+    createdAt: ts('created_at').notNull().defaultNow(),
+  },
+  (table) => [primaryKey({ columns: [table.chatId, table.telegramMessageId] })],
+);
+
+/** A private-chat message waiting for the user to pick an agent with the inline buttons. Pruned after a day. */
+export const telegramPending = pgTable(
+  'telegram_pending',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    chatId: bigint('chat_id', { mode: 'number' }).notNull(),
+    body: text('body').notNull(),
+    telegramUserId: bigint('telegram_user_id', { mode: 'number' }),
+    displayName: text('display_name'),
+    createdAt: ts('created_at').notNull().defaultNow(),
+  },
+  (table) => [index('telegram_pending_chat_idx').on(table.chatId, table.createdAt)],
+);
+
+/** Telegram update_ids already handled, so a webhook retry never makes a second message. Pruned after 7 days. */
+export const telegramUpdates = pgTable(
+  'telegram_updates',
+  {
+    updateId: bigint('update_id', { mode: 'number' }).primaryKey(),
+    receivedAt: ts('received_at').notNull().defaultNow(),
+  },
+  (table) => [index('telegram_updates_received_idx').on(table.receivedAt)],
+);
+
+/**
+ * Which Valetto messages came from or went to a Telegram chat. `in` rows carry the sender (display name and Telegram
+ * user id, never a phone number); a reply whose in_reply_to names an `in` row is sent back to its chat.
+ */
+export const telegramMessages = pgTable(
+  'telegram_messages',
+  {
+    messageId: uuid('message_id')
+      .primaryKey()
+      .references(() => messages.id, { onDelete: 'cascade' }),
+    chatId: bigint('chat_id', { mode: 'number' }).notNull(),
+    direction: text('direction').notNull(),
+    telegramUserId: bigint('telegram_user_id', { mode: 'number' }),
+    displayName: text('display_name'),
+    createdAt: ts('created_at').notNull().defaultNow(),
+  },
+  (table) => [
+    check('telegram_messages_direction_check', sql`${table.direction} in ('in', 'out')`),
+    index('telegram_messages_chat_idx').on(table.chatId, table.createdAt),
+  ],
+);
+
 export type AgentRow = typeof agents.$inferSelect;
 export type TaskRow = typeof tasks.$inferSelect;
 export type MessageRow = typeof messages.$inferSelect;
@@ -1170,3 +1305,5 @@ export type SiteSuggestedAnswerRow = typeof siteSuggestedAnswers.$inferSelect;
 export type OAuthClientRow = typeof oauthClients.$inferSelect;
 export type OAuthGrantRow = typeof oauthGrants.$inferSelect;
 export type OAuthAuthorizationRequestRow = typeof oauthAuthorizationRequests.$inferSelect;
+export type TelegramLinkRow = typeof telegramLinks.$inferSelect;
+export type TelegramChatRow = typeof telegramChats.$inferSelect;

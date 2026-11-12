@@ -1,4 +1,4 @@
-import { and, eq, gte, isNull, lt, or, sql } from 'drizzle-orm';
+import { and, eq, gte, isNull, lt, ne, or, sql } from 'drizzle-orm';
 import { getDb, type Db } from '@/db';
 import { agents, tasks, workspaces } from '@/db/schema';
 import { HttpError } from './errors';
@@ -84,7 +84,8 @@ async function countActiveAgents(db: Db, workspaceId: string): Promise<number> {
   const [row] = await db
     .select({ count: sql<number>`count(*)::int` })
     .from(agents)
-    .where(and(eq(agents.workspaceId, workspaceId), isNull(agents.revokedAt)));
+    // The hidden telegram sender (lib/telegram.ts) is not an agent the owner made, so it never uses up the plan.
+    .where(and(eq(agents.workspaceId, workspaceId), isNull(agents.revokedAt), ne(agents.role, 'telegram_sender')));
   return asCount(row?.count);
 }
 
