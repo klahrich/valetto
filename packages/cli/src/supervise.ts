@@ -5,8 +5,9 @@ import { createHash } from 'node:crypto';
 import { accessSync, appendFileSync, chmodSync, closeSync, mkdirSync, openSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { AGENT_NAME_PATTERN } from '../../../lib/constants.ts';
-import { agentKeyPath } from './register.ts';
+import { agentKeyPath, persistAgentNoAutoUpdate, readAgentCredentials } from './register.ts';
 import { envValue } from './home.ts';
+import { autoUpdateDisabled, maybeUpdateCli, originsMatch, type AutoUpdateResult } from './self-update.ts';
 import { redactSecrets } from './redact.ts';
 import { identifyProcess, killLockAllowed, killSpawnAllowed, watchCommandForAgent, type ProcessIdentity } from './process-identity.ts';
 import { decideSupervision, type SuperviseDecision } from './supervise-decide.ts';
@@ -73,6 +74,15 @@ export type SuperviseIo = {
   legacyLabel?: string;
   legacyTaskName?: string;
   legacyUnitName?: string;
+  fetchImpl?: typeof fetch;
+  /** Baked CLI version. Missing or non-x.y.z (for example "dev" under tsx) skips auto-update. */
+  currentVersion?: string;
+  argv?: string[];
+  /** Tests set this to skip the update check without changing env. */
+  skipAutoUpdate?: boolean;
+  /** Tests may pin an ephemeral release key. Production uses the baked-in public key. */
+  publicKeyPem?: string;
+  lockUpdates?: boolean;
 };
 
 export type SuperviseResult = { ok: true; lines: string[] } | { ok: false; message: string };
@@ -173,6 +183,12 @@ export async function installSupervision(name: string, io: SuperviseIo = {}): Pr
       ok: false,
       message: `No key file at ${agentKeyPath(name, home)}. Register this agent first. The key was not read.`,
     };
+  }
+  const noAutoUpdate = autoUpdateDisabled(io.env ?? process.env, io.argv ?? []);
+  try {
+    persistAgentNoAutoUpdate(name, home, noAutoUpdate);
+  } catch (err) {
+    return { ok: false, message: err instanceof Error ? err.message : 'Could not save the auto-update setting.' };
   }
   const plan = buildInstallPlan(planInput(io, scriptPath, nodePath));
   if ('error' in plan) return { ok: false, message: plan.error };
@@ -280,11 +296,85 @@ export async function runSupervisionTick(io: SuperviseIo = {}): Promise<Supervis
   const lines: string[] = [];
   const names = readEnrolled(io.home);
   if (names.length === 0) return { ok: true, lines: ['No enrolled agents.'] };
+  const update = await applyCliUpdateIfDue(names, io);
+  if (update.status === 'updated' && update.message) {
+    lines.push(update.message);
+    await restartEnrolledAfterUpdate(names, io, lines);
+  }
   for (const name of names) {
     const outcome = await tickAgent(name, io);
     lines.push(`${name}: ${outcome}`);
   }
   return { ok: true, lines };
+}
+
+async function uniqueRegisteredOrigin(names: string[], io: SuperviseIo): Promise<string | null> {
+  const found: string[] = [];
+  for (const name of names) {
+    try {
+      const creds = await readAgentCredentials(name, { home: io.home });
+      if (creds.relayUrl) found.push(creds.relayUrl.replace(/\/+$/, ''));
+    } catch {
+      // The tick will surface a missing key later.
+    }
+  }
+  if (found.length === 0) return null;
+  const first = found[0]!;
+  if (found.some((origin) => !originsMatch(first, origin))) {
+    const message = '[valetto] auto-update skipped: enrolled agents are registered with more than one server.';
+    (io.log ?? ((line: string) => appendSuperviseLog(io.home, line)))(message);
+    return null;
+  }
+  return first;
+}
+
+async function applyCliUpdateIfDue(names: string[], io: SuperviseIo): Promise<AutoUpdateResult> {
+  if (io.skipAutoUpdate) return { status: 'skipped' };
+  const version = io.currentVersion?.trim();
+  if (!version) return { status: 'skipped' };
+  const origin = await uniqueRegisteredOrigin(names, io);
+  if (!origin) return { status: 'skipped' };
+  const scriptPath = path.resolve(io.scriptPath ?? process.argv[1] ?? '');
+  if (!scriptPath) return { status: 'skipped' };
+  try {
+    return await maybeUpdateCli({
+      origin,
+      scriptPath,
+      nodePath: io.nodePath ?? process.execPath,
+      currentVersion: version,
+      home: io.home,
+      env: io.env ?? process.env,
+      argv: io.argv ?? [],
+      enrolledNames: names,
+      now: io.now,
+      fetchImpl: io.fetchImpl,
+      publicKeyPem: io.publicKeyPem,
+      lock: io.lockUpdates,
+      log: (line) => {
+        io.log?.(line);
+        appendSuperviseLog(io.home, line);
+      },
+    });
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : 'Auto-update failed.';
+    appendSuperviseLog(io.home, `[valetto] auto-update failed: ${detail}`);
+    return { status: 'failed', message: detail };
+  }
+}
+
+async function restartEnrolledAfterUpdate(names: string[], io: SuperviseIo, lines: string[]): Promise<void> {
+  for (const name of names) {
+    if (isStopped(io.home, name)) continue;
+    try {
+      await withAgentOp(io.home, name, async (op) => {
+        await reapOurWatchers(name, { ...io, op });
+      });
+      lines.push(`${name}: restarting after CLI update`);
+    } catch (err) {
+      const wait = lockWaitMessage(err);
+      lines.push(`${name}: could not signal the watcher after CLI update${wait ? ` (${wait})` : ''}`);
+    }
+  }
 }
 
 export function supervisionStatus(io: SuperviseIo = {}): string[] {
@@ -707,6 +797,7 @@ function planInput(io: SuperviseIo, scriptPath: string, nodePath: string): Insta
     ...(io.legacyLabel ? { legacyLabel: io.legacyLabel } : {}),
     ...(io.legacyTaskName ? { legacyTaskName: io.legacyTaskName } : {}),
     ...(io.legacyUnitName ? { legacyUnitName: io.legacyUnitName } : {}),
+    noAutoUpdate: autoUpdateDisabled(io.env ?? process.env, io.argv ?? []),
   };
 }
 

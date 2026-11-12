@@ -21,3 +21,23 @@ export function cliScriptSha256(): string {
 export function cliScriptSha256Line(name: CliScriptName = 'valetto.mjs'): string {
   return `${cliScriptSha256()}  ${name}\n`;
 }
+
+/** Version of the served bundle. packages/cli/package.json is the source of truth. */
+export function cliScriptVersion(): string {
+  const pkg = JSON.parse(readFileSync(path.join(process.cwd(), 'packages/cli/package.json'), 'utf8')) as { version?: unknown };
+  if (typeof pkg.version !== 'string' || !pkg.version.trim()) throw new Error('packages/cli/package.json has no version.');
+  return pkg.version.trim();
+}
+
+/** Detached ed25519 signature (base64) of the served /valetto.mjs bytes. */
+export function cliScriptSignaturePath(): string {
+  return path.join(process.cwd(), 'public/valetto.mjs.sig');
+}
+
+export function cliScriptSignature(): string {
+  return readFileSync(cliScriptSignaturePath(), 'utf8').trim();
+}
+
+export function cliScriptSignatureLine(): string {
+  return `${cliScriptSignature()}\n`;
+}
