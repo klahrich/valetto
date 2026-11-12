@@ -3,8 +3,53 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api, ApiError, errorText } from './api';
 import { LocalTime } from './LocalTime';
-import { OnceSecret } from './CopyButton';
+import { CopyButton } from './CopyButton';
 import type { TelegramLink } from './types';
+
+/** True for https://t.me/... and https://telegram.me/... only. */
+export function isTelegramHttpUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== 'https:') return false;
+    const authority = url.match(/^https:\/\/([^/?#]*)/i)?.[1] ?? '';
+    if (authority.includes('@') || parsed.username || parsed.password) return false;
+    const host = parsed.hostname.toLowerCase();
+    return host === 't.me' || host === 'www.t.me' || host === 'telegram.me' || host === 'www.telegram.me';
+  } catch {
+    return false;
+  }
+}
+
+/** The one-time Telegram URL, shown as a tappable t.me link plus a copy button. */
+export function FreshTelegramLink({ url, agentName }: { url: string; agentName: string }) {
+  const href = isTelegramHttpUrl(url) ? url : null;
+  return (
+    <div className="dash-secret" role="region" aria-label="Open or copy your Telegram link now. It won’t be shown again.">
+      <p className="dash-secret-title">Open or copy your Telegram link now. It won’t be shown again.</p>
+      <div className="dash-secret-row">
+        {href ? (
+          <a
+            className="dash-secret-value dash-secret-link"
+            href={href}
+            target="_blank"
+            rel="noopener noreferrer"
+            translate="no"
+          >
+            {url}
+          </a>
+        ) : (
+          <code translate="no" className="dash-secret-value">
+            {url}
+          </code>
+        )}
+        <CopyButton value={url} label="Copy Telegram link" />
+      </div>
+      <p className="dash-secret-help">
+        Send it to the people who should reach {agentName}. If you lose it, get a new link below.
+      </p>
+    </div>
+  );
+}
 
 async function fetchLinks(agentId: string): Promise<TelegramLink[] | null> {
   try {
@@ -119,13 +164,7 @@ export function TelegramLinkPanel({ agentId, agentName }: { agentId: string; age
 
       {active ? (
         <>
-          {shown ? (
-            <OnceSecret title="Copy your Telegram link now. It won’t be shown again." secret={shown}>
-              <p className="dash-secret-help">
-                Send it to the people who should reach {agentName}. If you lose it, get a new link below.
-              </p>
-            </OnceSecret>
-          ) : null}
+          {shown ? <FreshTelegramLink url={shown} agentName={agentName} /> : null}
           <p className="dash-muted dash-wake-meta">
             <code translate="no">{active.prefix}…</code> · Created <LocalTime iso={active.created_at} /> ·{' '}
             {chats === 1 ? '1 chat connected' : `${chats} chats connected`}
