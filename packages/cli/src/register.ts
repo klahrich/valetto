@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
-import { accessSync } from 'node:fs';
+import { accessSync, chmodSync, readFileSync, writeFileSync } from 'node:fs';
 import { chmod, mkdir, readdir, readFile, stat, unlink, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import path from 'node:path';
@@ -14,6 +14,8 @@ export type AgentKeyFile = {
   mcp_url: string;
   relay_url: string;
   created_at: string;
+  /** When true, the supervised watcher will not auto-update the CLI on this machine. */
+  no_auto_update?: boolean;
 };
 
 /** Where `register` writes a new key file: `~/.valetto/agents/<name>.json`. */
@@ -112,6 +114,41 @@ export async function writeAgentKeyFile(
   }
   await chmod(target, 0o600);
   return target;
+}
+
+/** Persist or clear `no_auto_update` on the existing key file. Mode 600 is kept. Errors never include the key. */
+export function persistAgentNoAutoUpdate(name: string, home: string | undefined, disabled: boolean): void {
+  const file = existingAgentKeyPath(name, home ?? homedir());
+  if (!file) throw new Error(`No key file for agent ${name}. Register it first.`);
+  let parsed: Record<string, unknown>;
+  try {
+    parsed = JSON.parse(readFileSync(file, 'utf8')) as Record<string, unknown>;
+  } catch {
+    throw new Error(`Agent key file for ${name} is not valid JSON.`);
+  }
+  if (disabled) parsed.no_auto_update = true;
+  else delete parsed.no_auto_update;
+  writeFileSync(file, `${JSON.stringify(parsed, null, 2)}\n`, { mode: 0o600 });
+  try {
+    chmodSync(file, 0o600);
+  } catch {
+    // Windows ignores Unix modes.
+  }
+}
+
+export function agentNoAutoUpdateEnabled(name: string, home?: string): boolean {
+  try {
+    const file = existingAgentKeyPath(name, home ?? homedir());
+    if (!file) return false;
+    const parsed = JSON.parse(readFileSync(file, 'utf8')) as { no_auto_update?: unknown };
+    return parsed.no_auto_update === true;
+  } catch {
+    return false;
+  }
+}
+
+export function anyAgentNoAutoUpdateEnabled(names: string[], home?: string): boolean {
+  return names.some((name) => agentNoAutoUpdateEnabled(name, home));
 }
 
 async function refuseExistingKeyFile(name: string, home: string | undefined, force: boolean | undefined): Promise<void> {

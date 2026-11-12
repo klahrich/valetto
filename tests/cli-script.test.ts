@@ -7,7 +7,7 @@ import { GET as scriptRoute } from '@/app/valetto.mjs/route';
 import { GET as shaRoute } from '@/app/valetto.mjs.sha256/route';
 import { GET as legacyScriptRoute } from '@/app/replyslip.mjs/route';
 import { GET as legacyShaRoute } from '@/app/replyslip.mjs.sha256/route';
-import { cliScriptPath } from '@/lib/cli-script';
+import { cliScriptPath, cliScriptVersion } from '@/lib/cli-script';
 
 const execFileAsync = promisify(execFile);
 
@@ -23,6 +23,7 @@ describe('served valetto.mjs', () => {
     const body = Buffer.from(await script.arrayBuffer());
     expect(Buffer.compare(body, bytes)).toBe(0);
     expect(body.toString('utf8')).toContain('// Copyright (c) 2026 ClaireVue. All rights reserved.');
+    expect(body.toString('utf8')).toContain(`// valetto-cli-version: ${cliScriptVersion()}`);
     expect(body.toString('utf8')).toContain('watch');
     expect(body.toString('utf8')).toContain('register');
     expect(body.toString('utf8')).not.toContain('rsk_');

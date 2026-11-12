@@ -5,9 +5,9 @@ import { createHash } from 'node:crypto';
 import { accessSync, appendFileSync, chmodSync, closeSync, mkdirSync, openSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { AGENT_NAME_PATTERN } from '../../../lib/constants.ts';
-import { agentKeyPath, readAgentCredentials } from './register.ts';
+import { agentKeyPath, persistAgentNoAutoUpdate, readAgentCredentials } from './register.ts';
 import { envValue } from './home.ts';
-import { maybeUpdateCli, originsMatch, type AutoUpdateResult } from './self-update.ts';
+import { autoUpdateDisabled, maybeUpdateCli, originsMatch, type AutoUpdateResult } from './self-update.ts';
 import { redactSecrets } from './redact.ts';
 import { identifyProcess, killLockAllowed, killSpawnAllowed, watchCommandForAgent, type ProcessIdentity } from './process-identity.ts';
 import { decideSupervision, type SuperviseDecision } from './supervise-decide.ts';
@@ -80,6 +80,9 @@ export type SuperviseIo = {
   argv?: string[];
   /** Tests set this to skip the update check without changing env. */
   skipAutoUpdate?: boolean;
+  /** Tests may pin an ephemeral release key. Production uses the baked-in public key. */
+  publicKeyPem?: string;
+  lockUpdates?: boolean;
 };
 
 export type SuperviseResult = { ok: true; lines: string[] } | { ok: false; message: string };
@@ -180,6 +183,12 @@ export async function installSupervision(name: string, io: SuperviseIo = {}): Pr
       ok: false,
       message: `No key file at ${agentKeyPath(name, home)}. Register this agent first. The key was not read.`,
     };
+  }
+  const noAutoUpdate = autoUpdateDisabled(io.env ?? process.env, io.argv ?? []);
+  try {
+    persistAgentNoAutoUpdate(name, home, noAutoUpdate);
+  } catch (err) {
+    return { ok: false, message: err instanceof Error ? err.message : 'Could not save the auto-update setting.' };
   }
   const plan = buildInstallPlan(planInput(io, scriptPath, nodePath));
   if ('error' in plan) return { ok: false, message: plan.error };
@@ -336,8 +345,11 @@ async function applyCliUpdateIfDue(names: string[], io: SuperviseIo): Promise<Au
       home: io.home,
       env: io.env ?? process.env,
       argv: io.argv ?? [],
+      enrolledNames: names,
       now: io.now,
       fetchImpl: io.fetchImpl,
+      publicKeyPem: io.publicKeyPem,
+      lock: io.lockUpdates,
       log: (line) => {
         io.log?.(line);
         appendSuperviseLog(io.home, line);
@@ -785,6 +797,7 @@ function planInput(io: SuperviseIo, scriptPath: string, nodePath: string): Insta
     ...(io.legacyLabel ? { legacyLabel: io.legacyLabel } : {}),
     ...(io.legacyTaskName ? { legacyTaskName: io.legacyTaskName } : {}),
     ...(io.legacyUnitName ? { legacyUnitName: io.legacyUnitName } : {}),
+    noAutoUpdate: autoUpdateDisabled(io.env ?? process.env, io.argv ?? []),
   };
 }
 

@@ -1,19 +1,23 @@
 // SPDX-License-Identifier: Apache-2.0
 
-import { spawn } from 'node:child_process';
-import { createHash } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import {
   chmodSync,
   existsSync,
   mkdirSync,
   readFileSync,
   renameSync,
+  statSync,
   unlinkSync,
   writeFileSync,
 } from 'node:fs';
 import { homedir } from 'node:os';
 import path from 'node:path';
+import { acquireFileLockSync, releaseFileLock, FileLockError, type HeldFileLock } from './file-lock.ts';
 import { envValue, stateHome } from './home.ts';
+import { anyAgentNoAutoUpdateEnabled } from './register.ts';
+import { CLI_RELEASE_PUBLIC_KEY_PEM, parseCliScriptVersionFromBytes, verifyCliReleaseSignature } from './release-pubkey.ts';
+import { superviseDir } from './watcher-progress.ts';
 
 export const DEFAULT_UPDATE_INTERVAL_MS = 6 * 60 * 60 * 1000;
 export const MIN_UPDATE_INTERVAL_MS = 60 * 60 * 1000;
@@ -27,7 +31,7 @@ const TRUTHY = new Set(['1', 'true', 'yes', 'on']);
 
 export type CliVersionParts = [number, number, number];
 
-export type LatestCliInfo = { version: string; sha256: string; url: string };
+export type LatestCliInfo = { version: string; sha256: string; url: string; signature?: string };
 
 export type AutoUpdateStatus = 'updated' | 'current' | 'skipped' | 'failed';
 
@@ -39,12 +43,13 @@ export type AutoUpdateResult = {
 };
 
 export type ScriptFs = {
-  writeFileSync(path: string, data: string | Uint8Array): void;
+  writeFileSync(path: string, data: string | Uint8Array, options?: { flag?: string; mode?: number }): void;
   readFileSync(path: string): Buffer;
   renameSync(from: string, to: string): void;
   unlinkSync(path: string): void;
   existsSync(path: string): boolean;
   chmodSync?(path: string, mode: number): void;
+  statSync?(path: string): { mode: number };
 };
 
 const defaultFs: ScriptFs = {
@@ -54,6 +59,7 @@ const defaultFs: ScriptFs = {
   unlinkSync,
   existsSync,
   chmodSync,
+  statSync,
 };
 
 export function parseCliVersion(value: string): CliVersionParts | null {
@@ -78,10 +84,19 @@ export function isNewerCliVersion(current: string, candidate: string): boolean {
   return compareCliVersions(current, candidate) === -1;
 }
 
-export function autoUpdateDisabled(env: NodeJS.ProcessEnv = process.env, argv: string[] = []): boolean {
+export function autoUpdateDisabled(
+  env: NodeJS.ProcessEnv = process.env,
+  argv: string[] = [],
+  options: { agentConfig?: boolean } = {},
+): boolean {
+  if (options.agentConfig) return true;
   if (argv.includes('--no-auto-update')) return true;
   const value = envValue(env, 'NO_AUTO_UPDATE');
   return value !== undefined && TRUTHY.has(value.trim().toLowerCase());
+}
+
+export function enrolledAgentsDisableAutoUpdate(names: string[], home?: string): boolean {
+  return anyAgentNoAutoUpdateEnabled(names, home);
 }
 
 export function isLocalhostHostname(hostname: string): boolean {
@@ -100,72 +115,168 @@ export function originsMatch(a: string, b: string): boolean {
   }
 }
 
-/**
- * The update URL must be on the same origin the agent registered with.
- * HTTPS only, except http://localhost (and loopback) for tests.
- * Path must be the served CLI script.
- */
-export function assertUpdateUrlAllowed(origin: string, url: string): void {
+function assertSameOriginUrl(origin: string, url: string, allowedPaths: string[], label: string): void {
   let parsed: URL;
   let base: URL;
   try {
     parsed = new URL(url);
     base = new URL(origin);
   } catch {
-    throw new Error('Update URL is not valid.');
+    throw new Error(`${label} is not valid.`);
   }
   const https = parsed.protocol === 'https:';
   const localHttp = parsed.protocol === 'http:' && isLocalhostHostname(parsed.hostname);
-  if (!https && !localHttp) throw new Error('Update URL must be https, or http on localhost.');
-  if (!originsMatch(base.href, parsed.href)) throw new Error('Update URL is not on the registered origin.');
-  if (parsed.pathname !== '/valetto.mjs' && parsed.pathname !== '/replyslip.mjs') {
-    throw new Error('Update URL must be the Valetto CLI script.');
+  if (!https && !localHttp) throw new Error(`${label} must be https, or http on localhost.`);
+  if (!originsMatch(base.href, parsed.href)) throw new Error(`${label} is not on the registered origin.`);
+  if (!allowedPaths.includes(parsed.pathname) || parsed.search || parsed.hash) {
+    throw new Error(`${label} must be the Valetto CLI script.`);
   }
-  if (parsed.search || parsed.hash) throw new Error('Update URL must be the Valetto CLI script.');
+}
+
+/**
+ * The update URL must be on the same origin the agent registered with.
+ * HTTPS only, except http://localhost (and loopback) for tests.
+ * Path must be the served CLI script.
+ */
+export function assertUpdateUrlAllowed(origin: string, url: string): void {
+  assertSameOriginUrl(origin, url, ['/valetto.mjs', '/replyslip.mjs'], 'Update URL');
+}
+
+export function assertSignatureUrlAllowed(origin: string, url: string): void {
+  try {
+    assertSameOriginUrl(origin, url, ['/valetto.mjs.sig', '/replyslip.mjs.sig'], 'Signature URL');
+  } catch (err) {
+    if (err instanceof Error && err.message.includes('must be the Valetto CLI script')) {
+      throw new Error('Signature URL must be the Valetto CLI signature.');
+    }
+    throw err;
+  }
 }
 
 export function backupScriptPath(scriptPath: string): string {
   return `${scriptPath}.old`;
 }
 
-export function tempScriptPath(scriptPath: string, pid = process.pid): string {
-  return `${scriptPath}.tmp-${pid}`;
+export function tempScriptPath(scriptPath: string, token: string): string {
+  return `${scriptPath}.tmp-${token}`;
+}
+
+export function readScriptMode(scriptPath: string, fs: ScriptFs = defaultFs): number | undefined {
+  try {
+    const mode = fs.statSync?.(scriptPath)?.mode;
+    return typeof mode === 'number' ? mode : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 /**
- * Replace `scriptPath` with `tempPath`. On Windows the running file cannot be overwritten,
- * so it is renamed aside first, then the new file is moved into place. If the second move
- * fails, the original is renamed back. A leftover `.old` on Windows is the previous script
- * still held open by a process; a later tick deletes it.
+ * Write `data` to a new exclusive temp file next to `scriptPath`.
+ * The name is random; the file is created with `wx` / O_EXCL so a colliding name is not overwritten.
+ */
+export function writeExclusiveTempScript(
+  scriptPath: string,
+  data: Buffer,
+  options: { fs?: ScriptFs; random?: () => string; mode?: number } = {},
+): string {
+  const fs = options.fs ?? defaultFs;
+  const mode = options.mode ?? 0o600;
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    const token = options.random?.() ?? randomBytes(16).toString('hex');
+    const tempPath = tempScriptPath(scriptPath, token);
+    try {
+      fs.writeFileSync(tempPath, data, { flag: 'wx', mode });
+      return tempPath;
+    } catch (err) {
+      const code = err && typeof err === 'object' && 'code' in err ? (err as { code?: string }).code : '';
+      if (code === 'EEXIST') continue;
+      throw err;
+    }
+  }
+  throw new Error('Could not create an exclusive temp file for the CLI update.');
+}
+
+/**
+ * If the script is missing but a `.old` leftover remains, rename it back.
+ * If the current script is already in place (and, when `current` is set, already that version),
+ * try to delete the leftover `.old`.
+ */
+export function healWindowsScript(
+  scriptPath: string,
+  options: { platform: NodeJS.Platform; fs?: ScriptFs; currentVersion?: string } = { platform: process.platform },
+): 'restored' | 'cleaned' | 'none' {
+  const fs = options.fs ?? defaultFs;
+  const bak = backupScriptPath(scriptPath);
+  if (!fs.existsSync(bak)) return 'none';
+  if (!fs.existsSync(scriptPath)) {
+    fs.renameSync(bak, scriptPath);
+    return 'restored';
+  }
+  if (options.currentVersion) {
+    try {
+      const version = parseCliScriptVersionFromBytes(fs.readFileSync(scriptPath));
+      if (version && compareCliVersions(version, options.currentVersion) === 0) {
+        fs.unlinkSync(bak);
+        return 'cleaned';
+      }
+    } catch {
+      return 'none';
+    }
+    return 'none';
+  }
+  try {
+    fs.unlinkSync(bak);
+    return 'cleaned';
+  } catch {
+    return 'none';
+  }
+}
+
+/**
+ * Replace `scriptPath` with `tempPath`, preserving mode. On Windows the running file cannot be overwritten,
+ * so it is renamed aside first, then the new file is moved into place. If the second move fails, the original
+ * is renamed back. If that restore also fails, `.old` is left for the next tick to self-heal.
  */
 export function replaceScriptFile(
   scriptPath: string,
   tempPath: string,
-  options: { platform: NodeJS.Platform; fs?: ScriptFs } = { platform: process.platform },
+  options: { platform: NodeJS.Platform; fs?: ScriptFs; mode?: number } = { platform: process.platform },
 ): void {
   const io = options.fs ?? defaultFs;
   const bak = backupScriptPath(scriptPath);
-  if (io.existsSync(bak)) {
-    try {
-      io.unlinkSync(bak);
-    } catch {
-      // An older leftover may still be open on Windows.
-    }
-  }
+  const mode = options.mode ?? readScriptMode(scriptPath, io);
   if (options.platform === 'win32') {
     const hadScript = io.existsSync(scriptPath);
-    if (hadScript) io.renameSync(scriptPath, bak);
+    if (hadScript && io.existsSync(bak)) {
+      try {
+        io.unlinkSync(bak);
+      } catch {
+        // An older leftover may still be open; the rename below may then fail, which is safer than deleting the only copy.
+      }
+    }
+    try {
+      if (hadScript) io.renameSync(scriptPath, bak);
+    } catch (err) {
+      throw err;
+    }
     try {
       io.renameSync(tempPath, scriptPath);
     } catch (err) {
-      if (hadScript && io.existsSync(bak) && !io.existsSync(scriptPath)) {
+      if (!io.existsSync(scriptPath) && io.existsSync(bak)) {
         try {
           io.renameSync(bak, scriptPath);
         } catch {
-          // Leave the backup so the machine is not left without a script.
+          // Leave the backup so the next tick can restore it.
         }
       }
       throw err;
+    }
+    if (mode !== undefined) {
+      try {
+        io.chmodSync?.(scriptPath, mode & 0o777);
+      } catch {
+        // Windows ignores Unix modes.
+      }
     }
     try {
       io.unlinkSync(bak);
@@ -175,24 +286,30 @@ export function replaceScriptFile(
     return;
   }
   io.renameSync(tempPath, scriptPath);
+  if (mode !== undefined) {
+    try {
+      io.chmodSync?.(scriptPath, mode & 0o777);
+    } catch {
+      // Some filesystems ignore the mode.
+    }
+  }
 }
 
 export function writeChecksumSidecar(scriptPath: string, sha256: string, fs: ScriptFs = defaultFs): void {
   const base = path.basename(scriptPath);
   if (base !== 'valetto.mjs' && base !== 'replyslip.mjs') return;
   const sidecar = `${scriptPath}.sha256`;
-  const temp = `${sidecar}.tmp-${process.pid}`;
-  fs.writeFileSync(temp, `${sha256}  ${base}\n`);
+  const written = writeExclusiveTempScript(sidecar, Buffer.from(`${sha256}  ${base}\n`), { fs, mode: 0o644 });
   try {
     if (fs.existsSync(sidecar)) fs.unlinkSync(sidecar);
   } catch {
     // Windows may need unlink-then-rename when the sidecar is not locked.
   }
   try {
-    fs.renameSync(temp, sidecar);
+    fs.renameSync(written, sidecar);
   } catch (err) {
     try {
-      fs.unlinkSync(temp);
+      fs.unlinkSync(written);
     } catch {
       // Best effort.
     }
@@ -204,6 +321,10 @@ type CheckState = { checked_at: number; outcome: string };
 
 function checkStatePath(home?: string): string {
   return path.join(stateHome(home ?? homedir()), 'auto-update.json');
+}
+
+export function updateLockPath(home?: string): string {
+  return path.join(superviseDir(home), 'update.lock');
 }
 
 export function readUpdateCheckState(home?: string, fs: ScriptFs = defaultFs): CheckState | null {
@@ -238,16 +359,21 @@ export type AutoUpdateIo = {
   home?: string;
   env?: NodeJS.ProcessEnv;
   argv?: string[];
+  /** Enrolled agent names, used to honour `no_auto_update` on a key file. */
+  enrolledNames?: string[];
   now?: () => number;
   intervalMs?: number;
   /** Tests may set 0. Production clamps to at least an hour. */
   minIntervalMs?: number;
   fetchImpl?: typeof fetch;
-  runVersion?: (nodePath: string, scriptPath: string) => Promise<{ code: number; stdout: string; stderr: string }>;
   log?: (line: string) => void;
   platform?: NodeJS.Platform;
   fs?: ScriptFs;
-  pid?: number;
+  /** Override the pinned release public key (tests only). */
+  publicKeyPem?: string;
+  /** When false, skip the exclusive update lock. Tests may set this. Default true. */
+  lock?: boolean;
+  acquireLock?: (file: string) => HeldFileLock;
 };
 
 function clampInterval(intervalMs: number | undefined, minIntervalMs: number): number {
@@ -261,33 +387,8 @@ export function parseLatestPayload(body: unknown): LatestCliInfo {
   if (typeof row.version !== 'string' || !parseCliVersion(row.version)) throw new Error('Latest CLI version is not valid.');
   if (typeof row.sha256 !== 'string' || !SHA_RE.test(row.sha256.toLowerCase())) throw new Error('Latest CLI sha256 is not valid.');
   if (typeof row.url !== 'string' || !row.url.trim()) throw new Error('Latest CLI url is not valid.');
-  return { version: row.version.trim(), sha256: row.sha256.toLowerCase(), url: row.url.trim() };
-}
-
-async function defaultRunVersion(nodePath: string, scriptPath: string): Promise<{ code: number; stdout: string; stderr: string }> {
-  return new Promise((resolve, reject) => {
-    const child = spawn(nodePath, [scriptPath, '--version'], { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
-    let stdout = '';
-    let stderr = '';
-    child.stdout?.on('data', (chunk: Buffer) => {
-      stdout += chunk.toString('utf8');
-    });
-    child.stderr?.on('data', (chunk: Buffer) => {
-      stderr += chunk.toString('utf8');
-    });
-    const timer = setTimeout(() => {
-      child.kill();
-      reject(new Error('Timed out running the downloaded script --version.'));
-    }, 15_000);
-    child.on('error', (err) => {
-      clearTimeout(timer);
-      reject(err);
-    });
-    child.on('close', (code) => {
-      clearTimeout(timer);
-      resolve({ code: code ?? 1, stdout, stderr });
-    });
-  });
+  const signature = typeof row.signature === 'string' && row.signature.trim() ? row.signature.trim() : undefined;
+  return { version: row.version.trim(), sha256: row.sha256.toLowerCase(), url: row.url.trim(), signature };
 }
 
 async function readLimited(response: Response, maxBytes: number): Promise<Buffer> {
@@ -312,28 +413,81 @@ async function readLimited(response: Response, maxBytes: number): Promise<Buffer
   return Buffer.concat(chunks);
 }
 
+async function resolveSignature(origin: string, latest: LatestCliInfo, fetchImpl: typeof fetch): Promise<string> {
+  if (latest.signature) return latest.signature;
+  const sigUrl = latest.url.endsWith('replyslip.mjs') ? `${origin}/replyslip.mjs.sig` : `${origin}/valetto.mjs.sig`;
+  assertSignatureUrlAllowed(origin, sigUrl);
+  const response = await fetchImpl(sigUrl, {
+    method: 'GET',
+    redirect: 'error',
+    signal: AbortSignal.timeout(UPDATE_FETCH_TIMEOUT_MS),
+  });
+  if (!response.ok) throw new Error(`CLI signature request failed (HTTP ${response.status}).`);
+  const text = (await response.text()).trim();
+  if (!text) throw new Error('CLI signature is missing.');
+  return text;
+}
+
 /**
  * Check the registered origin for a newer CLI and, if so, replace this script in place.
+ * The download is signature-checked against the pinned release key before any file is written
+ * to the final path, and the downloaded bytes are never executed.
  * On any failure the existing script is left untouched.
  */
 export async function maybeUpdateCli(io: AutoUpdateIo): Promise<AutoUpdateResult> {
   const log = io.log ?? (() => undefined);
   const env = io.env ?? process.env;
-  if (autoUpdateDisabled(env, io.argv ?? [])) return { status: 'skipped', message: 'Auto-update is off.' };
+  const configDisabled = enrolledAgentsDisableAutoUpdate(io.enrolledNames ?? [], io.home);
+  if (autoUpdateDisabled(env, io.argv ?? [], { agentConfig: configDisabled })) {
+    return { status: 'skipped', message: 'Auto-update is off.' };
+  }
+
+  const useLock = io.lock !== false;
+  let held: HeldFileLock | undefined;
+  if (useLock) {
+    try {
+      mkdirSync(superviseDir(io.home), { recursive: true, mode: 0o700 });
+      const acquire = io.acquireLock ?? ((file: string) => acquireFileLockSync(file, { waitMs: 2_000 }));
+      held = acquire(updateLockPath(io.home));
+    } catch (err) {
+      if (err instanceof FileLockError) {
+        log('[valetto] auto-update skipped: another update is already running.');
+        return { status: 'skipped', message: 'Another update is already running.' };
+      }
+      const detail = err instanceof Error ? err.message : 'Could not take the update lock.';
+      log(`[valetto] auto-update skipped: ${detail}`);
+      return { status: 'skipped', message: detail };
+    }
+  }
+  try {
+    return await maybeUpdateCliLocked(io);
+  } finally {
+    if (held) releaseFileLock(held);
+  }
+}
+
+async function maybeUpdateCliLocked(io: AutoUpdateIo): Promise<AutoUpdateResult> {
+  const log = io.log ?? (() => undefined);
   const current = io.currentVersion.trim();
   if (!parseCliVersion(current)) return { status: 'skipped' };
   const scriptPath = path.resolve(io.scriptPath);
   if (!scriptPath) return { status: 'skipped' };
+  const fs = io.fs ?? defaultFs;
+  const platform = io.platform ?? process.platform;
+  try {
+    healWindowsScript(scriptPath, { platform, fs, currentVersion: current });
+  } catch {
+    // Healing must not block a later successful replace.
+  }
 
   const minInterval = io.minIntervalMs ?? MIN_UPDATE_INTERVAL_MS;
   const interval = clampInterval(io.intervalMs, minInterval);
   const now = (io.now ?? Date.now)();
-  const previous = readUpdateCheckState(io.home, io.fs);
+  const previous = readUpdateCheckState(io.home, fs);
   if (previous && now - previous.checked_at < interval) return { status: 'skipped' };
 
   const origin = io.origin.replace(/\/+$/, '');
   let latest: LatestCliInfo;
-  const fs = io.fs ?? defaultFs;
   const mark = (outcome: string) => {
     writeUpdateCheckState(io.home, { checked_at: now, outcome }, fs);
   };
@@ -370,10 +524,16 @@ export async function maybeUpdateCli(io: AutoUpdateIo): Promise<AutoUpdateResult
   }
   if (cmp >= 0) {
     mark('current');
+    try {
+      healWindowsScript(scriptPath, { platform, fs, currentVersion: current });
+    } catch {
+      // Leftover cleanup is best effort.
+    }
     return { status: 'current' };
   }
 
-  const tempPath = tempScriptPath(scriptPath, io.pid ?? process.pid);
+  const publicKeyPem = io.publicKeyPem ?? CLI_RELEASE_PUBLIC_KEY_PEM;
+  let tempPath: string | undefined;
   try {
     const fetchImpl = io.fetchImpl ?? fetch;
     const response = await fetchImpl(latest.url, {
@@ -385,33 +545,37 @@ export async function maybeUpdateCli(io: AutoUpdateIo): Promise<AutoUpdateResult
     const bytes = await readLimited(response, UPDATE_MAX_BYTES);
     const digest = createHash('sha256').update(bytes).digest('hex');
     if (digest !== latest.sha256) throw new Error('Downloaded CLI does not match sha256.');
-    fs.writeFileSync(tempPath, bytes);
-    try {
-      fs.chmodSync?.(tempPath, 0o644);
-    } catch {
-      // Windows ignores Unix modes.
+    const signature = await resolveSignature(origin, latest, fetchImpl);
+    if (!verifyCliReleaseSignature(bytes, signature, publicKeyPem)) {
+      throw new Error('Downloaded CLI does not match the release signature.');
     }
-    const runVersion = io.runVersion ?? defaultRunVersion;
-    const ran = await runVersion(io.nodePath ?? process.execPath, tempPath);
-    if (ran.code !== 0) throw new Error('Downloaded CLI did not run.');
-    if (ran.stdout.trim().split(/\s+/, 1)[0] !== latest.version) {
-      throw new Error('Downloaded CLI --version did not match.');
-    }
-    replaceScriptFile(scriptPath, tempPath, { platform: io.platform ?? process.platform, fs });
+    const parsedVersion = parseCliScriptVersionFromBytes(bytes);
+    if (parsedVersion !== latest.version) throw new Error('Downloaded CLI version marker did not match.');
+    const mode = readScriptMode(scriptPath, fs) ?? 0o644;
+    tempPath = writeExclusiveTempScript(scriptPath, bytes, { fs, mode });
+    replaceScriptFile(scriptPath, tempPath, { platform, fs, mode });
+    tempPath = undefined;
     try {
       writeChecksumSidecar(scriptPath, latest.sha256, fs);
     } catch {
       // The script is already replaced; a missing sidecar only matters for a later --install.
+    }
+    try {
+      healWindowsScript(scriptPath, { platform, fs, currentVersion: latest.version });
+    } catch {
+      // Leftover cleanup is best effort.
     }
     mark('updated');
     const message = `Updated Valetto watcher ${current} -> ${latest.version}`;
     log(`[valetto] ${message}`);
     return { status: 'updated', message, from: current, to: latest.version };
   } catch (err) {
-    try {
-      if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
-    } catch {
-      // Keep going; the old script was not replaced.
+    if (tempPath) {
+      try {
+        if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
+      } catch {
+        // Keep going; the old script was not replaced.
+      }
     }
     mark('failed');
     const detail = err instanceof Error ? err.message : 'Auto-update failed.';

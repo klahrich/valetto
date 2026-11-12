@@ -37,7 +37,7 @@ Usage:
   valetto watch [--name <name>] [--url <origin>] [--interval <ms>] [--once] [--force] [--no-auto-update]
   valetto watch --status
   valetto watch --stop --name <name>
-  valetto supervise --install --name <name>
+  valetto supervise --install --name <name> [--no-auto-update]
   valetto supervise --once [--no-auto-update]
   valetto supervise --status
   valetto supervise --stop --name <name>
@@ -59,6 +59,8 @@ and starts the watcher detached. It does not type into a herdr or Orca pane.
 supervise --stop records a deliberate stop. Logout, sleep, and shutdown do not. --install clears that stop.
 The supervised watcher updates itself from the server it registered with. Set VALETTO_NO_AUTO_UPDATE=1
 or pass --no-auto-update to leave the installed script unchanged. REPLYSLIP_NO_AUTO_UPDATE also works.
+supervise --install --no-auto-update (or that env var at install time) stores the setting on the agent
+key file and copies it into the OS timer, so later ticks stay opted out.
 
 Legacy, machine-wide (one workspace watcher key for every local agent in the workspace):
   valetto watch (--key-file <file> | --key <watcher-key>) [--url <origin>] [--interval <ms>] [--once] [--force]
