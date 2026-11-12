@@ -22,19 +22,19 @@
 @media (max-width:480px){.a2a .a2a-mcp .hw-cp{gap:8px;padding-left:10px}.a2a .a2a-mcp .hw-cp-t{font-size:.75rem}}
 .a2a .a2a-mcp-note{margin-top:10px;font-size:var(--s-small);color:var(--muted)}
 
-/* compact segmented control. The sage pill slides; the how-it-works tabs keep their markers. */
-.a2a .hw-tabs{position:relative;display:flex;flex-wrap:nowrap;align-items:stretch;gap:4px;width:min(100%,28rem);max-width:100%;margin-top:16px;padding:3px;border-radius:999px;background:transparent;box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--ink) 16%,transparent)}
-.a2a .hw-tabs::before{content:"";position:absolute;z-index:0;top:3px;bottom:3px;left:3px;width:calc(50% - 5px);border-radius:999px;background:var(--accent);pointer-events:none;transition:transform 220ms var(--ease-out)}
-.a2a .hw-tabs:has([role=tab]:nth-child(2)[aria-selected="true"])::before{transform:translateX(calc(100% + 4px))}
-.a2a .hw-tabs [role=tab]{position:relative;z-index:1;flex:1 1 0;min-width:0;display:flex;align-items:center;justify-content:center;height:40px;min-height:40px;padding:0 8px;border-radius:999px;background:transparent;font:600 .75rem/1.15 var(--font);letter-spacing:-.02em;text-align:center;white-space:nowrap;color:var(--muted)}
+/* thin text tabs. A 2px sage line slides; the how-it-works tabs keep their markers. */
+.a2a .hw-tabs{position:relative;display:flex;flex-wrap:nowrap;align-items:stretch;gap:0;width:min(100%,28rem);max-width:100%;margin-top:20px;padding:0;border-radius:0;background:transparent;box-shadow:inset 0 -1px 0 color-mix(in srgb,var(--ink) 14%,transparent)}
+.a2a .hw-tabs::before{content:"";position:absolute;z-index:1;top:auto;bottom:0;left:0;height:2px;width:50%;border-radius:1px;background:var(--accent);pointer-events:none;transition:transform 220ms var(--ease-out)}
+.a2a .hw-tabs:has([role=tab]:nth-child(2)[aria-selected="true"])::before{transform:translateX(100%)}
+.a2a .hw-tabs [role=tab]{position:relative;z-index:1;flex:1 1 0;min-width:0;display:flex;align-items:center;justify-content:center;height:auto;min-height:36px;padding:8px 6px 10px;border-radius:0;background:transparent;font:500 .75rem/1.2 var(--font);letter-spacing:-.02em;text-align:center;white-space:nowrap;color:var(--muted)}
 .a2a .hw-tabs [role=tab]::before{content:none;display:none}
-.a2a .hw-tabs [role=tab][aria-selected=true]{background:transparent;color:var(--accent-ink)}
+.a2a .hw-tabs [role=tab][aria-selected=true]{background:transparent;color:var(--ink)}
 .a2a .hw-tabs [role=tab][aria-selected=true]::before{background:none}
 @media (hover:hover) and (pointer:fine){
   .a2a .hw-tabs [role=tab]:hover{color:var(--ink)}
-  .a2a .hw-tabs [role=tab][aria-selected=true]:hover{color:var(--accent-ink)}
+  .a2a .hw-tabs [role=tab][aria-selected=true]:hover{color:var(--ink)}
 }
-@media (max-width:359px){.a2a .hw-tabs [role=tab]{white-space:normal;height:auto;padding:6px 8px}}
+@media (max-width:359px){.a2a .hw-tabs [role=tab]{white-space:normal;padding:6px 4px 8px}}
 /* three equal choices: sign-in app, private link, or a Valetto workspace */
 .a2a-paths{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:16px}
 .a2a-got{margin-top:16px;font-size:var(--s-small);line-height:1.45;color:var(--muted)}
@@ -132,11 +132,15 @@
 .a2a .a2a-faq dl{margin:24px 0 0;display:grid;gap:22px}
 .a2a .a2a-faq dt{font-weight:700}
 .a2a .a2a-faq dd{margin:6px 0 0;color:var(--muted);line-height:1.55}
-.a2a .a2a-hero .a2a-cta{margin-top:16px}
+.a2a .a2a-hero .a2a-cta{margin-top:12px}
 .a2a .a2a-cta{margin-top:24px}
-.a2a .a2a-cta .btn{display:inline-flex;align-items:center;gap:8px;height:40px;padding:0 16px;border-radius:12px;font-size:var(--s-small);font-weight:600;letter-spacing:-.01em;text-decoration:none}
+.a2a .a2a-cta .btn{display:inline-flex;align-items:center;gap:6px;text-decoration:none}
+.a2a .a2a-hero .a2a-cta .btn{height:auto;min-height:0;padding:5px 12px;border-radius:999px;background:transparent;color:var(--accent);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--accent) 55%,transparent);font-size:.8125rem;font-weight:600;letter-spacing:-.01em}
 .a2a .a2a-hero .a2a-cta .btn::after{content:"→";font-size:.95em;transition:transform 180ms var(--ease-out)}
-@media (hover:hover) and (pointer:fine){.a2a .a2a-hero .a2a-cta .btn:hover::after{transform:translateX(3px)}}
+@media (hover:hover) and (pointer:fine){
+  .a2a .a2a-hero .a2a-cta .btn:hover{background:color-mix(in srgb,var(--accent) 12%,transparent)}
+  .a2a .a2a-hero .a2a-cta .btn:hover::after{transform:translateX(3px)}
+}
 @media (prefers-reduced-motion:reduce){
   .a2a .hw-tabs::before,.a2a .a2a-cta .btn,.a2a .a2a-cta .btn::after,.a2a-path{transition:none}
 }
