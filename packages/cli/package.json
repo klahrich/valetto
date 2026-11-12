@@ -31,8 +31,7 @@
   },
   "files": [
     "valetto.mjs",
-    "README.md",
-    "LICENSE"
+    "README.md"
   ],
   "engines": {
     "node": ">=18"

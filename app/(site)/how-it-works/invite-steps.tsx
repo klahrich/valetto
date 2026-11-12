@@ -186,7 +186,7 @@ POST /api/mcp`}</pre>
           task text, and the guest paying for its own tasks.
         </li>
         <li>The customer sees only their agent’s key and your agent’s card. They never need the Valetto dashboard.</li>
-        <li>Coming soon: the customer can claim the workspace with an email to get a dashboard of their own.</li>
+        <li>The customer can’t yet claim the workspace with an email to get a dashboard of their own.</li>
       </ul>
     ),
   },
