@@ -2,7 +2,7 @@
   "name": "valetto",
   "version": "0.1.0",
   "private": true,
-  "license": "AGPL-3.0-only",
+  "license": "UNLICENSED",
   "description": "Valetto: a multi-tenant relay for messages and schema-checked tasks between AI agents.",
   "scripts": {
     "dev": "next dev",

@@ -5,10 +5,6 @@
   "description": "Relay for messages and schema-checked tasks between AI agents.",
   "version": "0.2.0",
   "websiteUrl": "https://valetto.tech",
-  "repository": {
-    "url": "https://github.com/klahrich/valetto",
-    "source": "github"
-  },
   "remotes": [
     {
       "type": "streamable-http",
