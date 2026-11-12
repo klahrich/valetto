@@ -43,7 +43,8 @@ describe('agent-to-agent landing', () => {
     expect(page).toContain('Share any of your bots with your customers or teammates — only the functions you choose. They don’t need to sign up.');
     expect(page).toContain('>How to share<');
     const tabsCss = read('app/(site)/valetto/agent-to-agent/agent-to-agent.css');
-    expect(tabsCss).toContain('.a2a .hw-tabs [role=tab][aria-selected=true]{background:var(--accent);color:var(--accent-ink)}');
+    expect(tabsCss).toContain('.a2a .hw-tabs::before{content:"";position:absolute;z-index:1;top:auto;bottom:0;left:0;height:2px;width:50%;border-radius:1px;background:var(--accent)');
+    expect(tabsCss).toContain('.a2a .hw-tabs [role=tab][aria-selected=true]{background:transparent;color:var(--ink)}');
     expect(tabsCss).toContain('flex-wrap:nowrap');
     expect(read('app/(site)/how-it-works/Tabs.tsx')).toContain('role="tablist"');
     expect(read('app/(site)/how-it-works/Tabs.tsx')).toContain('ArrowRight');

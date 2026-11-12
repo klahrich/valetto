@@ -1,8 +1,10 @@
 /* valetto.tech/agent-to-agent. Scoped under .a2a; reuses the how-it-works boxes (hw-*) and the setup prompt (sp-*). */
 .lp.a2a main{margin:0;padding:0 var(--m);max-width:none}
 .lp.a2a main>*{max-width:820px}
-.a2a .a2a-hero{margin-top:clamp(40px,8vh,96px)}
-.a2a .a2a-kicker{font-size:var(--s-small);font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--accent);margin-bottom:12px}
+.a2a .a2a-hero{margin-top:clamp(24px,5vh,64px)}
+.a2a .a2a-hero h1{margin-top:8px;max-width:12em;font-family:var(--vt-mono),ui-monospace,monospace;font-weight:450;font-stretch:87.5%;font-variation-settings:"wdth" 87.5;font-size:clamp(1.75rem,.85rem + 3.5vw,3.25rem);line-height:.98;letter-spacing:-.055em}
+.a2a .a2a-hero .lead{margin-top:8px;max-width:28em;font-size:clamp(.9375rem,.9rem + .15vw,1.0625rem);line-height:1.35;letter-spacing:-.015em;color:var(--muted)}
+.a2a .a2a-kicker{margin-bottom:0;font-family:var(--vt-mono),ui-monospace,monospace;font-size:.6875rem;font-weight:500;font-variation-settings:"wdth" 87.5;letter-spacing:.12em;text-transform:uppercase;color:color-mix(in srgb,var(--accent) 72%,var(--muted))}
 .a2a .a2a-toc{display:flex;flex-wrap:wrap;gap:10px;margin-top:clamp(28px,4vw,40px)}
 .a2a .a2a-toc a{display:inline-flex;align-items:center;gap:8px;padding:8px 14px 8px 8px;border-radius:999px;background:var(--surface);color:var(--ink);text-decoration:none;font-size:var(--s-small);font-weight:600;box-shadow:inset 0 0 0 1px var(--surface-2);transition:background-color .18s ease,transform .16s var(--ease-out)}
 .a2a .a2a-toc a:hover{background:var(--surface-2)}
@@ -11,33 +13,40 @@
 
 /* the MCP server URL under the intro: label, the URL in a mono box with Copy (CopyBlock), one plain line.
    The URL is short, so the box keeps Copy on the same row on phones too. */
-.a2a .a2a-mcp{margin-top:clamp(24px,3.5vw,32px);max-width:560px}
-.a2a .a2a-mcp-l{margin:0 0 8px;font-size:var(--s-small);font-weight:600;letter-spacing:0;color:var(--ink)}
-.a2a .a2a-mcp .hw-cp{flex-direction:row;align-items:center;gap:12px;padding:8px 8px 8px 16px}
-.a2a .a2a-mcp .hw-cp-t{font-size:.9375rem;overflow-wrap:normal;white-space:nowrap;overflow-x:auto}
-@media (max-width:480px){.a2a .a2a-mcp .hw-cp{gap:10px;padding-left:12px}.a2a .a2a-mcp .hw-cp-t{font-size:.8125rem}}
+.a2a .a2a-mcp{margin-top:16px;max-width:560px}
+.a2a .a2a-mcp-l{margin:0 0 8px;font-family:var(--vt-mono),ui-monospace,monospace;font-size:.6875rem;font-weight:500;font-variation-settings:"wdth" 87.5;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.a2a .a2a-mcp .hw-cp{flex-direction:row;align-items:center;gap:8px;padding:4px 4px 4px 12px;border-radius:12px;background:transparent;box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--ink) 14%,transparent)}
+.a2a .a2a-mcp .hw-cp-t{font-family:var(--vt-mono),ui-monospace,monospace;font-size:.8125rem;font-variation-settings:"wdth" 90;letter-spacing:-.03em;line-height:1.3;overflow-wrap:normal;white-space:nowrap;overflow-x:auto}
+.a2a .a2a-mcp .hw-cp-b{height:32px;padding:0 12px;border-radius:999px;background:transparent;color:var(--accent);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--accent) 50%,transparent);font-size:.75rem}
+@media (hover:hover) and (pointer:fine){.a2a .a2a-mcp .hw-cp-b:hover{background:color-mix(in srgb,var(--accent) 14%,transparent)}}
+@media (max-width:480px){.a2a .a2a-mcp .hw-cp{gap:8px;padding-left:10px}.a2a .a2a-mcp .hw-cp-t{font-size:.75rem}}
 .a2a .a2a-mcp-note{margin-top:10px;font-size:var(--s-small);color:var(--muted)}
 
-/* two-option toggle: pills in one rounded track. Scoped so the how-it-works tabs keep their markers. */
-.a2a .hw-tabs{display:flex;flex-wrap:nowrap;align-items:stretch;gap:4px;max-width:100%;margin-top:clamp(18px,3vw,28px);padding:4px;border-radius:999px;background:var(--surface);box-shadow:inset 0 0 0 1px var(--surface-2)}
-.a2a .hw-tabs [role=tab]{flex:1 1 0;min-width:0;display:flex;align-items:center;justify-content:center;min-height:44px;padding:8px 10px;border-radius:999px;background:transparent;font:600 var(--s-small)/1.25 var(--font);text-align:center;white-space:normal;color:var(--muted)}
+/* thin text tabs. A 2px sage line slides; the how-it-works tabs keep their markers. */
+.a2a .hw-tabs{position:relative;display:flex;flex-wrap:nowrap;align-items:stretch;gap:0;width:min(100%,28rem);max-width:100%;margin-top:20px;padding:0;border-radius:0;background:transparent;box-shadow:inset 0 -1px 0 color-mix(in srgb,var(--ink) 14%,transparent)}
+.a2a .hw-tabs::before{content:"";position:absolute;z-index:1;top:auto;bottom:0;left:0;height:2px;width:50%;border-radius:1px;background:var(--accent);pointer-events:none;transition:transform 220ms var(--ease-out)}
+.a2a .hw-tabs:has([role=tab]:nth-child(2)[aria-selected="true"])::before{transform:translateX(100%)}
+.a2a .hw-tabs [role=tab]{position:relative;z-index:1;flex:1 1 0;min-width:0;display:flex;align-items:center;justify-content:center;height:auto;min-height:36px;padding:8px 6px 10px;border-radius:0;background:transparent;font:500 .75rem/1.2 var(--font);letter-spacing:-.02em;text-align:center;white-space:nowrap;color:var(--muted)}
 .a2a .hw-tabs [role=tab]::before{content:none;display:none}
-.a2a .hw-tabs [role=tab][aria-selected=true]{background:var(--accent);color:var(--accent-ink)}
+.a2a .hw-tabs [role=tab][aria-selected=true]{background:transparent;color:var(--ink)}
 .a2a .hw-tabs [role=tab][aria-selected=true]::before{background:none}
 @media (hover:hover) and (pointer:fine){
   .a2a .hw-tabs [role=tab]:hover{color:var(--ink)}
-  .a2a .hw-tabs [role=tab][aria-selected=true]:hover{color:var(--accent-ink)}
+  .a2a .hw-tabs [role=tab][aria-selected=true]:hover{color:var(--ink)}
 }
+@media (max-width:359px){.a2a .hw-tabs [role=tab]{white-space:normal;padding:6px 4px 8px}}
 /* three equal choices: sign-in app, private link, or a Valetto workspace */
-.a2a-paths{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-top:clamp(18px,3vw,28px)}
-.a2a-got{margin-top:14px;line-height:1.45}
-.a2a-path{display:flex;flex-direction:column;gap:8px;padding:16px 18px;border-radius:8px;background:var(--surface);color:inherit;text-decoration:none;box-shadow:inset 0 0 0 1px var(--surface-2);min-height:44px}
-.a2a-path:hover{background:var(--surface-2)}
-.a2a-path h2{margin:0;font-size:var(--s-body);font-weight:700;line-height:1.3}
-.a2a-path p{margin:0;color:var(--muted);line-height:1.45}
-.a2a-path span{margin-top:auto;color:var(--accent);font-weight:650}
+.a2a-paths{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:16px}
+.a2a-got{margin-top:16px;font-size:var(--s-small);line-height:1.45;color:var(--muted)}
+.a2a-path{display:flex;flex-direction:column;gap:6px;padding:12px 14px;border-radius:12px;background:transparent;color:inherit;text-decoration:none;box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--ink) 12%,transparent);transition:background-color 180ms ease,box-shadow 180ms ease,transform 160ms var(--ease-out)}
+.a2a-path:hover{background:color-mix(in srgb,var(--surface) 80%,transparent);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--accent) 40%,transparent)}
+.a2a-path:active{transform:scale(.985)}
+.a2a-path h2{margin:0;font-size:.9375rem;font-weight:650;line-height:1.25;letter-spacing:-.02em}
+.a2a-path p{margin:0;font-size:var(--s-small);color:var(--muted);line-height:1.4}
+.a2a-path span{margin-top:2px;color:var(--accent);font-size:.8125rem;font-weight:600}
+.a2a-path span::after{content:" →"}
 /* closed by default. The summary is the section title; hash links open it. */
-.a2a-more{margin-top:12px;padding:0 18px;border-radius:8px;background:var(--surface);scroll-margin-top:24px}
+.a2a-more{margin-top:8px;padding:0 16px;border-radius:12px;background:transparent;box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--ink) 10%,transparent);scroll-margin-top:24px}
 .a2a-more summary{cursor:pointer;padding:16px 0;min-height:44px}
 .a2a-more summary h2{display:inline;margin:0;font-size:var(--s-body);font-weight:700;line-height:1.3}
 .a2a-more[open] summary{border-bottom:1px solid var(--surface-2)}
@@ -123,8 +132,18 @@
 .a2a .a2a-faq dl{margin:24px 0 0;display:grid;gap:22px}
 .a2a .a2a-faq dt{font-weight:700}
 .a2a .a2a-faq dd{margin:6px 0 0;color:var(--muted);line-height:1.55}
-.a2a .a2a-cta{margin-top:clamp(40px,5vw,56px)}
-.a2a .a2a-cta .btn{display:inline-flex;align-items:center;text-decoration:none}
+.a2a .a2a-hero .a2a-cta{margin-top:12px}
+.a2a .a2a-cta{margin-top:24px}
+.a2a .a2a-cta .btn{display:inline-flex;align-items:center;gap:6px;text-decoration:none}
+.a2a .a2a-hero .a2a-cta .btn{height:auto;min-height:24px;padding:5px 12px;border-radius:999px;background:transparent;color:var(--accent);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--accent) 55%,transparent);font-size:.8125rem;font-weight:600;letter-spacing:-.01em}
+.a2a .a2a-hero .a2a-cta .btn::after{content:"→";font-size:.95em;transition:transform 180ms var(--ease-out)}
+@media (hover:hover) and (pointer:fine){
+  .a2a .a2a-hero .a2a-cta .btn:hover{background:color-mix(in srgb,var(--accent) 12%,transparent)}
+  .a2a .a2a-hero .a2a-cta .btn:hover::after{transform:translateX(3px)}
+}
+@media (prefers-reduced-motion:reduce){
+  .a2a .hw-tabs::before,.a2a .a2a-cta .btn,.a2a .a2a-hero .a2a-cta .btn::after,.a2a-path{transition:none}
+}
 
 @media (max-width:599px){
   .a2a-seq{row-gap:16px}
