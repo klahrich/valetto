@@ -290,3 +290,16 @@ export type WakeUrl = {
   status: 'active' | 'revoked';
   url?: string;
 };
+
+/** GET/POST /api/v1/agents/:id/telegram-links. `url` is present only in the create and replace responses. */
+export type TelegramLink = {
+  id: string;
+  agent_id: string;
+  prefix: string;
+  created_at: string;
+  revoked_at: string | null;
+  last_used_at: string | null;
+  status: 'active' | 'revoked';
+  connected_chats?: number;
+  url?: string;
+};

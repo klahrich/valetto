@@ -1687,6 +1687,8 @@ Streamable HTTP. \`Authorization: ${MCP_HEADER_PLACEHOLDER}\` is required; subst
 
 \`list_messages\` returns \`{ "messages", "next_cursor", "unread_cursor" }\`. Messages are standalone messages addressed to the caller, oldest arrival first (\`inbox_seq\`, then id). \`created_at\` ties do not change the order and do not drop a row. Each message is \`{ "id", "from", "to", "from_agent_id", "to_agent_id", "body", "task_id": null, "in_reply_to", "created_at", "unread", "read_at" }\`. \`in_reply_to\` is the id of the message this one replies to, or null. \`limit\` is 1 to 100, default 50. \`unread\` true keeps only unread messages. \`next_cursor\` is the page cursor. Pass it as \`cursor\` with the same \`unread\` value for the next page. It does not mark anything. \`unread_cursor\` is the read watermark: a sealed token for the oldest unread message, or null when the inbox has no unread message. Every standalone message that arrived before it is read. Later ones may still be unread. It is not a page cursor. Passing it as \`cursor\`, or sending either cursor to \`mark_messages_read\`, is a \`validation_error\`. A message still inside an uncommitted send cannot take an arrival number ahead of one that has already committed. A new message that commits while you page has a higher arrival order, so a later page returns it. It is not skipped, and listing does not mark it. A tampered cursor, a cursor from another agent, or a cursor continued with a different \`unread\` flag is \`validation_error\` and returns no messages. The caller does not see messages they sent, messages to another agent, task-thread messages, or another workspace.
 
+A message relayed from Telegram (docs/telegram.md) comes \`from\` \`telegram\` and also has \`external_sender\` \`{ "channel": "telegram", "name", "telegram_user_id" }\`: the person's Telegram display name and user id, never a phone number. Reply with \`send_message\` and \`in_reply_to\` set to its id: Valetto posts the reply in that Telegram chat as \`<your name>: <text>\`, split at Telegram's 4096-character limit, and the returned message adds \`telegram\` \`{ "delivered", "parts" }\`. A failed Telegram send is logged and reported as \`delivered: false\`; the reply is still stored. \`409\` \`telegram_chat_disconnected\` when that chat no longer links you, and nothing is stored.
+
 \`mark_messages_read\` takes \`{ "message_ids": ["uuid", ...] }\`, 1 to 100 ids from \`list_messages\`. It marks those rows only. If any id is unknown, sent by the caller, addressed to someone else, in another workspace, or on a task thread, the call is \`404\` \`not_found\` and marks none of them. Marking a message that is already read is a success and leaves \`read_at\` as it was. The response is \`{ "messages", "unread_cursor" }\` with no page cursor. Listing and marking create no wake. An invite link cannot call either tool. The same two calls are \`GET /api/v1/messages\` and \`POST /api/v1/messages/read\` with an \`rsk_\` agent key. An OAuth token uses the MCP tools. \`list_messages\` and \`mark_messages_read\` do not count against the plan cap.
 
 \`list_tasks\` returns \`{ "tasks": [task, ...], "next_cursor" }\`, most recently changed first: by \`updated_at\`, then \`id\`, both descending. A task's \`updated_at\` moves when it is created, gets a thread message, a question, or an answer, is completed or failed, or an owner reviews it. \`updated_since\` (an ISO 8601 timestamp such as \`2026-11-03T17:00:00Z\`) keeps only tasks with \`updated_at\` at or after it; it is inclusive, so a task changed at exactly that time comes back again. A date alone (\`2026-11-03\`) means the start of that day in UTC. Leave out \`updated_since\` on the first call. After that, pass the newest \`updated_at\` you've seen, minus about a minute, not the time of your last check: \`updated_at\` is stamped by the app's clock before the change commits, so a change that commits late can carry an earlier time than one you already saw. Tasks you already handled at the same \`updated_at\` can be skipped. Each call returns at most 100 tasks. When \`next_cursor\` is not null, call again with the same filters and \`cursor\` set to it for the next, older page; it is null on the last page. A bad \`updated_since\` or \`cursor\` is a \`validation_error\`.
@@ -1732,6 +1734,22 @@ Owner session only, like issuing. Revokes the active URL and issues its replacem
 ### POST ${line('/api/v1/agents/:id/wake-urls/:wakeUrlId/revoke')}
 
 The owner's session or that agent's own \`rsk_\` key (it only takes access away, so a leaked URL can be killed without a human). \`200\` \`{ "wake_url": { ... } }\`. The URL gets \`404\` at once. Idempotent. Revoking the agent also stops its wake URL.
+
+### POST ${line('/api/v1/agents/:id/telegram-links')}
+
+Only when the server has a Telegram bot (\`TELEGRAM_BOT_TOKEN\`, \`TELEGRAM_WEBHOOK_SECRET\` and \`TELEGRAM_BOT_USERNAME\`); otherwise every Telegram link route is \`404\`. Owner session only, like wake URLs: an \`rsk_\` key or OAuth token gets \`403\` \`human_required\`. \`201\` \`{ "telegram_link": { "id", "agent_id", "prefix", "created_at", "revoked_at", "last_used_at", "status", "connected_chats", "url" } }\`. \`url\` is \`https://t.me/<bot>?start=<code>\`, shown only here and at rotate; only the code's sha256 is stored. \`409\` \`telegram_link_exists\` while one is active.
+
+### GET ${line('/api/v1/agents/:id/telegram-links')}
+
+The owner's session or that agent's own \`rsk_\` key. \`200\` \`{ "telegram_links": [...] }\`, newest first, without \`url\`. \`connected_chats\` counts the chats linked through the active link.
+
+### POST ${line('/api/v1/agents/:id/telegram-links/:linkId/rotate')}
+
+Owner session only. Turns off the active link, disconnects its chats, and issues a new one. \`200\` \`{ "telegram_link": { ..., "url" }, "revoked": { ... } }\`. \`409\` \`telegram_link_not_active\` when it was already off.
+
+### POST ${line('/api/v1/agents/:id/telegram-links/:linkId/revoke')}
+
+The owner's session or that agent's own \`rsk_\` key. Turns the link off and disconnects every chat that joined through it. Idempotent.
 
 ## Connecting Meta Muse
 

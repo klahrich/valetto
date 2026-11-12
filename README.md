@@ -318,6 +318,9 @@ Names only. Real values stay in `.env` or the host. `.env.example` lists the sam
 | `STATS_API_KEY` | Bearer token for `GET /api/admin/stats`. When unset, that route is 404. |
 | `STATS_EXCLUDE_WORKSPACE_IDS` | Comma-separated workspace UUIDs left out of `/api/admin/stats`, `/admin/usage` and the signup and first-agent alerts. Internal team and bot emails are already left out in code (`lib/internal-accounts.ts`). |
 | `ALERT_EMAIL` | Inbox for the signup alert (an outside person's first sign-in) and the first-agent alert. When unset, both are skipped. |
+| `TELEGRAM_BOT_TOKEN` | Token of the shared Valetto Telegram bot, from BotFather. With the next two, turns on the Telegram channel ([docs/telegram.md](docs/telegram.md)). Any of the three missing: `/api/telegram/webhook` and the Telegram link routes answer `404`. |
+| `TELEGRAM_WEBHOOK_SECRET` | 1-256 letters, numbers, `_` or `-`. Telegram sends it as `X-Telegram-Bot-Api-Secret-Token`, checked in constant time. |
+| `TELEGRAM_BOT_USERNAME` | The bot's username without `@`, for the `https://t.me/<username>?start=<code>` links. |
 
 The `VALETTO_ALLOW_PRIVATE_WEBHOOKS`, `VALETTO_URL`, and CLI `VALETTO_*` variables also accept their pre-rename `REPLYSLIP_*` names. When both are set, `VALETTO_*` wins.
 
