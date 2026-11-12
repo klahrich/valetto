@@ -105,3 +105,10 @@ export async function sendTelegramText(
 export async function answerTelegramCallback(token: string, callbackQueryId: string, text?: string): Promise<void> {
   await callTelegram(token, 'answerCallbackQuery', { callback_query_id: callbackQueryId, ...(text ? { text } : {}) });
 }
+
+/** A user's status in a chat (creator, administrator, member, restricted, left, kicked), or null when Telegram cannot say. */
+export async function getTelegramChatMemberStatus(token: string, chatId: number, userId: number): Promise<string | null> {
+  const result = await callTelegram(token, 'getChatMember', { chat_id: chatId, user_id: userId });
+  const status = (result.result as { status?: unknown } | undefined)?.status;
+  return result.ok && typeof status === 'string' ? status : null;
+}

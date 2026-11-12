@@ -21,7 +21,7 @@ import { HttpError, isUniqueViolation } from './errors';
 import { bearerToken } from './http';
 import { insertMessageWithWake } from './message-insert';
 import { consumeKeyedRateLimit } from './rate-limit';
-import { answerTelegramCallback, sendTelegramText, type InlineButton } from './telegram-api';
+import { answerTelegramCallback, getTelegramChatMemberStatus, sendTelegramText, type InlineButton } from './telegram-api';
 import { afterWakeDelivery } from './wake-after';
 
 /**
@@ -157,11 +157,35 @@ export async function revokeTelegramLink(subject: TelegramSubject, linkId: strin
   return getDb().transaction(async (tx) => {
     const [existing] = await tx.select().from(telegramLinks).where(linkWhere(subject, linkId)).limit(1).for('update');
     if (!existing) throw new HttpError(404, 'not_found', 'No Telegram link was found.');
-    await tx.delete(telegramChats).where(eq(telegramChats.linkId, existing.id));
-    if (existing.revokedAt) return existing;
+    const groups = await disconnectLinkChats(tx, existing.id);
+    if (existing.revokedAt) return { row: existing, groups };
     const [revoked] = await tx.update(telegramLinks).set({ revokedAt: new Date() }).where(eq(telegramLinks.id, existing.id)).returning();
-    return revoked ?? existing;
+    return { row: revoked ?? existing, groups };
+  }).then(async ({ row, groups }) => {
+    await noticeGroups(groups);
+    return row;
   });
+}
+
+type GroupNotice = { chatId: number; agentName: string };
+
+/** Deletes a link's chats and returns the groups among them, to be told after commit. */
+async function disconnectLinkChats(tx: Db, linkId: string): Promise<GroupNotice[]> {
+  const gone = await tx
+    .delete(telegramChats)
+    .where(eq(telegramChats.linkId, linkId))
+    .returning({ chatId: telegramChats.chatId, chatType: telegramChats.chatType, agentId: telegramChats.agentId });
+  const groups = gone.filter((row) => row.chatType === 'group');
+  if (!groups.length) return [];
+  const [agent] = await tx.select({ name: agents.name }).from(agents).where(eq(agents.id, groups[0]!.agentId)).limit(1);
+  return groups.map((row) => ({ chatId: row.chatId, agentName: agent?.name ?? 'the agent' }));
+}
+
+/** Tells each disconnected group, after commit. Never throws. */
+async function noticeGroups(groups: GroupNotice[]): Promise<void> {
+  const config = telegramConfig();
+  if (!config) return;
+  for (const group of groups) await sendTelegramText(config.token, group.chatId, TELEGRAM_COPY.groupLinkOff(group.agentName));
 }
 
 /** Revokes an active link (disconnecting its chats) and issues its replacement in one transaction. */
@@ -175,10 +199,13 @@ export async function rotateTelegramLink(
     const [existing] = await tx.select().from(telegramLinks).where(linkWhere(subject, linkId)).limit(1).for('update');
     if (!existing) throw new HttpError(404, 'not_found', 'No Telegram link was found.');
     if (existing.revokedAt) throw new HttpError(409, 'telegram_link_not_active', 'Only an active Telegram link can be replaced.');
-    await tx.delete(telegramChats).where(eq(telegramChats.linkId, existing.id));
+    const groups = await disconnectLinkChats(tx, existing.id);
     const [revoked] = await tx.update(telegramLinks).set({ revokedAt: new Date() }).where(eq(telegramLinks.id, existing.id)).returning();
     const row = await insertLink(tx, subject, code);
-    return { row, url: telegramConnectUrl(config.username, code), revoked: revoked ?? existing };
+    return { row, url: telegramConnectUrl(config.username, code), revoked: revoked ?? existing, groups };
+  }).then(async ({ groups, ...rest }) => {
+    await noticeGroups(groups);
+    return rest;
   });
 }
 
@@ -374,6 +401,13 @@ export const TELEGRAM_COPY = {
   notConnected: NOT_CONNECTED,
   unavailable: 'The agent for this group is no longer available, so the group has been disconnected.',
   pick: 'Who should get this message?',
+  replyAgentGone: (name: string) => `${name} is no longer linked here.`,
+  groupSwitched: (from: string, to: string) =>
+    `This group now talks to ${to} instead of ${from}. Messages the bot can see here go to ${to}. Send /stop to disconnect.`,
+  groupStopped: (name: string) => `This group is no longer connected to ${name}. Messages here no longer go to any agent.`,
+  groupLinkOff: (name: string) =>
+    `This group is no longer connected to ${name}: its owner turned off the Telegram link. Messages here no longer go to any agent.`,
+  adminsOnly: 'Only a group admin, or the person who connected this group, can change its agent.',
   emptyAfterName: (name: string) => `Add your message after @${name}.`,
   textOnly: 'Only text messages are passed on. Please send your message as text.',
   slowDown: 'You’re sending messages too fast. Wait a minute, then try again.',
@@ -441,7 +475,7 @@ export type TelegramOutcome = {
   callback?: { id: string; text?: string };
 };
 
-type Linked = { agent: AgentRow; linkId: string; lastUsedAt: Date | null; boundAt: Date };
+type Linked = { agent: AgentRow; linkId: string; lastUsedAt: Date | null; boundAt: Date; linkedBy: number | null };
 
 /** Agents this chat can use, oldest link first. Rows whose agent or link was revoked are deleted on the way. */
 async function linkedAgents(tx: Db, chatId: number): Promise<Linked[]> {
@@ -466,7 +500,13 @@ async function linkedAgents(tx: Db, chatId: number): Promise<Linked[]> {
   }
   return rows
     .filter((row) => !stale.includes(row))
-    .map((row) => ({ agent: row.agent, linkId: row.chat.linkId, lastUsedAt: row.chat.lastUsedAt, boundAt: row.chat.boundAt }));
+    .map((row) => ({
+      agent: row.agent,
+      linkId: row.chat.linkId,
+      lastUsedAt: row.chat.lastUsedAt,
+      boundAt: row.chat.boundAt,
+      linkedBy: row.chat.telegramUserId,
+    }));
 }
 
 const names = (linked: Linked[]) => linked.map((row) => row.agent.name);
@@ -480,7 +520,8 @@ async function linkAgent(tx: Db, chatId: number, kind: ChatKind, code: string, u
     .where(eq(telegramLinks.codeHash, sha256(code)))
     .limit(1);
   if (!hit || hit.link.revokedAt || hit.agent.revokedAt || hit.agent.role !== 'agent') return { text: TELEGRAM_COPY.badLink };
-  // A group talks to exactly one agent: linking another replaces it.
+  // A group talks to exactly one agent: linking another replaces it, with a notice in the group.
+  const previous = kind === 'group' ? (await linkedAgents(tx, chatId))[0] : undefined;
   if (kind === 'group') await tx.delete(telegramChats).where(eq(telegramChats.chatId, chatId));
   const values = {
     chatId,
@@ -500,7 +541,14 @@ async function linkAgent(tx: Db, chatId: number, kind: ChatKind, code: string, u
       set: { linkId: values.linkId, chatType: kind, telegramUserId: values.telegramUserId, displayName: values.displayName },
     });
   await tx.update(telegramLinks).set({ lastUsedAt: new Date() }).where(eq(telegramLinks.id, hit.link.id));
-  if (kind === 'group') return { text: TELEGRAM_COPY.groupBound(hit.agent.name) };
+  if (kind === 'group') {
+    return {
+      text:
+        previous && previous.agent.id !== hit.agent.id
+          ? TELEGRAM_COPY.groupSwitched(previous.agent.name, hit.agent.name)
+          : TELEGRAM_COPY.groupBound(hit.agent.name),
+    };
+  }
   return { text: TELEGRAM_COPY.added(hit.agent.name, names(await linkedAgents(tx, chatId))) };
 }
 
@@ -536,12 +584,17 @@ async function relay(
 }
 
 /** The bot message a Telegram reply points at, when it carried an agent's reply in this chat. */
-async function repliedTo(tx: Db, chatId: number, message: TelegramMessage): Promise<{ agentId: string; messageId: string } | null> {
+async function repliedTo(
+  tx: Db,
+  chatId: number,
+  message: TelegramMessage,
+): Promise<{ agentId: string; agentName: string; messageId: string } | null> {
   const replyId = intOf(message.reply_to_message?.message_id);
   if (replyId === null || message.reply_to_message?.from?.is_bot !== true) return null;
   const [row] = await tx
-    .select({ agentId: telegramSent.agentId, messageId: telegramSent.messageId })
+    .select({ agentId: telegramSent.agentId, agentName: agents.name, messageId: telegramSent.messageId })
     .from(telegramSent)
+    .innerJoin(agents, eq(agents.id, telegramSent.agentId))
     .where(and(eq(telegramSent.chatId, chatId), eq(telegramSent.telegramMessageId, replyId)))
     .limit(1);
   return row ?? null;
@@ -582,10 +635,12 @@ async function routeText(
     return { ...out('relayed'), messageId: sent.messageId, wakeIds: [sent.wakeId].filter((id): id is string => !!id) };
   };
 
-  // 1. A Telegram reply to an agent's message goes back to that agent, linked to that Valetto message.
+  // 1. A Telegram reply to an agent's message goes back to that agent, linked to that Valetto message. When that agent
+  // is no longer linked here, fail closed: say so and ask with buttons. Never guess another agent for it.
   if (reply) {
     const target = linked.find((row) => row.agent.id === reply.agentId);
     if (target) return send(target, text, reply.messageId);
+    return askWhich(tx, chatId, text, sender, linked, `${TELEGRAM_COPY.replyAgentGone(reply.agentName)} ${TELEGRAM_COPY.pick}`, 'reply_agent_gone');
   }
   // 2. @name at the start picks a linked agent; the prefix is removed.
   const mention = parseMention(text);
@@ -603,14 +658,27 @@ async function routeText(
     .filter((row) => row.lastUsedAt)
     .sort((a, b) => b.lastUsedAt!.getTime() - a.lastUsedAt!.getTime())[0];
   if (last) return send(last, text, null);
-  // 5. Ask, with a button per agent. The text waits in telegram_pending.
+  // 5. Ask, with a button per agent.
+  return askWhich(tx, chatId, text, sender, linked, TELEGRAM_COPY.pick, 'pick');
+}
+
+/** Holds the text in telegram_pending and asks which linked agent gets it, with a button per agent. */
+async function askWhich(
+  tx: Db,
+  chatId: number,
+  text: string,
+  sender: { userId: number | null; name: string | null },
+  linked: Linked[],
+  question: string,
+  status: string,
+): Promise<TelegramOutcome> {
   await tx.delete(telegramPending).where(sql`${telegramPending.createdAt} < now() - ${PENDING_RETENTION}::interval`);
   const [pending] = await tx
     .insert(telegramPending)
     .values({ chatId, body: text, telegramUserId: sender.userId, displayName: sender.name })
     .returning();
   if (!pending) throw new HttpError(500, 'internal_error', 'Something went wrong.');
-  return out('pick', [{ text: TELEGRAM_COPY.pick, buttons: pickerButtons(pending.id, linked) }]);
+  return { status, chatId, sends: [{ text: question, buttons: pickerButtons(pending.id, linked) }], wakeIds: [] };
 }
 
 const PENDING_RETENTION = '1 day';
@@ -648,6 +716,23 @@ async function handleCallback(tx: Db, query: TelegramCallbackQuery): Promise<Tel
   };
 }
 
+/**
+ * Who may link, relink or stop a group: anyone while no agent is linked; after that only a Telegram admin of the group
+ * (getChatMember: creator or administrator) or the person who made the current link. Fails closed when Telegram
+ * cannot be asked.
+ */
+async function mayChangeGroup(tx: Db, chatId: number, from: TelegramUser | undefined): Promise<boolean> {
+  const userId = intOf(from?.id);
+  if (userId === null) return false;
+  const current = await linkedAgents(tx, chatId);
+  if (current.length === 0) return true;
+  if (current.some((row) => row.linkedBy === userId)) return true;
+  const config = telegramConfig();
+  if (!config) return false;
+  const status = await getTelegramChatMemberStatus(config.token, chatId, userId);
+  return status === 'creator' || status === 'administrator';
+}
+
 async function handleCommand(
   tx: Db,
   chatId: number,
@@ -656,6 +741,10 @@ async function handleCommand(
   message: TelegramMessage,
 ): Promise<TelegramOutcome | null> {
   const out = (status: string, text: string): TelegramOutcome => ({ status, chatId, sends: [{ text }], wakeIds: [] });
+  const changes = command.command === 'stop' || ((command.command === 'start' || command.command === 'link') && command.arg);
+  if (kind === 'group' && changes && !(await mayChangeGroup(tx, chatId, message.from))) {
+    return out('not_admin', TELEGRAM_COPY.adminsOnly);
+  }
   switch (command.command) {
     case 'start':
     case 'link': {
@@ -680,7 +769,7 @@ async function handleCommand(
       const wanted = command.arg.replace(/^@/, '').trim();
       if (!wanted || kind === 'group') {
         await tx.delete(telegramChats).where(eq(telegramChats.chatId, chatId));
-        return out('unbound', TELEGRAM_COPY.removedAll);
+        return out('unbound', kind === 'group' ? TELEGRAM_COPY.groupStopped(linked[0]!.agent.name) : TELEGRAM_COPY.removedAll);
       }
       const target = linked.find((row) => row.agent.name.toLowerCase() === wanted.toLowerCase());
       if (!target) return out('not_found', TELEGRAM_COPY.noSuchAgent(wanted, names(linked)));

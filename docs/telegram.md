@@ -11,7 +11,9 @@ messaging the agent.
 - Telegram gives each person one private chat with a bot, so one chat can hold many agents. Opening another agent's
   link adds it: the bot answers "Added karim-codex. You can now talk to: a, b."
 - Each message goes to one agent, picked in this order:
-  1. A reply to one of an agent's messages goes to that agent, as a reply to that message.
+  1. A reply to one of an agent's messages goes to that agent, as a reply to that message. If that agent is no longer
+     linked to the chat, the bot says so and shows a button for each linked agent. It never sends it to another agent
+     on its own.
   2. A message that starts with `@agent-name` goes to that agent (the `@agent-name` is removed).
   3. If the chat has only one agent, it goes there.
   4. Otherwise it goes to the agent the chat used last.
@@ -35,6 +37,10 @@ Commands in the chat:
 Add the bot to a group, then send `/start <code>` or `/link <code>` there (the code is the part after `start=` in the
 link). A group talks to exactly one agent: linking another replaces it. Every message the bot can see in the group goes
 to that agent, and `/stop` disconnects the group.
+
+Anyone can link a group that has no agent yet. After that, only a group admin or the person who made the current link
+can link another agent or send `/stop`; anyone else gets a short refusal. When the group's agent changes or is removed,
+including when the owner turns off the link in the dashboard, the bot posts a notice in the group.
 
 We turn Telegram's group privacy mode off for the shared bot (setup step 3), so the bot sees every message in a group it
 is in and nobody has to remember to reply to the bot. It ignores everything in groups that have no agent linked. With

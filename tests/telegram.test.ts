@@ -20,6 +20,9 @@ type TgCall = { method: string; body: any };
 let tgCalls: TgCall[] = [];
 let nextTelegramMessageId = 1000;
 let failTelegram = false;
+/** getChatMember answers by user id; anyone not listed is a plain member. */
+let memberStatus = new Map<number, string>();
+let failChatMember = false;
 const realFetch = globalThis.fetch;
 
 beforeEach(() => {
@@ -28,6 +31,8 @@ beforeEach(() => {
   vi.stubEnv('TELEGRAM_BOT_USERNAME', BOT);
   tgCalls = [];
   failTelegram = false;
+  memberStatus = new Map();
+  failChatMember = false;
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
     const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
     if (!url.startsWith('https://api.telegram.org/')) return realFetch(input, init);
@@ -35,6 +40,11 @@ beforeEach(() => {
     const body = JSON.parse(String(init?.body ?? '{}'));
     tgCalls.push({ method, body });
     if (failTelegram) return new Response(JSON.stringify({ ok: false, description: 'Forbidden: bot was blocked by the user' }), { status: 403 });
+    if (method === 'getChatMember') {
+      if (failChatMember) return new Response(JSON.stringify({ ok: false, description: 'Bad Request' }), { status: 400 });
+      const status = memberStatus.get(body.user_id) ?? 'member';
+      return new Response(JSON.stringify({ ok: true, result: { status, user: { id: body.user_id } } }), { status: 200 });
+    }
     nextTelegramMessageId += 1;
     return new Response(JSON.stringify({ ok: true, result: method === 'sendMessage' ? { message_id: nextTelegramMessageId } : true }), {
       status: 200,
@@ -73,11 +83,11 @@ function privateMessage(chatId: number, text: string, extra: Record<string, unkn
   };
 }
 
-function groupMessage(chatId: number, text: string, extra: Record<string, unknown> = {}) {
+function groupMessage(chatId: number, text: string, extra: Record<string, unknown> = {}, fromId = 77) {
   return {
     message: {
       message_id: nextId(),
-      from: { id: 77, is_bot: false, first_name: 'Gus' },
+      from: { id: fromId, is_bot: false, first_name: 'Gus' },
       chat: { id: chatId, type: 'supergroup' },
       text,
       ...extra,
@@ -397,6 +407,34 @@ describe('telegram: outbound', () => {
     expect((await inbox(b!.key)).map((m) => m.body)).toEqual(['unrelated']);
   });
 
+  it('a reply to an agent that is no longer linked asks with buttons instead of guessing', async () => {
+    const { agents: [a, b] } = await setup(['goneagent', 'staying']);
+    const chat = nextId();
+    await hook(privateMessage(chat, `/start ${a!.link.code}`));
+    await hook(privateMessage(chat, `/start ${b!.link.code}`));
+    await hook(privateMessage(chat, '@goneagent hi'));
+    const [incoming] = await inbox(a!.key);
+    await mcpTool(a!.key, 'send_message', { in_reply_to: incoming.id, body: 'hello back' });
+    const botMessageId = nextTelegramMessageId;
+    // staying is now the only linked agent and the last one used: neither may catch the reply.
+    await hook(privateMessage(chat, '@staying something'));
+    await hook(privateMessage(chat, '/stop goneagent'));
+    tgCalls = [];
+    const res = await hook(
+      privateMessage(chat, '@staying for you?', { reply_to_message: { message_id: botMessageId, from: { id: 1, is_bot: true } } }),
+    );
+    expect(res.data.status).toBe('reply_agent_gone');
+    const ask = sends().at(-1)!;
+    expect(ask.body.text).toBe(`${TELEGRAM_COPY.replyAgentGone('goneagent')} ${TELEGRAM_COPY.pick}`);
+    expect(ask.body.reply_markup.inline_keyboard.flat().map((x: { text: string }) => x.text)).toEqual(['staying']);
+    expect((await inbox(b!.key)).map((m) => m.body)).toEqual(['something']);
+    expect(await inbox(a!.key)).toHaveLength(1);
+    // A tap sends the held text, unchanged, with no reply link.
+    const data = ask.body.reply_markup.inline_keyboard[0][0].callback_data as string;
+    await hook({ callback_query: { id: `cb${nextId()}`, from: { id: chat }, data, message: { message_id: 9, chat: { id: chat, type: 'private' } } } });
+    expect((await inbox(b!.key)).at(-1)).toMatchObject({ body: '@staying for you?', in_reply_to: null });
+  });
+
   it('splits long replies under 4096 characters with the prefix on every part', async () => {
     const { agents: [a] } = await setup(['longwriter']);
     const chat = nextId();
@@ -462,8 +500,9 @@ describe('telegram: groups', () => {
 
     await hook(groupMessage(group, `/link@${BOT} ${a!.link.code}`));
     expect(lastText()).toBe(TELEGRAM_COPY.groupBound('groupone'));
+    // The person who linked the group may relink it; the group sees the switch.
     await hook(groupMessage(group, `/start ${b!.link.code}`));
-    expect(lastText()).toBe(TELEGRAM_COPY.groupBound('grouptwo'));
+    expect(lastText()).toBe(TELEGRAM_COPY.groupSwitched('groupone', 'grouptwo'));
     const rows = await getDb().select().from(telegramChats).where(eq(telegramChats.chatId, group));
     expect(rows.map((r) => r.agentId)).toEqual([b!.id]);
     expect(rows[0]?.chatType).toBe('group');
@@ -477,7 +516,59 @@ describe('telegram: groups', () => {
     expect(await inbox(a!.key)).toHaveLength(0);
 
     await hook(groupMessage(group, '/stop'));
-    expect(lastText()).toBe(TELEGRAM_COPY.removedAll);
+    expect(lastText()).toBe(TELEGRAM_COPY.groupStopped('grouptwo'));
     expect((await hook(groupMessage(group, 'after stop'))).data.status).toBe('ignored');
+  });
+
+  it('only a group admin or the person who linked it can relink or stop it', async () => {
+    const { agents: [a, b] } = await setup(['guardone', 'guardtwo']);
+    const group = -nextId();
+    const linker = nextId();
+    const member = nextId();
+    const admin = nextId();
+    memberStatus.set(admin, 'administrator');
+    await hook(groupMessage(group, `/link ${a!.link.code}`, {}, linker));
+    expect(lastText()).toBe(TELEGRAM_COPY.groupBound('guardone'));
+    const [row] = await getDb().select().from(telegramChats).where(eq(telegramChats.chatId, group));
+    expect(row?.telegramUserId).toBe(linker);
+
+    // A plain member is refused, for relinking and for stopping.
+    expect((await hook(groupMessage(group, `/link ${b!.link.code}`, {}, member))).data.status).toBe('not_admin');
+    expect(lastText()).toBe(TELEGRAM_COPY.adminsOnly);
+    expect((await hook(groupMessage(group, '/stop', {}, member))).data.status).toBe('not_admin');
+    expect(tgCalls.filter((c) => c.method === 'getChatMember').map((c) => c.body)).toContainEqual({ chat_id: group, user_id: member });
+    // If Telegram cannot be asked, the answer is no.
+    failChatMember = true;
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    expect((await hook(groupMessage(group, `/start ${b!.link.code}`, {}, admin))).data.status).toBe('not_admin');
+    failChatMember = false;
+    expect((await getDb().select().from(telegramChats).where(eq(telegramChats.chatId, group))).map((r) => r.agentId)).toEqual([a!.id]);
+
+    // An admin may relink; the group sees it.
+    await hook(groupMessage(group, `/start ${b!.link.code}`, {}, admin));
+    expect(lastText()).toBe(TELEGRAM_COPY.groupSwitched('guardone', 'guardtwo'));
+    const [after] = await getDb().select().from(telegramChats).where(eq(telegramChats.chatId, group));
+    expect(after).toMatchObject({ agentId: b!.id, telegramUserId: admin });
+    // Now the earlier linker is a plain member for this binding.
+    expect((await hook(groupMessage(group, '/stop', {}, linker))).data.status).toBe('not_admin');
+    // Anyone can still talk to the agent.
+    await hook(groupMessage(group, 'hello', {}, member));
+    expect((await inbox(b!.key)).map((m) => m.body)).toEqual(['hello']);
+  });
+
+  it('tells the group when the owner turns off the link', async () => {
+    const { session, agents: [a] } = await setup(['grouplinkoff']);
+    const group = -nextId();
+    await hook(groupMessage(group, `/link ${a!.link.code}`));
+    tgCalls = [];
+    const revoked = await call(revokeLinkRoute, `http://localhost/api/v1/agents/${a!.id}/telegram-links/${a!.link.id}/revoke`, {
+      method: 'POST',
+      cookie: session.cookie,
+      params: { id: a!.id, linkId: a!.link.id },
+    });
+    expect(revoked.status).toBe(200);
+    expect(sends().map((c) => c.body)).toEqual([
+      expect.objectContaining({ chat_id: group, text: TELEGRAM_COPY.groupLinkOff('grouplinkoff') }),
+    ]);
   });
 });
