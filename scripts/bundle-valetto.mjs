@@ -18,7 +18,7 @@ const result = await build({
   format: 'esm',
   target: 'node18',
   define: { __VALETTO_VERSION__: JSON.stringify(version) },
-  banner: { js: '#!/usr/bin/env node\n// SPDX-License-Identifier: Apache-2.0' },
+  banner: { js: '#!/usr/bin/env node\n// Copyright (c) 2026 ClaireVue. All rights reserved.' },
   legalComments: 'none',
   logLevel: 'silent',
   write: false,

@@ -34,11 +34,11 @@ const HELP = `valetto ${VALETTO_VERSION}: watcher and register CLI for Valetto (
 
 Usage:
   valetto register --join-code <code> --name <name> [--driver orca|herdr --target <pane>] [--url <origin>] [--description <text>] [--force]
-  valetto watch [--name <name>] [--url <origin>] [--interval <ms>] [--once] [--force]
+  valetto watch [--name <name>] [--url <origin>] [--interval <ms>] [--once] [--force] [--no-auto-update]
   valetto watch --status
   valetto watch --stop --name <name>
   valetto supervise --install --name <name>
-  valetto supervise --once
+  valetto supervise --once [--no-auto-update]
   valetto supervise --status
   valetto supervise --stop --name <name>
   valetto supervise --uninstall (--name <name> | --all)
@@ -57,13 +57,15 @@ supervise --install uses this same script. It checks valetto.mjs.sha256 beside i
 (macOS LaunchAgent, Linux systemd --user, or Windows Task Scheduler) that runs supervise --once every 120 seconds,
 and starts the watcher detached. It does not type into a herdr or Orca pane.
 supervise --stop records a deliberate stop. Logout, sleep, and shutdown do not. --install clears that stop.
+The supervised watcher updates itself from the server it registered with. Set VALETTO_NO_AUTO_UPDATE=1
+or pass --no-auto-update to leave the installed script unchanged. REPLYSLIP_NO_AUTO_UPDATE also works.
 
 Legacy, machine-wide (one workspace watcher key for every local agent in the workspace):
   valetto watch (--key-file <file> | --key <watcher-key>) [--url <origin>] [--interval <ms>] [--once] [--force]
 A per-agent watcher refuses to start while a legacy watcher for the same workspace runs on this machine.
 
 --url defaults to VALETTO_URL, then the server the agent registered with, then https://valetto.tech.
-Environment: VALETTO_URL, VALETTO_WATCHER_KEY (legacy), VALETTO_POLL_INTERVAL_MS, VALETTO_ORCA_BIN.
+Environment: VALETTO_URL, VALETTO_WATCHER_KEY (legacy), VALETTO_POLL_INTERVAL_MS, VALETTO_ORCA_BIN, VALETTO_NO_AUTO_UPDATE.
 Names from before the rename still work: replyslip.mjs, ~/.replyslip, and REPLYSLIP_* variables.
 Agent setup guide: https://valetto.tech/skill.md`;
 
@@ -106,7 +108,7 @@ function positionals(argv: string[]): string[] {
   const values: string[] = [];
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i] ?? '';
-    if (arg === '--force' || arg === '--once') continue;
+    if (arg === '--force' || arg === '--once' || arg === '--no-auto-update') continue;
     if (arg.startsWith('--')) {
       const value = argv[i + 1];
       if (value && !value.startsWith('-')) i += 1;
@@ -426,7 +428,7 @@ function readReclaim(argv: string[]): { pid: number; token: string; startedAt: s
   return { pid, token, startedAt };
 }
 
-function superviseIo(io: CliIo): SuperviseIo {
+function superviseIo(io: CliIo, argv: string[] = []): SuperviseIo {
   return {
     home: io.home ?? homedir(),
     env: io.env ?? process.env,
@@ -448,6 +450,11 @@ function superviseIo(io: CliIo): SuperviseIo {
     legacyLabel: io.supervise?.legacyLabel,
     legacyTaskName: io.supervise?.legacyTaskName,
     legacyUnitName: io.supervise?.legacyUnitName,
+    log: io.supervise?.log,
+    fetchImpl: io.fetchImpl,
+    currentVersion: VALETTO_VERSION,
+    argv,
+    skipAutoUpdate: io.supervise?.skipAutoUpdate,
   };
 }
 
@@ -457,7 +464,7 @@ async function runSupervise(
   stdout: (line: string) => void,
   stderr: (line: string) => void,
 ): Promise<number> {
-  const sup = superviseIo(io);
+  const sup = superviseIo(io, argv);
   if (argv.includes('--once')) return finishSupervise(await runSupervisionTick(sup), stdout, stderr);
   if (argv.includes('--status')) {
     for (const line of supervisionStatus(sup)) stdout(line);

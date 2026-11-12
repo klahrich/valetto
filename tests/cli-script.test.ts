@@ -22,7 +22,7 @@ describe('served valetto.mjs', () => {
     expect(script.headers.get('content-type')).toContain('text/javascript');
     const body = Buffer.from(await script.arrayBuffer());
     expect(Buffer.compare(body, bytes)).toBe(0);
-    expect(body.toString('utf8')).toContain('// SPDX-License-Identifier: Apache-2.0');
+    expect(body.toString('utf8')).toContain('// Copyright (c) 2026 ClaireVue. All rights reserved.');
     expect(body.toString('utf8')).toContain('watch');
     expect(body.toString('utf8')).toContain('register');
     expect(body.toString('utf8')).not.toContain('rsk_');

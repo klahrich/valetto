@@ -1,8 +1,8 @@
 #!/usr/bin/env node
-// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) 2026 ClaireVue. All rights reserved.
 
 // packages/cli/src/cli.ts
-import { homedir as homedir4 } from "node:os";
+import { homedir as homedir5 } from "node:os";
 import { readFile as readFile2, stat as stat2 } from "node:fs/promises";
 
 // lib/constants.ts
@@ -386,10 +386,328 @@ async function callWhoami(options) {
 }
 
 // packages/cli/src/supervise.ts
+import { spawn as spawn2 } from "node:child_process";
+import { createHash as createHash3 } from "node:crypto";
+import { accessSync as accessSync2, appendFileSync, chmodSync as chmodSync4, closeSync as closeSync4, mkdirSync as mkdirSync6, openSync as openSync4, readFileSync as readFileSync5, unlinkSync as unlinkSync4, writeFileSync as writeFileSync2 } from "node:fs";
+import path9 from "node:path";
+
+// packages/cli/src/self-update.ts
 import { spawn } from "node:child_process";
-import { createHash as createHash2 } from "node:crypto";
-import { accessSync as accessSync2, appendFileSync, chmodSync as chmodSync3, closeSync as closeSync4, mkdirSync as mkdirSync5, openSync as openSync4, readFileSync as readFileSync4, unlinkSync as unlinkSync3, writeFileSync } from "node:fs";
-import path8 from "node:path";
+import { createHash } from "node:crypto";
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  renameSync,
+  unlinkSync,
+  writeFileSync
+} from "node:fs";
+import { homedir as homedir3 } from "node:os";
+import path3 from "node:path";
+var DEFAULT_UPDATE_INTERVAL_MS = 6 * 60 * 60 * 1e3;
+var MIN_UPDATE_INTERVAL_MS = 60 * 60 * 1e3;
+var UPDATE_FETCH_TIMEOUT_MS = 15e3;
+var UPDATE_MAX_BYTES = 5 * 1024 * 1024;
+var LATEST_PATH = "/api/v1/cli/latest";
+var VERSION_RE = /^(\d+)\.(\d+)\.(\d+)$/;
+var SHA_RE = /^[0-9a-f]{64}$/;
+var TRUTHY = /* @__PURE__ */ new Set(["1", "true", "yes", "on"]);
+var defaultFs = {
+  writeFileSync,
+  readFileSync,
+  renameSync,
+  unlinkSync,
+  existsSync,
+  chmodSync
+};
+function parseCliVersion(value) {
+  const match = VERSION_RE.exec(value.trim());
+  if (!match) return null;
+  return [Number(match[1]), Number(match[2]), Number(match[3])];
+}
+function compareCliVersions(a, b) {
+  const left = parseCliVersion(a);
+  const right = parseCliVersion(b);
+  if (!left || !right) return null;
+  for (let i = 0; i < 3; i += 1) {
+    if (left[i] < right[i]) return -1;
+    if (left[i] > right[i]) return 1;
+  }
+  return 0;
+}
+function autoUpdateDisabled(env = process.env, argv = []) {
+  if (argv.includes("--no-auto-update")) return true;
+  const value = envValue(env, "NO_AUTO_UPDATE");
+  return value !== void 0 && TRUTHY.has(value.trim().toLowerCase());
+}
+function isLocalhostHostname(hostname2) {
+  const host = hostname2.replace(/^\[|\]$/g, "").toLowerCase();
+  return host === "localhost" || host === "127.0.0.1" || host === "::1";
+}
+function originsMatch(a, b) {
+  try {
+    const left = new URL(a);
+    const right = new URL(b);
+    const port = (url) => url.port || (url.protocol === "https:" ? "443" : url.protocol === "http:" ? "80" : url.port);
+    return left.protocol === right.protocol && left.hostname.toLowerCase() === right.hostname.toLowerCase() && port(left) === port(right);
+  } catch {
+    return false;
+  }
+}
+function assertUpdateUrlAllowed(origin, url) {
+  let parsed;
+  let base;
+  try {
+    parsed = new URL(url);
+    base = new URL(origin);
+  } catch {
+    throw new Error("Update URL is not valid.");
+  }
+  const https = parsed.protocol === "https:";
+  const localHttp = parsed.protocol === "http:" && isLocalhostHostname(parsed.hostname);
+  if (!https && !localHttp) throw new Error("Update URL must be https, or http on localhost.");
+  if (!originsMatch(base.href, parsed.href)) throw new Error("Update URL is not on the registered origin.");
+  if (parsed.pathname !== "/valetto.mjs" && parsed.pathname !== "/replyslip.mjs") {
+    throw new Error("Update URL must be the Valetto CLI script.");
+  }
+  if (parsed.search || parsed.hash) throw new Error("Update URL must be the Valetto CLI script.");
+}
+function backupScriptPath(scriptPath) {
+  return `${scriptPath}.old`;
+}
+function tempScriptPath(scriptPath, pid = process.pid) {
+  return `${scriptPath}.tmp-${pid}`;
+}
+function replaceScriptFile(scriptPath, tempPath, options = { platform: process.platform }) {
+  const io = options.fs ?? defaultFs;
+  const bak = backupScriptPath(scriptPath);
+  if (io.existsSync(bak)) {
+    try {
+      io.unlinkSync(bak);
+    } catch {
+    }
+  }
+  if (options.platform === "win32") {
+    const hadScript = io.existsSync(scriptPath);
+    if (hadScript) io.renameSync(scriptPath, bak);
+    try {
+      io.renameSync(tempPath, scriptPath);
+    } catch (err) {
+      if (hadScript && io.existsSync(bak) && !io.existsSync(scriptPath)) {
+        try {
+          io.renameSync(bak, scriptPath);
+        } catch {
+        }
+      }
+      throw err;
+    }
+    try {
+      io.unlinkSync(bak);
+    } catch {
+    }
+    return;
+  }
+  io.renameSync(tempPath, scriptPath);
+}
+function writeChecksumSidecar(scriptPath, sha256, fs = defaultFs) {
+  const base = path3.basename(scriptPath);
+  if (base !== "valetto.mjs" && base !== "replyslip.mjs") return;
+  const sidecar = `${scriptPath}.sha256`;
+  const temp = `${sidecar}.tmp-${process.pid}`;
+  fs.writeFileSync(temp, `${sha256}  ${base}
+`);
+  try {
+    if (fs.existsSync(sidecar)) fs.unlinkSync(sidecar);
+  } catch {
+  }
+  try {
+    fs.renameSync(temp, sidecar);
+  } catch (err) {
+    try {
+      fs.unlinkSync(temp);
+    } catch {
+    }
+    throw err;
+  }
+}
+function checkStatePath(home) {
+  return path3.join(stateHome(home ?? homedir3()), "auto-update.json");
+}
+function readUpdateCheckState(home, fs = defaultFs) {
+  try {
+    const parsed = JSON.parse(fs.readFileSync(checkStatePath(home)).toString("utf8"));
+    if (typeof parsed.checked_at !== "number" || !Number.isFinite(parsed.checked_at)) return null;
+    return { checked_at: parsed.checked_at, outcome: typeof parsed.outcome === "string" ? parsed.outcome : "" };
+  } catch {
+    return null;
+  }
+}
+function writeUpdateCheckState(home, state, fs = defaultFs) {
+  const file = checkStatePath(home);
+  try {
+    mkdirSync(path3.dirname(file), { recursive: true, mode: 448 });
+  } catch {
+  }
+  try {
+    fs.writeFileSync(file, `${JSON.stringify(state)}
+`);
+  } catch {
+  }
+}
+function clampInterval(intervalMs, minIntervalMs) {
+  const wanted = intervalMs ?? DEFAULT_UPDATE_INTERVAL_MS;
+  return Math.max(wanted, minIntervalMs);
+}
+function parseLatestPayload(body) {
+  if (!body || typeof body !== "object" || Array.isArray(body)) throw new Error("Latest CLI response is not valid.");
+  const row = body;
+  if (typeof row.version !== "string" || !parseCliVersion(row.version)) throw new Error("Latest CLI version is not valid.");
+  if (typeof row.sha256 !== "string" || !SHA_RE.test(row.sha256.toLowerCase())) throw new Error("Latest CLI sha256 is not valid.");
+  if (typeof row.url !== "string" || !row.url.trim()) throw new Error("Latest CLI url is not valid.");
+  return { version: row.version.trim(), sha256: row.sha256.toLowerCase(), url: row.url.trim() };
+}
+async function defaultRunVersion(nodePath, scriptPath) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(nodePath, [scriptPath, "--version"], { stdio: ["ignore", "pipe", "pipe"], windowsHide: true });
+    let stdout = "";
+    let stderr = "";
+    child.stdout?.on("data", (chunk) => {
+      stdout += chunk.toString("utf8");
+    });
+    child.stderr?.on("data", (chunk) => {
+      stderr += chunk.toString("utf8");
+    });
+    const timer = setTimeout(() => {
+      child.kill();
+      reject(new Error("Timed out running the downloaded script --version."));
+    }, 15e3);
+    child.on("error", (err) => {
+      clearTimeout(timer);
+      reject(err);
+    });
+    child.on("close", (code) => {
+      clearTimeout(timer);
+      resolve({ code: code ?? 1, stdout, stderr });
+    });
+  });
+}
+async function readLimited(response, maxBytes) {
+  if (response.body == null) {
+    const buf = Buffer.from(await response.arrayBuffer());
+    if (buf.length > maxBytes) throw new Error("Downloaded CLI is too large.");
+    return buf;
+  }
+  const reader = response.body.getReader();
+  const chunks = [];
+  let total = 0;
+  for (; ; ) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > maxBytes) {
+      await reader.cancel().catch(() => void 0);
+      throw new Error("Downloaded CLI is too large.");
+    }
+    chunks.push(Buffer.from(value));
+  }
+  return Buffer.concat(chunks);
+}
+async function maybeUpdateCli(io) {
+  const log = io.log ?? (() => void 0);
+  const env = io.env ?? process.env;
+  if (autoUpdateDisabled(env, io.argv ?? [])) return { status: "skipped", message: "Auto-update is off." };
+  const current = io.currentVersion.trim();
+  if (!parseCliVersion(current)) return { status: "skipped" };
+  const scriptPath = path3.resolve(io.scriptPath);
+  if (!scriptPath) return { status: "skipped" };
+  const minInterval = io.minIntervalMs ?? MIN_UPDATE_INTERVAL_MS;
+  const interval = clampInterval(io.intervalMs, minInterval);
+  const now = (io.now ?? Date.now)();
+  const previous = readUpdateCheckState(io.home, io.fs);
+  if (previous && now - previous.checked_at < interval) return { status: "skipped" };
+  const origin = io.origin.replace(/\/+$/, "");
+  let latest;
+  const fs = io.fs ?? defaultFs;
+  const mark = (outcome) => {
+    writeUpdateCheckState(io.home, { checked_at: now, outcome }, fs);
+  };
+  try {
+    const fetchImpl = io.fetchImpl ?? fetch;
+    const response = await fetchImpl(`${origin}${LATEST_PATH}`, {
+      method: "GET",
+      redirect: "error",
+      signal: AbortSignal.timeout(UPDATE_FETCH_TIMEOUT_MS),
+      headers: { accept: "application/json" }
+    });
+    if (!response.ok) throw new Error(`Latest CLI request failed (HTTP ${response.status}).`);
+    latest = parseLatestPayload(await response.json());
+  } catch (err) {
+    mark("failed");
+    const detail = err instanceof Error ? err.message : "Latest CLI request failed.";
+    log(`[valetto] auto-update check failed: ${detail}`);
+    return { status: "failed", message: detail };
+  }
+  try {
+    assertUpdateUrlAllowed(origin, latest.url);
+  } catch (err) {
+    mark("failed");
+    const detail = err instanceof Error ? err.message : "Update URL is not allowed.";
+    log(`[valetto] auto-update skipped: ${detail}`);
+    return { status: "failed", message: detail };
+  }
+  const cmp = compareCliVersions(current, latest.version);
+  if (cmp === null) {
+    mark("failed");
+    return { status: "failed", message: "Latest CLI version is not valid." };
+  }
+  if (cmp >= 0) {
+    mark("current");
+    return { status: "current" };
+  }
+  const tempPath = tempScriptPath(scriptPath, io.pid ?? process.pid);
+  try {
+    const fetchImpl = io.fetchImpl ?? fetch;
+    const response = await fetchImpl(latest.url, {
+      method: "GET",
+      redirect: "error",
+      signal: AbortSignal.timeout(UPDATE_FETCH_TIMEOUT_MS)
+    });
+    if (!response.ok) throw new Error(`CLI download failed (HTTP ${response.status}).`);
+    const bytes = await readLimited(response, UPDATE_MAX_BYTES);
+    const digest = createHash("sha256").update(bytes).digest("hex");
+    if (digest !== latest.sha256) throw new Error("Downloaded CLI does not match sha256.");
+    fs.writeFileSync(tempPath, bytes);
+    try {
+      fs.chmodSync?.(tempPath, 420);
+    } catch {
+    }
+    const runVersion = io.runVersion ?? defaultRunVersion;
+    const ran = await runVersion(io.nodePath ?? process.execPath, tempPath);
+    if (ran.code !== 0) throw new Error("Downloaded CLI did not run.");
+    if (ran.stdout.trim().split(/\s+/, 1)[0] !== latest.version) {
+      throw new Error("Downloaded CLI --version did not match.");
+    }
+    replaceScriptFile(scriptPath, tempPath, { platform: io.platform ?? process.platform, fs });
+    try {
+      writeChecksumSidecar(scriptPath, latest.sha256, fs);
+    } catch {
+    }
+    mark("updated");
+    const message = `Updated Valetto watcher ${current} -> ${latest.version}`;
+    log(`[valetto] ${message}`);
+    return { status: "updated", message, from: current, to: latest.version };
+  } catch (err) {
+    try {
+      if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
+    } catch {
+    }
+    mark("failed");
+    const detail = err instanceof Error ? err.message : "Auto-update failed.";
+    log(`[valetto] auto-update failed: ${detail}`);
+    return { status: "failed", message: detail };
+  }
+}
 
 // packages/cli/src/redact.ts
 function redactSecrets(text) {
@@ -398,7 +716,7 @@ function redactSecrets(text) {
 
 // packages/cli/src/process-identity.ts
 import { execFile as execFileCb, execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { readFileSync as readFileSync2 } from "node:fs";
 import { promisify } from "node:util";
 
 // packages/cli/src/supervise-constants.ts
@@ -573,9 +891,9 @@ async function identifyProcess(pid, platform = process.platform) {
   }
 }
 function identifyLinux(pid) {
-  const cmdline = readFileSync(`/proc/${pid}/cmdline`);
-  const stat3 = readFileSync(`/proc/${pid}/stat`, "utf8");
-  const procStat = readFileSync("/proc/stat", "utf8");
+  const cmdline = readFileSync2(`/proc/${pid}/cmdline`);
+  const stat3 = readFileSync2(`/proc/${pid}/stat`, "utf8");
+  const procStat = readFileSync2("/proc/stat", "utf8");
   const btime = Number(procStat.match(/^btime\s+(\d+)/m)?.[1]);
   const text = cmdline.toString("utf8");
   if (!text) return null;
@@ -691,8 +1009,8 @@ function decideSupervision(input) {
 }
 
 // packages/cli/src/file-lock.ts
-import { closeSync, existsSync, mkdirSync, openSync } from "node:fs";
-import path3 from "node:path";
+import { closeSync, existsSync as existsSync2, mkdirSync as mkdirSync2, openSync } from "node:fs";
+import path4 from "node:path";
 import { Worker } from "node:worker_threads";
 var FILE_LOCK_WAIT_MS = 2e3;
 var PENDING = 0;
@@ -711,7 +1029,7 @@ var FileLockError = class extends Error {
 };
 function lookupExecutable(names, pathEnv, exists, platform) {
   const delimiter = platform === "win32" ? ";" : ":";
-  const join = platform === "win32" ? path3.win32.join : path3.posix.join;
+  const join = platform === "win32" ? path4.win32.join : path4.posix.join;
   for (const entry of (pathEnv ?? "").split(delimiter)) {
     const dir = entry.trim().replaceAll(/^"|"$/g, "");
     if (!dir) continue;
@@ -753,7 +1071,7 @@ function acquireFileLockSync(file, options = {}) {
       `Could not acquire ${file}. No OS lock helper is available (perl, flock, or PowerShell). Nothing was deleted.`
     );
   }
-  mkdirSync(path3.dirname(file), { recursive: true, mode: 448 });
+  mkdirSync2(path4.dirname(file), { recursive: true, mode: 448 });
   const created = openSync(file, "a", 384);
   closeSync(created);
   const sab = new SharedArrayBuffer(16);
@@ -843,19 +1161,19 @@ function abandon(worker, view) {
 function resolveHelper(requested) {
   const pathEnv = process.env.PATH ?? process.env.Path;
   if (requested === "powershell" || !requested && process.platform === "win32") {
-    const bin = lookupExecutable(["powershell.exe", "pwsh.exe"], pathEnv, existsSync, "win32");
+    const bin = lookupExecutable(["powershell.exe", "pwsh.exe"], pathEnv, existsSync2, "win32");
     return bin ? { helper: "powershell", bin } : null;
   }
   if (requested === "flock") {
-    const bin = lookupExecutable(["flock"], pathEnv, existsSync, process.platform);
+    const bin = lookupExecutable(["flock"], pathEnv, existsSync2, process.platform);
     return bin ? { helper: "flock", bin } : null;
   }
   if (requested === "perl" || !requested) {
-    const perl = lookupExecutable(["perl"], pathEnv, existsSync, process.platform);
+    const perl = lookupExecutable(["perl"], pathEnv, existsSync2, process.platform);
     if (perl) return { helper: "perl", bin: perl };
     if (requested === "perl") return null;
   }
-  const flock = lookupExecutable(["flock"], pathEnv, existsSync, process.platform);
+  const flock = lookupExecutable(["flock"], pathEnv, existsSync2, process.platform);
   return flock ? { helper: "flock", bin: flock } : null;
 }
 var PERL_LOCK = String.raw`
@@ -997,12 +1315,12 @@ child.on('exit', () => {
 `;
 
 // packages/cli/src/supervise-lock.ts
-import { mkdirSync as mkdirSync3 } from "node:fs";
-import path5 from "node:path";
+import { mkdirSync as mkdirSync4 } from "node:fs";
+import path6 from "node:path";
 
 // packages/cli/src/watcher-progress.ts
-import { chmodSync, closeSync as closeSync2, mkdirSync as mkdirSync2, openSync as openSync2, readFileSync as readFileSync2, renameSync, unlinkSync, writeSync } from "node:fs";
-import path4 from "node:path";
+import { chmodSync as chmodSync2, closeSync as closeSync2, mkdirSync as mkdirSync3, openSync as openSync2, readFileSync as readFileSync3, renameSync as renameSync2, unlinkSync as unlinkSync2, writeSync } from "node:fs";
+import path5 from "node:path";
 import { randomBytes } from "node:crypto";
 function emptySuperviseState() {
   return {
@@ -1016,22 +1334,22 @@ function emptySuperviseState() {
   };
 }
 function superviseDir(home) {
-  return path4.join(stateHome(home), "supervise");
+  return path5.join(stateHome(home), "supervise");
 }
 function agentFile(home, name, suffix) {
   if (!AGENT_NAME_PATTERN.test(name)) throw new Error("Agent name is not valid.");
-  return path4.join(superviseDir(home), `${name}${suffix}`);
+  return path5.join(superviseDir(home), `${name}${suffix}`);
 }
 function ensureDir(dir) {
-  mkdirSync2(dir, { recursive: true, mode: 448 });
+  mkdirSync3(dir, { recursive: true, mode: 448 });
   try {
-    chmodSync(dir, 448);
+    chmodSync2(dir, 448);
   } catch {
   }
 }
 function writePrivate(file, body) {
-  ensureDir(path4.dirname(file));
-  const temp = path4.join(path4.dirname(file), `.${path4.basename(file)}.${randomBytes(6).toString("hex")}.tmp`);
+  ensureDir(path5.dirname(file));
+  const temp = path5.join(path5.dirname(file), `.${path5.basename(file)}.${randomBytes(6).toString("hex")}.tmp`);
   const fd = openSync2(temp, "wx", 384);
   try {
     writeSync(fd, body.endsWith("\n") ? body : `${body}
@@ -1040,14 +1358,14 @@ function writePrivate(file, body) {
     closeSync2(fd);
   }
   try {
-    chmodSync(temp, 384);
+    chmodSync2(temp, 384);
   } catch {
   }
-  renameSync(temp, file);
+  renameSync2(temp, file);
 }
 function readJson(file) {
   try {
-    return JSON.parse(readFileSync2(file, "utf8"));
+    return JSON.parse(readFileSync3(file, "utf8"));
   } catch {
     return null;
   }
@@ -1081,7 +1399,7 @@ function writeStopped(home, name, at = /* @__PURE__ */ new Date()) {
 }
 function isStopped(home, name) {
   try {
-    readFileSync2(agentFile(home, name, ".stopped"));
+    readFileSync3(agentFile(home, name, ".stopped"));
     return true;
   } catch {
     return false;
@@ -1121,7 +1439,7 @@ function writeSuperviseState(home, name, state) {
   writePrivate(agentFile(home, name, ".state.json"), JSON.stringify(state));
 }
 function readEnrolled(home) {
-  const parsed = readJson(path4.join(superviseDir(home), "agents.json"));
+  const parsed = readJson(path5.join(superviseDir(home), "agents.json"));
   if (!parsed || typeof parsed !== "object") return [];
   const agents = parsed.agents;
   if (!Array.isArray(agents)) return [];
@@ -1129,7 +1447,7 @@ function readEnrolled(home) {
 }
 function writeEnrolled(home, agents) {
   const unique = [...new Set(agents.filter((name) => AGENT_NAME_PATTERN.test(name)))].sort();
-  writePrivate(path4.join(superviseDir(home), "agents.json"), JSON.stringify({ agents: unique }));
+  writePrivate(path5.join(superviseDir(home), "agents.json"), JSON.stringify({ agents: unique }));
 }
 function enrollAgent(home, name) {
   if (!AGENT_NAME_PATTERN.test(name)) throw new Error("Agent name is not valid.");
@@ -1142,7 +1460,7 @@ function unenrollAgent(home, name) {
 }
 function removeFile(file) {
   try {
-    unlinkSync(file);
+    unlinkSync2(file);
   } catch (err) {
     if (err.code !== "ENOENT") throw err;
   }
@@ -1160,8 +1478,8 @@ async function withAgentOp(home, name, fn) {
   const tail = previous.then(() => current);
   chains.set(key, tail);
   await previous;
-  mkdirSync3(superviseDir(home), { recursive: true, mode: 448 });
-  const file = path5.join(superviseDir(home), `${name}.op`);
+  mkdirSync4(superviseDir(home), { recursive: true, mode: 448 });
+  const file = path6.join(superviseDir(home), `${name}.op`);
   let held;
   try {
     held = await acquireFileLock(file, { waitMs: FILE_LOCK_WAIT_MS });
@@ -1204,7 +1522,7 @@ async function withAgentOp(home, name, fn) {
 }
 
 // packages/cli/src/supervise-os.ts
-import path6 from "node:path";
+import path7 from "node:path";
 function buildInstallPlan(input) {
   const safe = validatePlanInputs(input);
   if ("error" in safe) return safe;
@@ -1249,8 +1567,8 @@ function darwinPlan(input) {
     return { error: "macOS LaunchAgent install needs a numeric user id. Supervision was not installed." };
   }
   const label = input.label ?? SUPERVISE_LABEL;
-  const plistPath = path6.join(input.home, "Library", "LaunchAgents", `${label}.plist`);
-  const logPath = path6.join(superviseDir(input.home), "timer.log");
+  const plistPath = path7.join(input.home, "Library", "LaunchAgents", `${label}.plist`);
+  const logPath = path7.join(superviseDir(input.home), "timer.log");
   const domain = `gui/${uid}`;
   const target = `${domain}/${label}`;
   const legacyLabel = input.legacyLabel ?? LEGACY_SUPERVISE_LABEL;
@@ -1269,7 +1587,7 @@ function darwinPlan(input) {
       { command: "launchctl", args: ["disable", target], optional: true }
     ],
     legacyCommands: legacyLabel === label ? [] : [{ command: "launchctl", args: ["bootout", legacyTarget], optional: true }],
-    legacyFiles: legacyLabel === label ? [] : [path6.join(input.home, "Library", "LaunchAgents", `${legacyLabel}.plist`)],
+    legacyFiles: legacyLabel === label ? [] : [path7.join(input.home, "Library", "LaunchAgents", `${legacyLabel}.plist`)],
     notes: [
       `macOS LaunchAgent ${label} ticks every ${intervalSec(input)} seconds in the logged-in GUI session (${domain}).`,
       "It does not use KeepAlive. Logging out unloads the agent. The next login loads it again. That is not a deliberate stop.",
@@ -1280,13 +1598,13 @@ function darwinPlan(input) {
 function linuxPlan(input) {
   const unit = input.unitName ?? SUPERVISE_UNIT_NAME;
   const legacyUnit = input.legacyUnitName ?? LEGACY_SUPERVISE_UNIT_NAME;
-  const dir = path6.join(input.home, ".config", "systemd", "user");
+  const dir = path7.join(input.home, ".config", "systemd", "user");
   const seconds = intervalSec(input);
   return {
     platform: "linux",
     files: [
-      { path: path6.join(dir, `${unit}.service`), mode: 384, contents: systemdService(input) },
-      { path: path6.join(dir, `${unit}.timer`), mode: 384, contents: systemdTimer(unit, seconds) }
+      { path: path7.join(dir, `${unit}.service`), mode: 384, contents: systemdService(input) },
+      { path: path7.join(dir, `${unit}.timer`), mode: 384, contents: systemdTimer(unit, seconds) }
     ],
     preflight: [{ command: "systemctl", args: ["--user", "show-environment"] }],
     commands: [
@@ -1299,7 +1617,7 @@ function linuxPlan(input) {
     ],
     // Disable before the files go, so systemd still knows the unit and drops its timers.target.wants link.
     legacyCommands: legacyUnit === unit ? [] : [{ command: "systemctl", args: ["--user", "disable", "--now", `${legacyUnit}.timer`], optional: true }],
-    legacyFiles: legacyUnit === unit ? [] : [path6.join(dir, `${legacyUnit}.service`), path6.join(dir, `${legacyUnit}.timer`)],
+    legacyFiles: legacyUnit === unit ? [] : [path7.join(dir, `${legacyUnit}.service`), path7.join(dir, `${legacyUnit}.timer`)],
     notes: [
       `Linux systemd --user timer ${unit}.timer runs about every ${seconds} seconds, with AccuracySec=15s, while this user session is up.`,
       "Linger is not enabled. After logout the timer stops. The next login starts it again. That is not a deliberate stop.",
@@ -1311,7 +1629,7 @@ function windowsPlan(input) {
   const taskName = input.taskName ?? SUPERVISE_TASK_NAME;
   const legacyTaskName = input.legacyTaskName ?? LEGACY_SUPERVISE_TASK_NAME;
   const minutes = Math.max(1, Math.round(intervalSec(input) / 60));
-  const cmdPath = path6.join(superviseDir(input.home), "tick.cmd");
+  const cmdPath = path7.join(superviseDir(input.home), "tick.cmd");
   return {
     platform: "win32",
     files: [{ path: cmdPath, mode: 384, contents: windowsCmd(input) }],
@@ -1434,10 +1752,10 @@ function systemdEnv(value) {
 }
 
 // packages/cli/src/watcher-lock.ts
-import { createHash, randomBytes as randomBytes2 } from "node:crypto";
-import { chmodSync as chmodSync2, closeSync as closeSync3, lstatSync, mkdirSync as mkdirSync4, openSync as openSync3, readdirSync, readFileSync as readFileSync3, renameSync as renameSync2, unlinkSync as unlinkSync2, writeSync as writeSync2 } from "node:fs";
-import { hostname, homedir as homedir3, uptime } from "node:os";
-import path7 from "node:path";
+import { createHash as createHash2, randomBytes as randomBytes2 } from "node:crypto";
+import { chmodSync as chmodSync3, closeSync as closeSync3, lstatSync, mkdirSync as mkdirSync5, openSync as openSync3, readdirSync, readFileSync as readFileSync4, renameSync as renameSync3, unlinkSync as unlinkSync3, writeSync as writeSync2 } from "node:fs";
+import { hostname, homedir as homedir4, uptime } from "node:os";
+import path8 from "node:path";
 var LOCK_NAME = /^watcher-[0-9a-f]{16}\.lock$/;
 var TEMP_NAME = /^\.lock-(\d+)-[0-9a-f]{16}\.tmp$/;
 var STALE_TEMP_MS = 6e4;
@@ -1452,10 +1770,10 @@ function normalizeOrigin(origin) {
   return origin.replace(/\/+$/, "");
 }
 function keyHash(watcherKey) {
-  return createHash("sha256").update(watcherKey).digest("hex");
+  return createHash2("sha256").update(watcherKey).digest("hex");
 }
 function scopeHash(material) {
-  return createHash("sha256").update(material).digest("hex").slice(0, 16);
+  return createHash2("sha256").update(material).digest("hex").slice(0, 16);
 }
 function watcherScopeId(workspaceId, watcherKey) {
   return workspaceId ? scopeHash(`workspace
@@ -1480,7 +1798,7 @@ var HOSTED_ORIGINS = [
 ];
 function watcherLockPath(home, scopeId) {
   if (!/^[0-9a-f]{16}$/.test(scopeId)) throw new Error("Invalid watcher lock scope.");
-  return path7.join(stateHome(home), `watcher-${scopeId}.lock`);
+  return path8.join(stateHome(home), `watcher-${scopeId}.lock`);
 }
 function alreadyRunningMessage(pid, origin, lockPath) {
   return `A Valetto watcher is already running for this workspace (pid ${pid}, origin ${origin}, lock ${lockPath}); it delivers every local agent in this workspace. If pid ${pid} is not a Valetto watcher, rerun with --force.`;
@@ -1517,7 +1835,7 @@ function roundedBootId(nowMs, uptimeSeconds) {
 }
 function machineBootId(now = Date.now()) {
   try {
-    const text = readFileSync3("/proc/sys/kernel/random/boot_id", "utf8").trim();
+    const text = readFileSync4("/proc/sys/kernel/random/boot_id", "utf8").trim();
     if (text) return text;
   } catch {
   }
@@ -1526,7 +1844,7 @@ function machineBootId(now = Date.now()) {
 function readWatcherLock(file) {
   let text;
   try {
-    text = readFileSync3(file, "utf8");
+    text = readFileSync4(file, "utf8");
   } catch {
     return null;
   }
@@ -1571,7 +1889,7 @@ function lockNames(dir) {
     return [];
   }
 }
-function listLiveWatcherLocks(home = homedir3(), self) {
+function listLiveWatcherLocks(home = homedir4(), self) {
   const identity = {
     hostname: self?.hostname ?? hostname(),
     bootId: self?.bootId ?? machineBootId(),
@@ -1582,7 +1900,7 @@ function listLiveWatcherLocks(home = homedir3(), self) {
   const seen = /* @__PURE__ */ new Set();
   for (const dir of stateHomes(home)) {
     for (const name of lockNames(dir)) {
-      const info = readWatcherLock(path7.join(dir, name));
+      const info = readWatcherLock(path8.join(dir, name));
       if (!info || info.alias || !lockIsCurrent(info, identity, isAlive)) continue;
       const key = `${holdKey(info)}|${info.agentId ?? ""}|${info.workspaceId ?? ""}`;
       if (seen.has(key)) continue;
@@ -1594,7 +1912,7 @@ function listLiveWatcherLocks(home = homedir3(), self) {
   return live;
 }
 function acquireWatcherLock(options) {
-  const home = options.home ?? homedir3();
+  const home = options.home ?? homedir4();
   const origin = normalizeOrigin(options.origin);
   const scopeId = watcherScopeId(options.workspaceId, options.watcherKey);
   const file = watcherLockPath(home, scopeId);
@@ -1615,8 +1933,8 @@ function acquireWatcherLock(options) {
     ...options.workspaceId ? { workspaceId: options.workspaceId } : {},
     token: randomBytes2(8).toString("hex")
   };
-  mkdirSync4(path7.dirname(file), { recursive: true, mode: 448 });
-  removeStaleTemps(path7.dirname(file), isAlive);
+  mkdirSync5(path8.dirname(file), { recursive: true, mode: 448 });
+  removeStaleTemps(path8.dirname(file), isAlive);
   return withAcquireMutex(home, () => {
     if (!options.force && !options.reclaim) {
       const other = sameWorkspaceLock(home, file, options.workspaceId, options.watcherKey, self, isAlive);
@@ -1646,7 +1964,7 @@ function removeStaleTemps(dir, isAlive, nowMs = Date.now()) {
   for (const name of names) {
     const match = TEMP_NAME.exec(name);
     if (!match) continue;
-    const full = path7.join(dir, name);
+    const full = path8.join(dir, name);
     try {
       const info = lstatSync(full);
       if (!info.isFile()) continue;
@@ -1672,13 +1990,13 @@ function sameWorkspaceLock(home, file, workspaceId, watcherKey, self, isAlive) {
   const [primary] = stateHomes(home);
   for (const dir of stateHomes(home)) {
     for (const name of lockNames(dir)) {
-      const full = path7.join(dir, name);
+      const full = path8.join(dir, name);
       if (full === file) continue;
       const info = readWatcherLock(full);
       if (!info || !lockIsCurrent(info, self, isAlive)) continue;
       const sameId = Boolean(workspaceId) && info.workspaceId === workspaceId;
       const legacyName = `watcher-${legacyWatcherScopeId(info.origin, workspaceId, watcherKey)}.lock`;
-      const sameScopeElsewhere = dir !== primary && name === path7.basename(file);
+      const sameScopeElsewhere = dir !== primary && name === path8.basename(file);
       if (sameId || name === legacyName || sameScopeElsewhere) return { info, path: info.alias && sameId && dir === primary ? file : full };
     }
   }
@@ -1695,10 +2013,10 @@ function writeAliases(home, file, identity, options, self, isAlive) {
     if (held && !sameHolder(held, identity) && lockIsCurrent(held, self, isAlive)) {
       if (!held.alias || !options.force) continue;
     }
-    const temp = writeTemp(path7.dirname(target), alias);
+    const temp = writeTemp(path8.dirname(target), alias);
     try {
       assertMutex();
-      renameSync2(temp, target);
+      renameSync3(temp, target);
       written.push(target);
     } catch {
     } finally {
@@ -1723,7 +2041,7 @@ function selfOf(options) {
   };
 }
 function findLegacyWatcherLock(options) {
-  const home = options.home ?? homedir3();
+  const home = options.home ?? homedir4();
   const self = selfOf(options);
   const isAlive = options.isAlive ?? pidIsAlive;
   const legacyNames = new Set(
@@ -1732,7 +2050,7 @@ function findLegacyWatcherLock(options) {
   legacyNames.add(`watcher-${watcherScopeId(options.workspaceId, "")}.lock`);
   for (const dir of stateHomes(home)) {
     for (const name of lockNames(dir)) {
-      const full = path7.join(dir, name);
+      const full = path8.join(dir, name);
       const info = readWatcherLock(full);
       if (!info || info.agentId || !lockIsCurrent(info, self, isAlive)) continue;
       if (info.workspaceId === options.workspaceId || legacyNames.has(name)) return { info, path: full };
@@ -1741,13 +2059,13 @@ function findLegacyWatcherLock(options) {
   return null;
 }
 function acquireAgentWatcherLock(options) {
-  const home = options.home ?? homedir3();
+  const home = options.home ?? homedir4();
   const origin = normalizeOrigin(options.origin);
   const file = watcherLockPath(home, agentWatcherScopeId(options.agentId));
   const self = selfOf(options);
   const isAlive = options.isAlive ?? pidIsAlive;
-  mkdirSync4(path7.dirname(file), { recursive: true, mode: 448 });
-  removeStaleTemps(path7.dirname(file), isAlive);
+  mkdirSync5(path8.dirname(file), { recursive: true, mode: 448 });
+  removeStaleTemps(path8.dirname(file), isAlive);
   return withAcquireMutex(home, () => {
     const legacy = findLegacyWatcherLock({ ...options, home, origin });
     if (legacy) return { ok: false, reason: "legacy", pid: legacy.info.pid, origin: legacy.info.origin, path: legacy.path };
@@ -1784,8 +2102,8 @@ function acquireAgentWatcherLock(options) {
 }
 function sameScopeInOtherHome(home, file, self, isAlive) {
   const [, other] = stateHomes(home);
-  if (path7.dirname(file) === other) return null;
-  const full = path7.join(other, path7.basename(file));
+  if (path8.dirname(file) === other) return null;
+  const full = path8.join(other, path8.basename(file));
   const info = readWatcherLock(full);
   if (!info || info.alias || !lockIsCurrent(info, self, isAlive)) return null;
   return { info, path: full };
@@ -1816,7 +2134,7 @@ function attempt(file, identity, self, isAlive, force, hooks, options) {
   if (reclaim) {
     if (!matchesReclaim(after, reclaim)) return refuseReclaim(after, self, isAlive, file);
   } else if (after && lockIsCurrent(after, self, isAlive) && !force) return running(after, file);
-  const temp = writeTemp(path7.dirname(file), identity);
+  const temp = writeTemp(path8.dirname(file), identity);
   try {
     const placed = publish(temp, file, self, isAlive, force, reclaim);
     if (placed !== "placed") {
@@ -1843,7 +2161,7 @@ function refuseReclaim(info, self, isAlive, file) {
 function publish(temp, file, self, isAlive, force, reclaim) {
   assertMutex();
   try {
-    renameSync2(temp, file);
+    renameSync3(temp, file);
     return "placed";
   } catch (err) {
     if (!isRenameConflict(err)) throw err;
@@ -1859,7 +2177,7 @@ function publish(temp, file, self, isAlive, force, reclaim) {
   removeLock(file);
   assertMutex();
   try {
-    renameSync2(temp, file);
+    renameSync3(temp, file);
     return "placed";
   } catch (err) {
     if (!isRenameConflict(err)) throw err;
@@ -1867,7 +2185,7 @@ function publish(temp, file, self, isAlive, force, reclaim) {
   }
 }
 function writeTemp(dir, identity) {
-  const temp = path7.join(dir, `.lock-${identity.pid}-${randomBytes2(8).toString("hex")}.tmp`);
+  const temp = path8.join(dir, `.lock-${identity.pid}-${randomBytes2(8).toString("hex")}.tmp`);
   const fd = openSync3(temp, "wx", 384);
   try {
     writeSync2(fd, `${JSON.stringify(identity)}
@@ -1876,7 +2194,7 @@ function writeTemp(dir, identity) {
     closeSync3(fd);
   }
   try {
-    chmodSync2(temp, 384);
+    chmodSync3(temp, 384);
   } catch {
   }
   return temp;
@@ -1894,7 +2212,7 @@ function assertMutex() {
   }
 }
 function withAcquireMutex(home, fn) {
-  const file = path7.join(stateHome(home), "acquire.mutex");
+  const file = path8.join(stateHome(home), "acquire.mutex");
   const depth = acquireDepth.get(file) ?? 0;
   if (depth > 0) {
     acquireDepth.set(file, depth + 1);
@@ -1906,7 +2224,7 @@ function withAcquireMutex(home, fn) {
       else acquireDepth.set(file, next);
     }
   }
-  mkdirSync4(path7.dirname(file), { recursive: true, mode: 448 });
+  mkdirSync5(path8.dirname(file), { recursive: true, mode: 448 });
   acquireDepth.set(file, 1);
   let held;
   try {
@@ -1926,7 +2244,7 @@ function withAcquireMutex(home, fn) {
 }
 function removeLock(file) {
   try {
-    unlinkSync2(file);
+    unlinkSync3(file);
   } catch (err) {
     if (err.code !== "ENOENT") throw err;
   }
@@ -1955,12 +2273,12 @@ function orcaBinFrom(env) {
 }
 var defaultSleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 function verifyDistributedScript(scriptPath) {
-  const base = path8.basename(scriptPath);
+  const base = path9.basename(scriptPath);
   if (base !== "valetto.mjs" && base !== "replyslip.mjs") return { ok: true };
   const checksumPath = `${scriptPath}.sha256`;
   let text;
   try {
-    text = readFileSync4(checksumPath, "utf8");
+    text = readFileSync5(checksumPath, "utf8");
   } catch {
     return {
       ok: false,
@@ -1971,7 +2289,7 @@ function verifyDistributedScript(scriptPath) {
   if (!/^[0-9a-f]{64}$/.test(expected)) {
     return { ok: false, message: `Refusing to install: ${checksumPath} is not a sha256 checksum line.` };
   }
-  const actual = createHash2("sha256").update(readFileSync4(scriptPath)).digest("hex");
+  const actual = createHash3("sha256").update(readFileSync5(scriptPath)).digest("hex");
   if (actual !== expected) {
     return { ok: false, message: `Refusing to install: ${scriptPath} does not match ${checksumPath}. Download both files again.` };
   }
@@ -1993,11 +2311,11 @@ function supervisedEnv(request, base = {}) {
 }
 function spawnDetachedWatcher(request) {
   const dir = superviseDir(request.home);
-  mkdirSync5(dir, { recursive: true, mode: 448 });
-  const logPath = path8.join(dir, `${request.name}.log`);
+  mkdirSync6(dir, { recursive: true, mode: 448 });
+  const logPath = path9.join(dir, `${request.name}.log`);
   const fd = openSync4(logPath, "a", 384);
   try {
-    chmodSync3(logPath, 384);
+    chmodSync4(logPath, 384);
   } catch {
   }
   const args = [request.scriptPath, "watch", "--name", request.name];
@@ -2011,7 +2329,7 @@ function spawnDetachedWatcher(request) {
       request.reclaim.startedAt
     );
   }
-  const child = spawn(request.nodePath, args, {
+  const child = spawn2(request.nodePath, args, {
     detached: true,
     stdio: ["ignore", fd, fd],
     windowsHide: true,
@@ -2027,7 +2345,7 @@ async function installSupervision(name, io = {}) {
   if (checked) return { ok: false, message: checked };
   const home = io.home;
   const epochAtInvoke = readSuperviseState(home, name).epoch;
-  const scriptPath = path8.resolve(io.scriptPath ?? process.argv[1] ?? "");
+  const scriptPath = path9.resolve(io.scriptPath ?? process.argv[1] ?? "");
   const nodePath = io.nodePath ?? process.execPath;
   const verified = verifyDistributedScript(scriptPath);
   if (!verified.ok) return verified;
@@ -2138,11 +2456,78 @@ async function runSupervisionTick(io = {}) {
   const lines = [];
   const names = readEnrolled(io.home);
   if (names.length === 0) return { ok: true, lines: ["No enrolled agents."] };
+  const update = await applyCliUpdateIfDue(names, io);
+  if (update.status === "updated" && update.message) {
+    lines.push(update.message);
+    await restartEnrolledAfterUpdate(names, io, lines);
+  }
   for (const name of names) {
     const outcome = await tickAgent(name, io);
     lines.push(`${name}: ${outcome}`);
   }
   return { ok: true, lines };
+}
+async function uniqueRegisteredOrigin(names, io) {
+  const found = [];
+  for (const name of names) {
+    try {
+      const creds = await readAgentCredentials(name, { home: io.home });
+      if (creds.relayUrl) found.push(creds.relayUrl.replace(/\/+$/, ""));
+    } catch {
+    }
+  }
+  if (found.length === 0) return null;
+  const first = found[0];
+  if (found.some((origin) => !originsMatch(first, origin))) {
+    const message = "[valetto] auto-update skipped: enrolled agents are registered with more than one server.";
+    (io.log ?? ((line) => appendSuperviseLog(io.home, line)))(message);
+    return null;
+  }
+  return first;
+}
+async function applyCliUpdateIfDue(names, io) {
+  if (io.skipAutoUpdate) return { status: "skipped" };
+  const version = io.currentVersion?.trim();
+  if (!version) return { status: "skipped" };
+  const origin = await uniqueRegisteredOrigin(names, io);
+  if (!origin) return { status: "skipped" };
+  const scriptPath = path9.resolve(io.scriptPath ?? process.argv[1] ?? "");
+  if (!scriptPath) return { status: "skipped" };
+  try {
+    return await maybeUpdateCli({
+      origin,
+      scriptPath,
+      nodePath: io.nodePath ?? process.execPath,
+      currentVersion: version,
+      home: io.home,
+      env: io.env ?? process.env,
+      argv: io.argv ?? [],
+      now: io.now,
+      fetchImpl: io.fetchImpl,
+      log: (line) => {
+        io.log?.(line);
+        appendSuperviseLog(io.home, line);
+      }
+    });
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : "Auto-update failed.";
+    appendSuperviseLog(io.home, `[valetto] auto-update failed: ${detail}`);
+    return { status: "failed", message: detail };
+  }
+}
+async function restartEnrolledAfterUpdate(names, io, lines) {
+  for (const name of names) {
+    if (isStopped(io.home, name)) continue;
+    try {
+      await withAgentOp(io.home, name, async (op) => {
+        await reapOurWatchers(name, { ...io, op });
+      });
+      lines.push(`${name}: restarting after CLI update`);
+    } catch (err) {
+      const wait = lockWaitMessage(err);
+      lines.push(`${name}: could not signal the watcher after CLI update${wait ? ` (${wait})` : ""}`);
+    }
+  }
 }
 function supervisionStatus(io = {}) {
   const names = readEnrolled(io.home);
@@ -2344,7 +2729,7 @@ async function startWatcher(name, io, state, reclaim) {
     writeHold(io.home, name, "config");
     return { ok: false, message: `No key file for ${name}. Not started.` };
   }
-  const scriptPath = path8.resolve(io.scriptPath ?? process.argv[1] ?? "");
+  const scriptPath = path9.resolve(io.scriptPath ?? process.argv[1] ?? "");
   const nodePath = io.nodePath ?? process.execPath;
   await io.beforeSpawn?.();
   own(io);
@@ -2440,7 +2825,7 @@ function liveLock(home, name) {
   return listLiveWatcherLocks(home).find((lock) => lock.agentName === name) ?? null;
 }
 async function removeTimer(io) {
-  const scriptPath = path8.resolve(io.scriptPath ?? process.argv[1] ?? "");
+  const scriptPath = path9.resolve(io.scriptPath ?? process.argv[1] ?? "");
   const nodePath = io.nodePath ?? process.execPath;
   const plan = buildInstallPlan(planInput(io, scriptPath, nodePath));
   if ("error" in plan) return { ok: true, lines: [plan.error] };
@@ -2449,7 +2834,7 @@ async function removeTimer(io) {
   const legacyNotes = await removeLegacyTimer(plan, run);
   for (const file of plan.files) {
     try {
-      unlinkSync3(file.path);
+      unlinkSync4(file.path);
     } catch (err) {
       if (err.code !== "ENOENT") {
         return { ok: false, message: `Could not remove ${file.path}.` };
@@ -2478,7 +2863,7 @@ async function removeLegacyTimer(plan, run) {
   const left = [];
   for (const file of plan.legacyFiles) {
     try {
-      unlinkSync3(file);
+      unlinkSync4(file);
     } catch (err) {
       if (err.code !== "ENOENT") left.push(file);
     }
@@ -2508,10 +2893,10 @@ function planInput(io, scriptPath, nodePath) {
 }
 function writePlanFiles(plan) {
   for (const file of plan.files) {
-    mkdirSync5(path8.dirname(file.path), { recursive: true, mode: 448 });
-    writeFileSync(file.path, file.contents, { mode: file.mode });
+    mkdirSync6(path9.dirname(file.path), { recursive: true, mode: 448 });
+    writeFileSync2(file.path, file.contents, { mode: file.mode });
     try {
-      chmodSync3(file.path, file.mode);
+      chmodSync4(file.path, file.mode);
     } catch {
     }
   }
@@ -2570,7 +2955,7 @@ function checkName(name) {
   return null;
 }
 var defaultRun = (command, args) => new Promise((resolve, reject) => {
-  const child = spawn(command, args, { windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
+  const child = spawn2(command, args, { windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
   let stdout = "";
   let stderr = "";
   child.stdout?.on("data", (chunk) => {
@@ -2585,8 +2970,8 @@ var defaultRun = (command, args) => new Promise((resolve, reject) => {
 function appendSuperviseLog(home, line) {
   try {
     const dir = superviseDir(home);
-    mkdirSync5(dir, { recursive: true, mode: 448 });
-    const file = path8.join(dir, "supervise.log");
+    mkdirSync6(dir, { recursive: true, mode: 448 });
+    const file = path9.join(dir, "supervise.log");
     appendFileSync(file, `${redactSecrets(line)}
 `, { mode: 384 });
   } catch {
@@ -2644,11 +3029,11 @@ function wakePaneNotice(input) {
 }
 
 // packages/cli/src/drivers/command.ts
-import { spawn as spawn2 } from "node:child_process";
+import { spawn as spawn3 } from "node:child_process";
 var COMMAND_TIMED_OUT = "command timed out";
 function runCommandWithTimeout(timeoutMs) {
   return (command, args) => new Promise((resolve, reject) => {
-    const child = spawn2(command, args, {
+    const child = spawn3(command, args, {
       stdio: ["ignore", "pipe", "pipe"],
       windowsHide: true,
       // Own process group on Unix so a timeout can kill this command and its children,
@@ -2688,7 +3073,7 @@ function killChild(child) {
   const pid = child.pid;
   if (!pid || pid === process.pid) return;
   if (process.platform === "win32") {
-    const killer = spawn2("taskkill", ["/PID", String(pid), "/T", "/F"], { windowsHide: true, stdio: "ignore" });
+    const killer = spawn3("taskkill", ["/PID", String(pid), "/T", "/F"], { windowsHide: true, stdio: "ignore" });
     killer.on("error", () => void 0);
     try {
       child.kill("SIGKILL");
@@ -3485,16 +3870,16 @@ async function watch(options) {
 }
 
 // packages/cli/src/cli.ts
-var VALETTO_VERSION = true ? "0.1.7" : "dev";
+var VALETTO_VERSION = true ? "0.1.8" : "dev";
 var HELP = `valetto ${VALETTO_VERSION}: watcher and register CLI for Valetto (https://valetto.tech)
 
 Usage:
   valetto register --join-code <code> --name <name> [--driver orca|herdr --target <pane>] [--url <origin>] [--description <text>] [--force]
-  valetto watch [--name <name>] [--url <origin>] [--interval <ms>] [--once] [--force]
+  valetto watch [--name <name>] [--url <origin>] [--interval <ms>] [--once] [--force] [--no-auto-update]
   valetto watch --status
   valetto watch --stop --name <name>
   valetto supervise --install --name <name>
-  valetto supervise --once
+  valetto supervise --once [--no-auto-update]
   valetto supervise --status
   valetto supervise --stop --name <name>
   valetto supervise --uninstall (--name <name> | --all)
@@ -3513,13 +3898,15 @@ supervise --install uses this same script. It checks valetto.mjs.sha256 beside i
 (macOS LaunchAgent, Linux systemd --user, or Windows Task Scheduler) that runs supervise --once every 120 seconds,
 and starts the watcher detached. It does not type into a herdr or Orca pane.
 supervise --stop records a deliberate stop. Logout, sleep, and shutdown do not. --install clears that stop.
+The supervised watcher updates itself from the server it registered with. Set VALETTO_NO_AUTO_UPDATE=1
+or pass --no-auto-update to leave the installed script unchanged. REPLYSLIP_NO_AUTO_UPDATE also works.
 
 Legacy, machine-wide (one workspace watcher key for every local agent in the workspace):
   valetto watch (--key-file <file> | --key <watcher-key>) [--url <origin>] [--interval <ms>] [--once] [--force]
 A per-agent watcher refuses to start while a legacy watcher for the same workspace runs on this machine.
 
 --url defaults to VALETTO_URL, then the server the agent registered with, then https://valetto.tech.
-Environment: VALETTO_URL, VALETTO_WATCHER_KEY (legacy), VALETTO_POLL_INTERVAL_MS, VALETTO_ORCA_BIN.
+Environment: VALETTO_URL, VALETTO_WATCHER_KEY (legacy), VALETTO_POLL_INTERVAL_MS, VALETTO_ORCA_BIN, VALETTO_NO_AUTO_UPDATE.
 Names from before the rename still work: replyslip.mjs, ~/.replyslip, and REPLYSLIP_* variables.
 Agent setup guide: https://valetto.tech/skill.md`;
 function flag(argv, name) {
@@ -3544,7 +3931,7 @@ function positionals(argv) {
   const values = [];
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i] ?? "";
-    if (arg === "--force" || arg === "--once") continue;
+    if (arg === "--force" || arg === "--once" || arg === "--no-auto-update") continue;
     if (arg.startsWith("--")) {
       const value = argv[i + 1];
       if (value && !value.startsWith("-")) i += 1;
@@ -3839,9 +4226,9 @@ function readReclaim(argv) {
   if (!Number.isInteger(pid) || pid <= 0 || !token || !/^[0-9a-f]{16}$/.test(token) || !startedAt || /[\r\n\0]/.test(startedAt)) return "invalid";
   return { pid, token, startedAt };
 }
-function superviseIo(io) {
+function superviseIo(io, argv = []) {
   return {
-    home: io.home ?? homedir4(),
+    home: io.home ?? homedir5(),
     env: io.env ?? process.env,
     scriptPath: io.supervise?.scriptPath,
     nodePath: io.supervise?.nodePath,
@@ -3860,11 +4247,16 @@ function superviseIo(io) {
     unitName: io.supervise?.unitName,
     legacyLabel: io.supervise?.legacyLabel,
     legacyTaskName: io.supervise?.legacyTaskName,
-    legacyUnitName: io.supervise?.legacyUnitName
+    legacyUnitName: io.supervise?.legacyUnitName,
+    log: io.supervise?.log,
+    fetchImpl: io.fetchImpl,
+    currentVersion: VALETTO_VERSION,
+    argv,
+    skipAutoUpdate: io.supervise?.skipAutoUpdate
   };
 }
 async function runSupervise(argv, io, stdout, stderr) {
-  const sup = superviseIo(io);
+  const sup = superviseIo(io, argv);
   if (argv.includes("--once")) return finishSupervise(await runSupervisionTick(sup), stdout, stderr);
   if (argv.includes("--status")) {
     for (const line of supervisionStatus(sup)) stdout(line);
