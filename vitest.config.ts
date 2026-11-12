@@ -22,6 +22,7 @@ export default defineConfig({
       CRON_SECRET: 'test-cron-secret',
       UNSUBSCRIBE_SECRET: TEST_UNSUBSCRIBE_SECRET,
       VALETTO_ALLOW_PRIVATE_WEBHOOKS: '1',
+      VALETTO_NO_AUTO_UPDATE: '1',
     },
   },
   resolve: {

@@ -64,6 +64,8 @@ export type InstallPlanInput = {
   legacyTaskName?: string;
   legacyUnitName?: string;
   intervalMs?: number;
+  /** When true, the generated timer passes VALETTO_NO_AUTO_UPDATE=1 and --no-auto-update. */
+  noAutoUpdate?: boolean;
 };
 
 export function buildInstallPlan(input: InstallPlanInput): InstallPlan | { error: string } {
@@ -212,7 +214,9 @@ export function launchdPlist(input: InstallPlanInput & { label: string; logPath:
     ['VALETTO_SUPERVISED', '1'],
   ];
   if (input.orcaBin) env.push(['VALETTO_ORCA_BIN', input.orcaBin]);
+  if (input.noAutoUpdate) env.push(['VALETTO_NO_AUTO_UPDATE', '1']);
   const args = [input.nodePath, input.scriptPath, 'supervise', '--once'];
+  if (input.noAutoUpdate) args.push('--no-auto-update');
   return `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -241,7 +245,9 @@ ${env.map(([key, value]) => `    <key>${xml(key)}</key>\n    <string>${xml(value
 }
 
 export function systemdService(input: InstallPlanInput): string {
-  const exec = ['ExecStart=' + systemdArg(input.nodePath), systemdArg(input.scriptPath), 'supervise', '--once'].join(' ');
+  const execParts = ['ExecStart=' + systemdArg(input.nodePath), systemdArg(input.scriptPath), 'supervise', '--once'];
+  if (input.noAutoUpdate) execParts.push('--no-auto-update');
+  const exec = execParts.join(' ');
   const lines = [
     '[Unit]',
     'Description=Valetto watcher supervision',
@@ -254,6 +260,7 @@ export function systemdService(input: InstallPlanInput): string {
     'Environment=VALETTO_SUPERVISED=1',
   ];
   if (input.orcaBin) lines.push(`Environment=VALETTO_ORCA_BIN=${systemdEnv(input.orcaBin)}`);
+  if (input.noAutoUpdate) lines.push('Environment=VALETTO_NO_AUTO_UPDATE=1');
   lines.push('');
   return `${lines.join('\n')}\n`;
 }
@@ -292,7 +299,9 @@ export function windowsCmd(input: InstallPlanInput): string {
   if (input.localAppData) lines.push(`set "LOCALAPPDATA=${cmdPercent(input.localAppData)}"`);
   lines.push('set "VALETTO_SUPERVISED=1"');
   if (input.orcaBin) lines.push(`set "VALETTO_ORCA_BIN=${cmdPercent(input.orcaBin)}"`);
-  lines.push(`"${cmdPercent(input.nodePath)}" "${cmdPercent(input.scriptPath)}" supervise --once`);
+  if (input.noAutoUpdate) lines.push('set "VALETTO_NO_AUTO_UPDATE=1"');
+  const onceArgs = input.noAutoUpdate ? 'supervise --once --no-auto-update' : 'supervise --once';
+  lines.push(`"${cmdPercent(input.nodePath)}" "${cmdPercent(input.scriptPath)}" ${onceArgs}`);
   lines.push('');
   return lines.join('\r\n');
 }
