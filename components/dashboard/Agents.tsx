@@ -176,15 +176,14 @@ export function Agents({
                     onClick={() => toggleOpen(a.id)}
                   >
                     <span className="dash-agent-toggle-main">
-                      <span translate="no">{a.name}</span>
+                      <span className="dash-agent-name" translate="no">{a.name}</span>
                       {revoked ? <span className="dash-pill dash-pill-failed">revoked</span> : null}
                       <RuntimeBadge runtime={runtime} />
                     </span>
                     <span className="dash-agent-chevron" aria-hidden="true" />
                   </button>
                 </h3>
-                {expanded ? (
-                <div className="dash-agent-body" id={panelId} role="region" aria-labelledby={toggleId}>
+                <div className="dash-agent-body" id={panelId} role="region" aria-labelledby={toggleId} hidden={!expanded}>
                 <div className="dash-agent-head">
                   <div>
                     {a.description ? <p className="dash-agent-desc">{a.description}</p> : null}
@@ -446,7 +445,6 @@ export function Agents({
                   </div>
                 ) : null}
                 </div>
-                ) : null}
               </li>
             );
           })}

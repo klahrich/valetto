@@ -11,6 +11,7 @@ export function isTelegramHttpUrl(url: string): boolean {
   try {
     const parsed = new URL(url);
     if (parsed.protocol !== 'https:') return false;
+    if (parsed.username || parsed.password) return false;
     const host = parsed.hostname.toLowerCase();
     return host === 't.me' || host === 'www.t.me' || host === 'telegram.me' || host === 'www.telegram.me';
   } catch {
