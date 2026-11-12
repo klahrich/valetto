@@ -1,7 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { api, errorText } from './api';
+import { agentRuntime, deliveryLabel, initiallyExpandedAgentIds, runtimeTone, type AgentRuntime, type RuntimeTone } from './agent-runtime';
 import { LocalTime } from './LocalTime';
 import { OnceSecret } from './CopyButton';
 import { DeliveryPanel } from './DeliveryPanel';
@@ -9,22 +10,55 @@ import { TelegramLinkPanel } from './TelegramLink';
 import { WakeUrlPanel } from './WakeUrl';
 import type { Agent, AgentKey, NewAgentKey } from './types';
 
-function deliveryLabel(a: Agent): string {
-  if (a.delivery.mode === 'webhook') {
-    let host = '';
-    try {
-      host = a.delivery.url ? new URL(a.delivery.url).host : '';
-    } catch {
-      host = '';
-    }
-    return `Webhook${host ? ` · ${host}` : ''}`;
+function RuntimeIcon({ tone }: { tone: RuntimeTone }) {
+  const common = { width: 14, height: 14, viewBox: '0 0 16 16', 'aria-hidden': true as const, focusable: false };
+  if (tone === 'orca') {
+    return (
+      <svg {...common}>
+        <rect x="2.5" y="3" width="11" height="10" rx="1.5" fill="none" stroke="currentColor" strokeWidth="1.4" />
+        <path d="M5 6.5h6M5 9h3.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+      </svg>
+    );
   }
-  if (a.delivery.mode === 'local' || a.delivery.mode === 'herdr') {
-    const driver = a.delivery.driver ?? (a.delivery.mode === 'herdr' ? 'herdr' : '');
-    const target = a.delivery.target ?? a.delivery.pane;
-    return `Local${driver ? ` · ${driver}` : ''}${target ? ` · ${target}` : ''}`;
+  if (tone === 'herdr') {
+    return (
+      <svg {...common}>
+        <circle cx="8" cy="5" r="2" fill="none" stroke="currentColor" strokeWidth="1.4" />
+        <circle cx="4.5" cy="11" r="2" fill="none" stroke="currentColor" strokeWidth="1.4" />
+        <circle cx="11.5" cy="11" r="2" fill="none" stroke="currentColor" strokeWidth="1.4" />
+      </svg>
+    );
   }
-  return 'Checks Valetto for new tasks (nothing sent)';
+  if (tone === 'webhook') {
+    return (
+      <svg {...common}>
+        <path d="M4 8h8M9.5 5.5 12 8l-2.5 2.5" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    );
+  }
+  if (tone === 'poll') {
+    return (
+      <svg {...common}>
+        <path d="M12.5 8A4.5 4.5 0 1 1 8 3.5" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+        <path d="M8 2v3l2.2-.8" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    );
+  }
+  return (
+    <svg {...common}>
+      <rect x="3" y="3" width="10" height="10" rx="2" fill="none" stroke="currentColor" strokeWidth="1.4" />
+    </svg>
+  );
+}
+
+function RuntimeBadge({ runtime }: { runtime: AgentRuntime }) {
+  const tone = runtimeTone(runtime.id);
+  return (
+    <span className={`dash-runtime dash-runtime-${tone}`}>
+      <RuntimeIcon tone={tone} />
+      {runtime.label}
+    </span>
+  );
 }
 
 /** Last wake outcome per agent, from GET /api/v1/agents. Shows nothing until a wake has been attempted. */
@@ -73,6 +107,24 @@ export function Agents({
   const [editing, setEditing] = useState<string | null>(null);
   const [renaming, setRenaming] = useState<string | null>(null);
   const [renameDraft, setRenameDraft] = useState('');
+  const [openIds, setOpenIds] = useState<ReadonlySet<string>>(() => new Set(initiallyExpandedAgentIds(agents)));
+  const toggled = useRef(false);
+
+  useEffect(() => {
+    if (toggled.current || agents.length !== 1) return;
+    const only = agents[0]!.id;
+    setOpenIds((prev) => (prev.has(only) ? prev : new Set([only])));
+  }, [agents]);
+
+  function toggleOpen(id: string) {
+    toggled.current = true;
+    setOpenIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
 
   async function run(id: string, fn: () => Promise<void>) {
     setBusy(id);
@@ -108,14 +160,33 @@ export function Agents({
           {sorted.map((a) => {
             const agentKeys = keys[a.id] ?? [];
             const revoked = !!a.revoked_at;
+            const expanded = openIds.has(a.id);
+            const runtime = agentRuntime(a.delivery);
+            const panelId = `agent-body-${a.id}`;
+            const toggleId = `agent-toggle-${a.id}`;
             return (
-              <li key={a.id} className={revoked ? 'dash-agent is-revoked' : 'dash-agent'}>
-                <div className="dash-agent-head">
-                  <div>
-                    <h3>
+              <li key={a.id} className={`${revoked ? 'dash-agent is-revoked' : 'dash-agent'}${expanded ? ' is-open' : ''}`}>
+                <h3 className="dash-agent-title">
+                  <button
+                    type="button"
+                    className="dash-agent-toggle"
+                    id={toggleId}
+                    aria-expanded={expanded}
+                    aria-controls={panelId}
+                    onClick={() => toggleOpen(a.id)}
+                  >
+                    <span className="dash-agent-toggle-main">
                       <span translate="no">{a.name}</span>
                       {revoked ? <span className="dash-pill dash-pill-failed">revoked</span> : null}
-                    </h3>
+                      <RuntimeBadge runtime={runtime} />
+                    </span>
+                    <span className="dash-agent-chevron" aria-hidden="true" />
+                  </button>
+                </h3>
+                {expanded ? (
+                <div className="dash-agent-body" id={panelId} role="region" aria-labelledby={toggleId}>
+                <div className="dash-agent-head">
+                  <div>
                     {a.description ? <p className="dash-agent-desc">{a.description}</p> : null}
                     <p className="dash-muted">
                       Joined <LocalTime iso={a.created_at} /> · {deliveryLabel(a)}
@@ -373,6 +444,8 @@ export function Agents({
                       </p>
                     ) : null}
                   </div>
+                ) : null}
+                </div>
                 ) : null}
               </li>
             );
