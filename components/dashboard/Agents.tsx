@@ -108,22 +108,26 @@ export function Agents({
   const [renaming, setRenaming] = useState<string | null>(null);
   const [renameDraft, setRenameDraft] = useState('');
   const [openIds, setOpenIds] = useState<ReadonlySet<string>>(() => new Set(initiallyExpandedAgentIds(agents)));
+  const [loadedPanels, setLoadedPanels] = useState<ReadonlySet<string>>(() => new Set(initiallyExpandedAgentIds(agents)));
   const toggled = useRef(false);
 
   useEffect(() => {
     if (toggled.current || agents.length !== 1) return;
     const only = agents[0]!.id;
     setOpenIds((prev) => (prev.has(only) ? prev : new Set([only])));
+    setLoadedPanels((prev) => (prev.has(only) ? prev : new Set(prev).add(only)));
   }, [agents]);
 
   function toggleOpen(id: string) {
     toggled.current = true;
+    const opening = !openIds.has(id);
     setOpenIds((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
       else next.add(id);
       return next;
     });
+    if (opening) setLoadedPanels((prev) => (prev.has(id) ? prev : new Set(prev).add(id)));
   }
 
   async function run(id: string, fn: () => Promise<void>) {
@@ -391,9 +395,9 @@ export function Agents({
                   <p className="dash-muted">No keys.</p>
                 )}
 
-                {!revoked ? <WakeUrlPanel agentId={a.id} agentName={a.name} /> : null}
+                {!revoked && loadedPanels.has(a.id) ? <WakeUrlPanel agentId={a.id} agentName={a.name} /> : null}
 
-                {!revoked ? <TelegramLinkPanel agentId={a.id} agentName={a.name} /> : null}
+                {!revoked && loadedPanels.has(a.id) ? <TelegramLinkPanel agentId={a.id} agentName={a.name} /> : null}
 
                 {!revoked ? (
                   <div className="dash-agent-danger">

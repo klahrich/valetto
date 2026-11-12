@@ -27,16 +27,18 @@ html:has(.dash),html:has(.dash) body{background:#eceef0}
 .dash-btn:active{transform:scale(.97)}
 .dash-btn-ink{color:var(--bg);background:var(--ink)}
 @media (hover:hover) and (pointer:fine){.dash-btn-ink:hover{background:color-mix(in srgb,var(--ink) 84%,var(--bg))}}
-.dash-textbtn{background:none;border:0;padding:4px 0;font:500 var(--s-small)/1.4 var(--font);color:var(--ink);cursor:pointer;text-decoration:underline;text-underline-offset:.22em;text-decoration-color:color-mix(in srgb,currentColor 35%,transparent)}
+.dash-textbtn{background:none;border:0;padding:4px 0;max-width:100%;font:500 var(--s-small)/1.4 var(--font);color:var(--ink);cursor:pointer;text-decoration:underline;text-underline-offset:.22em;text-decoration-color:color-mix(in srgb,currentColor 35%,transparent);overflow-wrap:anywhere}
 .dash-textbtn:disabled{color:var(--muted);cursor:default}
 .dash-danger{color:var(--err)}
-.dash-actions{display:flex;flex-wrap:wrap;gap:4px 16px;justify-content:flex-end;align-items:center}
+.dash-actions{display:flex;flex-wrap:wrap;gap:4px 16px;justify-content:flex-end;align-items:center;min-width:0}
 .dash-secret{margin:0 0 18px;padding:16px;border-radius:6px;background:#f7f8f9;border:1px solid #8a9097}
 .dash-secret-title{font-weight:500}
 .dash-secret-row{margin-top:10px;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
 .dash-secret-value{flex:1 1 280px;min-width:0;padding:10px 12px;background:var(--bg);border-radius:4px;overflow-wrap:anywhere;user-select:all}
 a.dash-secret-link{color:var(--ink);text-decoration:underline;text-underline-offset:.22em;text-decoration-color:color-mix(in srgb,currentColor 45%,transparent)}
 @media (hover:hover) and (pointer:fine){a.dash-secret-link:hover{text-decoration-color:currentColor}}
+.dash-secret-help,.dash-secret-title{overflow-wrap:anywhere}
+.dash-secret,.dash-secret-help,.dash-secret-title{min-width:0}
 .dash-secret-help{margin-top:12px}
 .dash-prompt{margin-top:16px}
 .dash-secret .dash-muted{margin-top:6px}
@@ -87,10 +89,13 @@ a.dash-secret-link{color:var(--ink);text-decoration:underline;text-underline-off
 .dash-runtime-webhook{color:#154e8c;background:#dce8f7}
 .dash-runtime-poll{color:#3a3f46;background:#dfe2e5}
 .dash-runtime-other{color:#6a4a00;background:#f3e6c4}
-.dash-agent-body{padding:0 18px 16px}
-.dash-agent-head{display:flex;justify-content:space-between;gap:12px 24px;flex-wrap:wrap;margin-bottom:8px}
-.dash-agent-desc{margin-top:2px}
-.dash-agent-danger{margin-top:16px;padding-top:12px;border-top:1px solid #c4c9ce;display:flex;flex-wrap:wrap;gap:4px 16px;align-items:center}
+.dash-agent-body{padding:0 18px 16px;min-width:0;overflow-wrap:anywhere}
+.dash-agent-body code{overflow-wrap:anywhere}
+.dash-agent-head{display:flex;justify-content:space-between;gap:12px 24px;flex-wrap:wrap;margin-bottom:8px;min-width:0}
+.dash-agent-head>div{min-width:0}
+.dash-agent-desc{margin-top:2px;overflow-wrap:anywhere}
+.dash-agent-danger{margin-top:16px;padding-top:12px;border-top:1px solid #c4c9ce;display:flex;flex-wrap:wrap;gap:4px 16px;align-items:center;min-width:0}
+.dash-confirm{min-width:0}
 @media (max-width:640px){
   .dash-agent-toggle{min-height:44px;padding:12px 14px}
   .dash-agent-body{padding:0 14px 14px}
@@ -128,9 +133,9 @@ a.dash-secret-link{color:var(--ink);text-decoration:underline;text-underline-off
 .dash-history>summary{font-size:var(--s-body);color:var(--ink);font-weight:500}
 .dash-ws-name{display:flex;align-items:baseline;gap:6px 16px;flex-wrap:wrap}
 .dash-hero .dash-ws-name h1{margin:4px 0 10px}
-.dash-rename{margin:8px 0 6px;max-width:40rem}
+.dash-rename{margin:8px 0 6px;max-width:40rem;min-width:0}
 .dash-rename label{display:block;font-size:var(--s-small);color:var(--muted);margin-bottom:6px}
-.dash-rename-row{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center}
+.dash-rename-row{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;min-width:0}
 .dash-rename input{flex:1 1 240px;min-width:0;height:44px;padding:0 12px;font:500 var(--s-lead)/1 var(--font);color:var(--ink);background:#f7f8f9;border:1px solid #8a9097;border-radius:4px}
 .dash .signup input{border-color:#8a9097}
 /* Edit delivery panel (per agent) and watcher keys */
@@ -339,7 +344,7 @@ a.dash-secret-link{color:var(--ink);text-decoration:underline;text-underline-off
 .dash-wake{margin-top:16px;padding-top:12px;border-top:1px solid #c4c9ce;display:grid;gap:8px;min-width:0}
 .dash-wake-head{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 12px}
 .dash-wake h4{font-size:var(--s-small);font-weight:600}
-.dash-wake-help{max-width:40rem}
+.dash-wake-help{max-width:40rem;min-width:0;overflow-wrap:anywhere}
 .dash-wake .dash-secret{margin:4px 0}
 .dash-wake-meta{overflow-wrap:anywhere}
 .dash-wake-actions{display:flex;flex-wrap:wrap;gap:4px 16px;align-items:center;justify-content:flex-start}

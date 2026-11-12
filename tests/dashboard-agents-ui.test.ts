@@ -134,6 +134,8 @@ describe('agent accordion', () => {
     expect(toggle).not.toContain('Joined');
     expect(toggle).not.toContain('Edit delivery');
     expect(toggle).not.toContain('Revoke agent');
+    expect(html).not.toContain('Wake link');
+    expect(html).not.toContain('>Telegram</h4>');
   });
 
   it('starts a single agent expanded with the existing details', () => {
@@ -150,6 +152,8 @@ describe('agent accordion', () => {
     expect(html).toContain('Edit delivery');
     expect(html).toContain('Revoke agent');
     expect(html).toContain('>Orca</span>');
+    expect(html).toContain('Wake link');
+    expect(html).toContain('when <span translate="no">PlumberBot</span> has a new message');
   });
 
   it('puts the toggle in a heading and keeps a type=button control', () => {
@@ -169,6 +173,8 @@ describe('agent accordion', () => {
     expect(css).toMatch(/\.dash-agent-name\{[^}]*min-width:0/);
     expect(css).toMatch(/\.dash-agent-name\{[^}]*overflow-wrap:anywhere/);
     expect(css).toMatch(/\.dash-agent-toggle-main\{[^}]*min-width:0/);
+    expect(css).toMatch(/\.dash-wake-help\{[^}]*overflow-wrap:anywhere/);
+    expect(css).toMatch(/\.dash-agent-body\{[^}]*min-width:0/);
   });
 });
 
@@ -183,6 +189,8 @@ describe('fresh Telegram link', () => {
     expect(isTelegramHttpUrl('not a url')).toBe(false);
     expect(isTelegramHttpUrl('https://user:pw@t.me/valetto_tg_bot?start=vtg_abc')).toBe(false);
     expect(isTelegramHttpUrl('https://user@t.me/valetto_tg_bot?start=vtg_abc')).toBe(false);
+    expect(isTelegramHttpUrl('https://@t.me/bot')).toBe(false);
+    expect(isTelegramHttpUrl('https://@www.t.me/bot')).toBe(false);
   });
 
   it('renders a tappable t.me link next to the copy action', () => {
