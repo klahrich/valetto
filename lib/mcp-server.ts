@@ -177,7 +177,7 @@ export const mcpHandler = createMcpHandler(
           requireToolScope(ctx as ToolCtx, 'send_message');
           const message = await sendMessage(
             principalFrom(ctx as ToolCtx),
-            { to: args.to, body: args.body, taskId: args.task_id },
+            { to: args.to, body: args.body, taskId: args.task_id, inReplyTo: args.in_reply_to },
             // An OAuth app (no agent:respond) may only message on tasks it created (§5.7).
             { ownTasksOnly: !hasScope((ctx as ToolCtx).http?.authInfo?.scopes, SCOPE_RESPOND) },
           );

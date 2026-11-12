@@ -5,7 +5,7 @@ import {
   LEGACY_GUEST_WAKE_NOTICE,
   LEGACY_REVIEW_NEEDED_NOTICE,
   REVIEW_NEEDED_NOTICE,
-  WAKE_NOTICE,
+  wakePaneNotice,
 } from '../../../lib/wake-notice.ts';
 import { defaultRegistry, type DriverRegistry } from './drivers/registry.ts';
 import type { CommandRunner, DriverCheck, NudgeDriver } from './drivers/types.ts';
@@ -27,17 +27,27 @@ export type DueWake = {
   pane?: string;
   reason?: string;
   task_id?: string | null;
+  message_id?: string | null;
   agent_name?: string;
   /** Accepted only when it is the exact guest-task or review-needed notice. Any other value is ignored. */
   notice?: string;
 };
 
-/** Poll text never replaces the fixed notice unless it is the guest-task or review-needed constant. */
+/**
+ * Builds the pane notice from ids on the poll, never from message or task bodies.
+ * The poll `notice` field is still the exact guest/review constant (often the pre-rename wording)
+ * so CLIs 0.1.4 and 0.1.5 keep matching it. A current CLI adds message_id/task_id when present,
+ * and falls back to the fixed constants when an older server omits them.
+ */
 export function nudgeText(wake: DueWake): string {
-  // The poll sends the pre-rename wording so older watchers still match it. Either wording types the current one.
-  if (wake.notice === GUEST_WAKE_NOTICE || wake.notice === LEGACY_GUEST_WAKE_NOTICE) return GUEST_WAKE_NOTICE;
-  if (wake.notice === REVIEW_NEEDED_NOTICE || wake.notice === LEGACY_REVIEW_NEEDED_NOTICE) return REVIEW_NEEDED_NOTICE;
-  return WAKE_NOTICE;
+  const guest = wake.notice === GUEST_WAKE_NOTICE || wake.notice === LEGACY_GUEST_WAKE_NOTICE;
+  const review = wake.notice === REVIEW_NEEDED_NOTICE || wake.notice === LEGACY_REVIEW_NEEDED_NOTICE;
+  return wakePaneNotice({
+    reason: review ? 'review_needed' : wake.reason,
+    taskId: wake.task_id,
+    messageId: wake.message_id,
+    guest,
+  });
 }
 
 export type WakeNudge = { driver: string; target: string };

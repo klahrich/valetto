@@ -21,7 +21,7 @@ import { PATCH as patchWorkspace } from '@/app/api/v1/workspaces/current/route';
 import { getDb } from '@/db';
 import { agents, tasks, wakes } from '@/db/schema';
 import { OWNER_DECLINED_REASON, RATE_LIMITS } from '@/lib/constants';
-import { HELD_FOR_REVIEW_NOTICE, LEGACY_REVIEW_NEEDED_NOTICE, REVIEW_NEEDED_NOTICE, WAKE_NOTICE } from '@/lib/wake-notice';
+import { HELD_FOR_REVIEW_NOTICE, LEGACY_REVIEW_NEEDED_NOTICE, REVIEW_NEEDED_NOTICE, WAKE_NOTICE, reviewNeededWakeNotice } from '@/lib/wake-notice';
 import { leaseHerdrWakes } from '@/lib/wakes';
 import { nudgeText } from '../packages/cli/src/watch';
 import { approvedCustomer, directRequest, ORIGIN, owner, type Customer, type Owner } from './customer-fixtures';
@@ -304,7 +304,7 @@ describe('request checkpoint', () => {
       const c = await approvedCustomer(o);
       const task = await directRequest(o, c, 'CANARY-WEBHOOK-TEXT');
       const hit = receiver.hits.find((h) => h.body?.task_id === task.id);
-      expect(hit?.body).toMatchObject({ reason: 'review_needed', notice: REVIEW_NEEDED_NOTICE, review_url: `/dashboard/reviews/${task.id}` });
+      expect(hit?.body).toMatchObject({ reason: 'review_needed', notice: reviewNeededWakeNotice(task.id), task_id: task.id, review_url: `/dashboard/reviews/${task.id}` });
       expect(hit?.raw).not.toContain('CANARY-WEBHOOK-TEXT');
     } finally {
       await receiver.close();
@@ -328,6 +328,7 @@ describe('request checkpoint', () => {
     expect(LEGACY_REVIEW_NEEDED_NOTICE).toContain('ReplySlip');
     expect(JSON.stringify(leased)).not.toContain('CANARY-POLL-TEXT');
     expect(nudgeText({ id: 'w', notice: wake?.notice })).toBe(REVIEW_NEEDED_NOTICE);
+    expect(nudgeText(wake!)).toBe(reviewNeededWakeNotice(task.id));
     expect(REVIEW_NEEDED_NOTICE).toContain('Valetto');
   });
 });

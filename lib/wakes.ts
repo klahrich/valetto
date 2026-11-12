@@ -7,7 +7,7 @@ import { safeEqualString } from './crypto';
 import { buildWebhookCall, localNudgeOf } from './delivery';
 import { assertPublicWebhookUrl } from './webhook-url';
 import { absoluteUrl, canonicalOrigin } from './origin';
-import { GUEST_WAKE_NOTICE, LEGACY_GUEST_WAKE_NOTICE, LEGACY_REVIEW_NEEDED_NOTICE, REVIEW_NEEDED_NOTICE, WAKE_NOTICE, reviewPath } from './wake-notice';
+import { LEGACY_GUEST_WAKE_NOTICE, LEGACY_REVIEW_NEEDED_NOTICE, WAKE_NOTICE, reviewPath, wakePaneNotice } from './wake-notice';
 
 export type WakeReason =
   | 'message'
@@ -85,6 +85,7 @@ export function wakeNoticeBody(input: {
   agentName: string;
   reason: string;
   taskId: string | null;
+  messageId?: string | null;
   createdAt: Date;
   notice?: string;
 }): string {
@@ -95,6 +96,7 @@ export function wakeNoticeBody(input: {
     agent: input.agentName,
     reason: input.reason,
     task_id: input.taskId,
+    message_id: input.messageId ?? null,
     notice: input.notice ?? WAKE_NOTICE,
     ...review,
     created_at: input.createdAt.toISOString(),
@@ -106,16 +108,25 @@ export function reviewUrl(taskId: string): string {
   return absoluteUrl(canonicalOrigin() ?? '', reviewPath(taskId));
 }
 
-async function noticeForTask(db: Db, taskId: string | null, reason?: string): Promise<string> {
-  if (reason === 'review_needed') return REVIEW_NEEDED_NOTICE;
-  if (!taskId) return WAKE_NOTICE;
-  const [task] = await db
-    .select({ fromWorkspaceId: tasks.fromWorkspaceId, workspaceId: tasks.workspaceId })
-    .from(tasks)
-    .where(eq(tasks.id, taskId))
-    .limit(1);
-  if (task?.fromWorkspaceId && task.fromWorkspaceId !== task.workspaceId) return GUEST_WAKE_NOTICE;
-  return WAKE_NOTICE;
+async function noticeForWake(
+  db: Db,
+  input: { reason: string; taskId: string | null; messageId: string | null },
+): Promise<string> {
+  let guest = false;
+  if (input.taskId) {
+    const [task] = await db
+      .select({ fromWorkspaceId: tasks.fromWorkspaceId, workspaceId: tasks.workspaceId })
+      .from(tasks)
+      .where(eq(tasks.id, input.taskId))
+      .limit(1);
+    guest = Boolean(task?.fromWorkspaceId && task.fromWorkspaceId !== task.workspaceId);
+  }
+  return wakePaneNotice({
+    reason: input.reason,
+    taskId: input.taskId,
+    messageId: input.messageId,
+    guest: input.reason !== 'review_needed' && guest,
+  });
 }
 
 function backoffSeconds(attempts: number): number {
@@ -211,8 +222,13 @@ export async function deliverWebhookWake(wakeId: string): Promise<WebhookAttempt
       agentName: agent.name,
       reason: claimed.reason,
       taskId: claimed.taskId,
+      messageId: claimed.messageId,
       createdAt: claimed.createdAt,
-      notice: await noticeForTask(db, claimed.taskId, claimed.reason),
+      notice: await noticeForWake(db, {
+        reason: claimed.reason,
+        taskId: claimed.taskId,
+        messageId: claimed.messageId,
+      }),
     });
     const call = buildWebhookCall(agent, body, claimed.id);
     const response = await fetch(call.url, {
@@ -323,6 +339,7 @@ export async function leaseHerdrWakes(workspaceId: string, scope: WakeScope = {}
         id: wakes.id,
         reason: wakes.reason,
         taskId: wakes.taskId,
+        messageId: wakes.messageId,
         agentName: agents.name,
         deliveryMode: agents.deliveryMode,
         localDriver: agents.localDriver,
@@ -365,8 +382,10 @@ export async function leaseHerdrWakes(workspaceId: string, scope: WakeScope = {}
           pane: nudge.target,
           reason: row.reason,
           task_id: row.taskId,
+          message_id: row.messageId,
           agent_name: row.agentName,
-          // Pre-rename wording on the wire: older watchers match it exactly, current ones map it to the Valetto wording.
+          // Pre-rename wording on the wire, without ids: older watchers match it exactly.
+          // A current CLI maps it to the Valetto wording and adds message_id/task_id from these fields.
           ...(review ? { notice: LEGACY_REVIEW_NEEDED_NOTICE } : guest ? { notice: LEGACY_GUEST_WAKE_NOTICE } : {}),
         },
       ];
@@ -434,6 +453,7 @@ export async function getAgentWake(workspaceId: string, agentId: string, wakeId:
     status: wake.status,
     reason: wake.reason,
     task_id: wake.taskId,
+    message_id: wake.messageId,
     attempts: wake.attempts,
     last_error: publicWakeError(wake.lastError),
     delivered_at: wake.deliveredAt?.toISOString() ?? null,

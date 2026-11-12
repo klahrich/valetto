@@ -4,7 +4,7 @@ import { mkdtemp, writeFile, mkdir } from 'node:fs/promises';
 import { hostname, tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { WAKE_NOTICE } from '@/lib/wake-notice';
+import { taskWakeNotice } from '@/lib/wake-notice';
 import { runValetto } from '../packages/cli/src/cli';
 import { createRegistry } from '../packages/cli/src/drivers/registry';
 import type { NudgeDriver } from '../packages/cli/src/drivers/types';
@@ -86,7 +86,7 @@ describe('valetto watch resilience', () => {
 
     expect(result).toEqual({});
     expect(polls).toBe(script.length);
-    expect(nudged).toEqual([`codex:${WAKE_NOTICE}`]);
+    expect(nudged).toEqual([`codex:${taskWakeNotice(TASK_ID, 'task')}`]);
     expect(acked).toEqual([{ wake_ids: ['wake-1'] }]);
     expect(delays).toEqual([4000, 8000, 16000, 32000, 60000, 4000, 4000, 4000]);
     const failures = logs.filter((line) => line.includes('poll failed'));

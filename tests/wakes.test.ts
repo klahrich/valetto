@@ -24,9 +24,14 @@ describe('wakes', () => {
       const fromKey = await createKey(session.cookie, from.id);
       const sent = await mcpTool(fromKey, 'send_message', { to: 'ToBot', body: 'CANARY-BODY-message' });
       expect(sent.isError).toBe(false);
+      const messageId = sent.payload.message.id as string;
       const hit = receiver.hits.at(-1)!;
       expect(hit.raw).not.toContain('CANARY-BODY-message');
-      expect(hit.body.notice).toMatch(/check it with your Valetto tools/);
+      expect(hit.body.message_id).toBe(messageId);
+      expect(hit.body.task_id).toBeNull();
+      expect(hit.body.notice).toBe(
+        `Another agent sent you a message on Valetto (message_id: ${messageId}). Read it with list_messages and reply with send_message in_reply_to.`,
+      );
       const expected = createHmac('sha256', 'hook-secret').update(hit.raw).digest('hex');
       expect(hit.headers['x-valetto-signature']).toBe(`sha256=${expected}`);
       expect(hit.headers['x-valetto-wake-id']).toBe(hit.body.id);
@@ -65,7 +70,9 @@ describe('wakes', () => {
     const to = await createAgent(session.cookie, 'LocalTo');
     await setHerdr(session.cookie, to.id, 'local-to');
     const fromKey = await createKey(session.cookie, from.id);
-    await mcpTool(fromKey, 'send_message', { to: 'LocalTo', body: 'CANARY-HERDR-body' });
+    const sent = await mcpTool(fromKey, 'send_message', { to: 'LocalTo', body: 'CANARY-HERDR-body' });
+    expect(sent.isError).toBe(false);
+    const messageId = sent.payload.message.id as string;
     const watcher = await call(createWatcher, 'http://localhost/api/v1/watcher-keys', {
       cookie: session.cookie,
       body: { name: 'laptop' },
@@ -82,6 +89,8 @@ describe('wakes', () => {
         pane: 'local-to',
         reason: 'message',
         agent_name: 'LocalTo',
+        message_id: messageId,
+        task_id: null,
       }),
     ]);
     expect(polled.data.wakes[0].notice).toBeUndefined();

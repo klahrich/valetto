@@ -157,6 +157,7 @@ export function serializeMessage(message: MessageRow, fromName: string, toName: 
     to_agent_id: message.toAgentId,
     body: message.body,
     task_id: message.taskId,
+    in_reply_to: message.inReplyTo ?? null,
     created_at: message.createdAt.toISOString(),
   };
 }
@@ -190,9 +191,39 @@ export async function afterWake(wakeId: string | null): Promise<void> {
   await deliverWebhookWake(wakeId);
 }
 
+const MESSAGE_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+async function loadReplyTarget(tx: Db, caller: AgentPrincipal, id: string): Promise<MessageRow> {
+  const [message] = await tx
+    .select()
+    .from(messages)
+    .where(and(eq(messages.id, id), eq(messages.workspaceId, caller.workspaceId), eq(messages.toAgentId, caller.agentId)))
+    .limit(1);
+  if (!message) {
+    throw new HttpError(
+      404,
+      'not_found',
+      'No message was found. in_reply_to must be a message you received in this workspace.',
+    );
+  }
+  return message;
+}
+
+async function activeAgentById(tx: Db, workspaceId: string, id: string): Promise<AgentRow> {
+  const [agent] = await tx
+    .select()
+    .from(agents)
+    .where(and(eq(agents.workspaceId, workspaceId), eq(agents.id, id)))
+    .limit(1);
+  if (!agent || agent.revokedAt || agent.role !== 'agent') {
+    throw new HttpError(404, 'agent_not_found', 'The sender of that message is not an active agent in this workspace.');
+  }
+  return agent;
+}
+
 export async function sendMessage(
   caller: AgentPrincipal,
-  input: { to: string; body: string; taskId?: string },
+  input: { to?: string; body: string; taskId?: string; inReplyTo?: string },
   // MCP OAuth (docs/design/mcp-oauth.md §5.7): a connected app may only message on tasks it created. Off for rsk_.
   options: { ownTasksOnly?: boolean } = {},
 ) {
@@ -202,13 +233,33 @@ export async function sendMessage(
   if (input.body.length < 1 || input.body.length > MESSAGE_BODY_MAX) {
     throw new HttpError(400, 'validation_error', `Message body must be 1-${MESSAGE_BODY_MAX} characters.`);
   }
-  const address = parseRecipient(input.to);
-  if (address.kind === 'shared') {
+  const to = input.to?.trim() ?? '';
+  const inReplyTo = input.inReplyTo?.trim() ?? '';
+  if (!to && !inReplyTo) {
+    throw new HttpError(400, 'validation_error', 'Send to or in_reply_to.');
+  }
+  if (inReplyTo && !MESSAGE_ID_RE.test(inReplyTo)) {
+    throw new HttpError(400, 'validation_error', 'in_reply_to must be a message id from list_messages or get_task.', {
+      fields: { in_reply_to: 'Invalid message id.' },
+    });
+  }
+  const address = to ? parseRecipient(to) : null;
+  if (address?.kind === 'shared') {
     throw new HttpError(400, 'invalid_recipient', 'Messages stay inside your workspace. A shared agent accepts tasks only.');
   }
   const db = getDb();
   const written = await db.transaction(async (tx) => {
-    const recipient = await activeAgentByName(tx, caller.workspaceId, address.name);
+    const original = inReplyTo ? await loadReplyTarget(tx, caller, inReplyTo) : null;
+    const recipient = address
+      ? await activeAgentByName(tx, caller.workspaceId, address.name)
+      : await activeAgentById(tx, caller.workspaceId, original!.fromAgentId);
+    if (original && recipient.id !== original.fromAgentId) {
+      throw new HttpError(
+        400,
+        'invalid_recipient',
+        'to must be the sender of the message named in in_reply_to.',
+      );
+    }
     if (recipient.id === caller.agentId) {
       throw new HttpError(400, 'invalid_recipient', 'An agent cannot message itself.');
     }
@@ -243,6 +294,7 @@ export async function sendMessage(
         toAgentId: recipient.id,
         body: input.body,
         taskId,
+        inReplyTo: original?.id ?? null,
       })
       .returning();
     if (!message) throw new HttpError(500, 'internal_error', 'Something went wrong.');
