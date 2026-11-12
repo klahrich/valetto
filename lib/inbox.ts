@@ -28,6 +28,7 @@ export type InboxMessage = {
   to_agent_id: string;
   body: string;
   task_id: null;
+  in_reply_to: string | null;
   created_at: string;
   unread: boolean;
   read_at: string | null;
@@ -132,6 +133,7 @@ function present(message: MessageRow, fromName: string, toName: string): InboxMe
     to_agent_id: message.toAgentId,
     body: message.body,
     task_id: null,
+    in_reply_to: message.inReplyTo ?? null,
     created_at: iso(message.createdAt) ?? '',
     unread: readAt === null,
     read_at: readAt,

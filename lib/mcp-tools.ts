@@ -16,9 +16,10 @@ export type ToolDoc = {
 
 const sendTo = {
   name: 'to',
-  required: true,
+  required: false,
   type: 'string',
-  description: 'Name of an agent in this workspace. Messages cannot use @handle/agentname.',
+  description:
+    'Name of an agent in this workspace. Messages cannot use @handle/agentname. Required unless in_reply_to is set. When in_reply_to is set and to is omitted, the reply goes to the original sender.',
 } as const;
 const messageBody = {
   name: 'body',
@@ -33,14 +34,21 @@ const taskIdOptional = {
   description:
     'Optional task thread. You must be a participant, and to must be the other participant. This does not hand the task to anyone else. Without task_id the message is standalone: the recipient reads it with list_messages. It is not returned by get_task.',
 } as const;
+const inReplyToOptional = {
+  name: 'in_reply_to',
+  required: false,
+  type: 'string (uuid)',
+  description:
+    'Optional id of a message you received (from list_messages or a get_task thread). The reply is linked to that message. If to is omitted, the recipient is the original sender. If both are set, to must be that sender.',
+} as const;
 
 export const TOOL_DOCS: ToolDoc[] = [
   {
     name: 'send_message',
     title: 'Send message',
     description:
-      'Send a plain message to one agent in your workspace. With task_id, the message is added to that task\'s thread, and the other participant reads it with get_task. Without task_id the message is standalone: the recipient reads it with list_messages (a completion notice is one of these). A wake, when delivery sends one, is only the usual notice and does not include the body or start a turn. A message is finished when it is sent. Nobody owes a reply.',
-    args: [sendTo, messageBody, taskIdOptional],
+      'Send a plain message to one agent in your workspace. With task_id, the message is added to that task\'s thread, and the other participant reads it with get_task. Without task_id the message is standalone: the recipient reads it with list_messages (a completion notice is one of these). in_reply_to links the message to one you received; if to is omitted, the original sender is the recipient. A wake, when delivery sends one, names the new message_id (and task_id when it is on a thread) and does not include the body or start a turn. A message is finished when it is sent. Nobody owes a reply.',
+    args: [sendTo, messageBody, taskIdOptional, inReplyToOptional],
   },
   {
     name: 'create_task',
@@ -363,9 +371,10 @@ const jsonObject = z.record(z.string(), z.json());
 
 export const toolInputs = {
   send_message: z.object({
-    to: z.string().min(1).max(98).describe(sendTo.description),
+    to: z.string().min(1).max(98).optional().describe(sendTo.description),
     body: z.string().min(1).max(32_000).describe(messageBody.description),
     task_id: z.uuid().optional().describe(taskIdOptional.description),
+    in_reply_to: z.uuid().optional().describe(inReplyToOptional.description),
   }),
   create_task: z.object({
     to: z.string().min(1).max(98).describe(TOOL_DOCS[1]!.args[0]!.description),

@@ -14,7 +14,7 @@ import { ACCESS_REVOKED_REASON, DEFAULT_SHARE_DAILY_CAP } from '@/lib/constants'
 import { HttpError } from '@/lib/errors';
 import { assertTargetHandle } from '@/lib/sharing';
 import { FREE_GUEST_WORKSPACES, setGuestWorkspaceLimitForTests, usePlanLimitsForTests, workspacePlanUsage } from '@/lib/plans';
-import { CROSS_WORKSPACE_TASK_NOTICE, GUEST_WAKE_NOTICE } from '@/lib/wake-notice';
+import { CROSS_WORKSPACE_TASK_NOTICE, guestTaskWakeNotice } from '@/lib/wake-notice';
 import { call, createAgent, createKey, mcpListTools, mcpTool, setWebhook, signIn, startReceiver } from './helpers';
 
 const offerSchema = {
@@ -288,7 +288,7 @@ describe('agent sharing', () => {
       const after = await mcpTool(guestKey, 'get_task', { id: taskId });
       expect(after.payload.task.status).toBe('failed');
       expect(after.payload.task.fail_reason).toBe('access revoked');
-      expect(receiver.hits.some((hit) => hit.body?.reason === 'failure' && hit.body?.notice === GUEST_WAKE_NOTICE)).toBe(true);
+      expect(receiver.hits.some((hit) => hit.body?.reason === 'failure' && hit.body?.notice === guestTaskWakeNotice(taskId))).toBe(true);
       expect(receiver.hits.some((hit) => hit.raw.includes('CANARY-REVOKE-BODY'))).toBe(false);
       const again = await mcpTool(guestKey, 'create_task', {
         to: `@${ownerHandle}/Planner`,
@@ -330,7 +330,8 @@ describe('agent sharing', () => {
         description: 'CANARY-CAP-BODY',
       });
       expect(first.isError).toBe(false);
-      expect(receiver.hits[0]?.body.notice).toBe(GUEST_WAKE_NOTICE);
+      expect(receiver.hits[0]?.body.notice).toBe(guestTaskWakeNotice(first.payload.task.id as string));
+      expect(receiver.hits[0]?.body.task_id).toBe(first.payload.task.id);
       expect(receiver.hits[0]?.raw.includes('CANARY-CAP-BODY')).toBe(false);
       const second = await mcpTool(guestKey, 'create_task', {
         to: `@${ownerHandle}/Planner`,

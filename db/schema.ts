@@ -564,6 +564,8 @@ export const messages = pgTable(
      * nextval, so a higher value cannot commit while a lower one is still open. Not the read watermark.
      */
     inboxSeq: bigint('inbox_seq', { mode: 'number' }).notNull().default(sql`0`),
+    /** Standalone or thread message this one replies to. Null when the sender did not name one. */
+    inReplyTo: uuid('in_reply_to').references((): AnyPgColumn => messages.id, { onDelete: 'set null' }),
   },
   (table) => [
     index('messages_task_idx').on(table.taskId, table.createdAt),
@@ -572,6 +574,7 @@ export const messages = pgTable(
     index('messages_inbox_idx')
       .on(table.toAgentId, table.inboxSeq)
       .where(sql`${table.taskId} is null`),
+    index('messages_in_reply_to_idx').on(table.inReplyTo),
   ],
 );
 
