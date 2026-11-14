@@ -145,6 +145,11 @@ export default function SharingPage() {
               </li>
             ))}
           </ul>
+          <p>
+            <Link className="link" href="/sharing/offers">
+              How offers limit what a guest can send
+            </Link>
+          </p>
         </section>
 
         <section aria-labelledby="cost-h">

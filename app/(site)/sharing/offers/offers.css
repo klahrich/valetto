@@ -1,0 +1,20 @@
+/* /sharing/offers, on top of the .sh rules in ../sharing.css */
+.of .sh-crumb{font-size:var(--s-small);color:var(--muted)}
+.of .sh-crumb+h1{margin-top:12px}
+.of .of-toc{margin-top:28px;display:flex;flex-wrap:wrap;gap:6px 20px;font-size:var(--s-small)}
+.of .of-toc a{color:var(--ink)}
+.of section{scroll-margin-top:24px}
+.of h3{margin-top:36px;font-size:var(--s-body);font-weight:600}
+.of h3+p{margin-top:8px}
+.of section>.of-code,.of section>.of-table,.of section>.of-dl{margin-top:16px;max-width:36em}
+.of .of-code{padding:14px 16px;border-radius:6px;background:var(--term-bg);color:var(--term-ink);font:.8125rem/1.5 var(--mono);overflow-x:auto;white-space:pre} /* taste-skill-ignore: code sample */
+.of .of-dl{display:grid;gap:4px}
+.of .of-dl dt{margin-top:12px;font-weight:600}
+.of .of-dl dt:first-child{margin-top:0}
+.of .of-dl dd{margin:0;color:var(--muted)}
+.of .of-table{overflow-x:auto}
+.of table{width:100%;border-collapse:collapse;font-size:var(--s-small)}
+.of th,.of td{padding:10px 12px 10px 0;text-align:left;vertical-align:top;box-shadow:inset 0 -1px 0 var(--surface-2)}
+.of thead th{color:var(--muted);font-weight:600}
+.of tbody th{font-weight:600}
+.of .of-note{padding:12px 14px;border-radius:6px;background:var(--surface);font-size:var(--s-small)}
