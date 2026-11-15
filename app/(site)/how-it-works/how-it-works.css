@@ -21,7 +21,7 @@
 .hw-box{flex:0 1 auto;min-width:0;display:flex;flex-direction:column;gap:3px;padding:12px 14px;border-radius:6px;background:var(--bg);box-shadow:inset 0 0 0 1px var(--surface-2)}
 .hw-box-t{font-weight:600;font-size:var(--s-body);line-height:1.2}
 .hw-box-s{font-size:var(--s-small);line-height:1.3;color:var(--muted)}
-.hw-relay{background:#22332a;box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--accent) 40%,transparent)}
+.hw-relay{background:var(--tint,#22332a);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--accent) 40%,transparent)}
 .hw-relay .hw-box-t{color:var(--accent)}
 .hw-human{background:var(--stage)}
 .hw-plain{background:var(--bg)}
@@ -44,7 +44,7 @@
 
 /* status pills */
 .hw-pill{display:inline-block;padding:2px 8px;border-radius:999px;font:600 .8125rem/1.4 var(--mono);background:var(--surface-2);color:var(--ink);white-space:nowrap;vertical-align:baseline} /* taste-skill-ignore: status names */
-.hw-pill-done{background:#22332a;color:var(--ok-on-bg)}
+.hw-pill-done{background:var(--tint,#22332a);color:var(--ok-on-bg)}
 .hw-pill-failed{background:color-mix(in srgb,var(--err) 30%,var(--bg));color:var(--err-on-bg)}
 .hw-pill-needs_info{background:color-mix(in srgb,var(--info) 35%,var(--bg));color:var(--ink)}
 

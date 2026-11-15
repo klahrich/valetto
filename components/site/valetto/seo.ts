@@ -12,12 +12,12 @@ export const VALETTO_DESCRIPTION =
 export const VALETTO_PATHS = ['/', '/early-access', '/agent-to-agent', '/share', '/connect', '/connect/meta-muse', '/privacy', '/terms'] as const;
 
 /**
- * Valetto's social image (public/valetto/og-home-v1.png, 1200x630): the homepage hero lines and the offer card on its
+ * Valetto's social image (public/valetto/og-home-v2.png, 1200x630): the homepage hero lines and the offer card on its
  * dark background. A fresh filename so a cached card from the old shop homepage is not reused. No rewrite in
  * next.config.ts matches /valetto/*.png, so it is served as a static file on every host.
  */
 export const VALETTO_OG_IMAGE = {
-  url: '/valetto/og-home-v1.png',
+  url: '/valetto/og-home-v2.png',
   width: 1200,
   height: 630,
   alt: 'Valetto: Let other companies’ agents work with yours. On your terms, in the format you set.',

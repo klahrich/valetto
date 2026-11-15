@@ -1,5 +1,5 @@
 /* landing: one-line strip above the header, linking to /sharing */
-.lp .announce{margin:0;padding:9px var(--m);background:#22332a;font-size:var(--s-small);line-height:1.4}
+.lp .announce{margin:0;padding:9px var(--m);background:var(--tint,#22332a);font-size:var(--s-small);line-height:1.4}
 .lp .announce a{color:var(--ink);text-decoration:none}
 .lp .announce strong{font-weight:600;color:var(--accent)}
 .lp .announce-go{white-space:nowrap;text-decoration:underline;text-decoration-color:color-mix(in srgb,currentColor 40%,transparent);text-underline-offset:.22em}

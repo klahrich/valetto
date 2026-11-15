@@ -204,7 +204,7 @@
 /* channels */
 .vt-channels{list-style:none;margin:40px 0 0;padding:0;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
 .vt-channel{background:var(--surface);border-radius:2px;padding:22px 22px 24px;display:flex;flex-direction:column;min-width:0}
-.vt-channel:nth-child(2){background:#22332a}
+.vt-channel:nth-child(2){background:var(--tint,#22332a)}
 .vt-ch-k{font-family:var(--vt-mono);font-size:.75rem;font-variation-settings:"wdth" 87.5;letter-spacing:-.02em;color:var(--accent)}
 .vt-channel h3{margin:14px 0 0;font-size:var(--s-lead);line-height:1.25;letter-spacing:-.018em;font-weight:500}
 .vt-channel>p{margin-top:10px;color:var(--muted);line-height:1.5}
@@ -371,14 +371,10 @@ fieldset.vt-ea-f[aria-invalid=true] .vt-ea-pills label:not(.on){border-color:var
 .vt-home{--rd-s:8px;--rd-m:12px;--rd-l:18px;--line:color-mix(in srgb,var(--ink) 11%,transparent);--lit:inset 0 1px 0 color-mix(in srgb,#fff 7%,transparent);
   --tile:color-mix(in srgb,var(--surface) 72%,var(--bg))}
 
-/* 1. background: no light bands; a fine grid that fades out from the hero, one sage light behind the card */
+/* 1. background: no light bands; the grid comes from landing-bg.css; one soft light behind the card */
 .vt-home .lp-bg .st{display:none}
 .vt-home .lp-bg .g1{opacity:.55}
 .vt-home .lp-bg .g3{display:none}
-.vt-home .lp-bg::after{content:"";position:absolute;inset:0;pointer-events:none;
-  background-image:linear-gradient(color-mix(in srgb,var(--ink) 5%,transparent) 1px,transparent 1px),linear-gradient(90deg,color-mix(in srgb,var(--ink) 5%,transparent) 1px,transparent 1px);
-  background-size:56px 56px;background-position:center top;
-  -webkit-mask-image:radial-gradient(80% 60% at 50% 20%,#000 10%,transparent 75%);mask-image:radial-gradient(80% 60% at 50% 20%,#000 10%,transparent 75%)}
 .vt-home .vt-hero-stage{position:relative}
 .vt-home .vt-hero-stage::before{content:"";position:absolute;z-index:-1;inset:-18% -14%;border-radius:50%;pointer-events:none;
   background:radial-gradient(closest-side,rgb(120 170 128 / .28),transparent 72%);filter:blur(10px)}
@@ -471,47 +467,25 @@ fieldset.vt-ea-f[aria-invalid=true] .vt-ea-pills label:not(.on){border-color:var
 .vh-check-h b{font-weight:500;color:var(--accent)}
 .vh-b-main .vh-check{margin-top:10px;padding-top:0}
 
-/* palette: near-black zinc with sage as the one brand accent (logo, subline, kickers, in/out labels, soft glows).
-   The button is white; green and red appear only for pass and fail. Homepage only. */
-.vt-home{--bg:#09090b;--surface:#18181b;--surface-2:#27272a;--field:#18181b;--ink:#fafafa;--muted:#a1a1aa;
-  --sage:#a9bfa9;--accent:#a9bfa9;--accent-strong:#bccfbc;--accent-ink:#09090b;
-  --line:rgb(255 255 255 / .1);--tile:#111113;--lit:inset 0 1px 0 rgb(255 255 255 / .05);--ok-on-bg:#4ade80;--err-on-bg:#f87171;--close-bg:#111113;
-  background:#09090b}
-body:has(.vt-home){background:#09090b}
-.vt-home .lp-bg{background:#09090b}
-.vt-home .lp-bg .g1{--c:rgb(150 186 152 / .16);opacity:1}
-.vt-home .lp-bg .g2{--c:rgb(96 156 112 / .22)}
-.vt-home .lp-bg::after{background-image:linear-gradient(rgb(255 255 255 / .045) 1px,transparent 1px),linear-gradient(90deg,rgb(255 255 255 / .045) 1px,transparent 1px)}
-.vt-home .vt-hero-stage::before{background:radial-gradient(closest-side,rgb(120 170 128 / .2),transparent 72%)}
-.vt-home .btn{background:#fafafa;color:#09090b;box-shadow:0 1px 2px rgb(0 0 0 / .4),0 8px 28px -10px rgb(169 191 169 / .35)}
-.vt-home .btn:hover{background:#e4e4e7;box-shadow:0 1px 2px rgb(0 0 0 / .4),0 10px 32px -10px rgb(169 191 169 / .5)}
-.vt-home .vt-num{color:#fafafa;background:#09090b}
-.vt-home .vt-steps::before{border-color:rgb(169 191 169 / .35)}
-.vt-home .vt-badge-dot{background:var(--sage);box-shadow:0 0 0 3px rgb(169 191 169 / .2)}
+/* palette details. Colours come from palette B in app/globals.css (near-black zinc, mint accent, white primary
+   button); this adds only the homepage's glows, tiles and pass/fail marks. Green and red appear only for pass and fail. */
+.vt-home{--tile:#111113;--line:rgb(255 255 255 / .1);--lit:inset 0 1px 0 rgb(255 255 255 / .05)}
+.vt-home .lp-bg .g1{opacity:1}
+.vt-home .vt-hero-stage::before{background:radial-gradient(closest-side,rgb(80 200 160 / .22),transparent 72%)}
+.vt-home .vt-hero h1 .vt-dim{color:#8fdcbc}
+.vt-home .btn{box-shadow:0 1px 2px rgb(0 0 0 / .4),0 8px 28px -10px rgb(110 231 183 / .35)}
+.vt-home .btn:hover{box-shadow:0 1px 2px rgb(0 0 0 / .4),0 10px 32px -10px rgb(110 231 183 / .5)}
+.vt-home .vt-num{color:var(--ink);background:var(--bg)}
+.vt-home .vt-steps::before{border-color:rgb(110 231 183 / .3)}
+.vt-home .vt-badge-dot{background:var(--accent);box-shadow:0 0 0 3px rgb(110 231 183 / .2)}
+.vt-home .vt-kicker::before{box-shadow:0 0 0 4px rgb(110 231 183 / .18)}
 .vh-tag{color:var(--ink);box-shadow:inset 0 0 0 1px rgb(255 255 255 / .2)}
 .vh-offer{background:rgb(255 255 255 / .03);box-shadow:inset 0 0 0 1px rgb(255 255 255 / .1)}
 .vh-card{background:linear-gradient(180deg,#141416,#0c0c0e)}
-.vh-good::before,.vh-good .vh-mark,.vh-check .ok b{background:#4ade80}
-.vh-good code{box-shadow:inset 0 0 0 1px rgb(74 222 128 / .4)}
-.vt-home .vt-key{background:#111113}
-.vt-home .vh-bento>.vh-b-main{background:radial-gradient(70% 90% at 100% 100%,rgb(96 156 112 / .12),transparent 70%),var(--tile)}
-.vt-home .vt-close{background:radial-gradient(60% 120% at 50% 110%,rgb(96 156 112 / .24),transparent 70%),linear-gradient(180deg,#111113,#09090b)}
-.vt-home .lp-bg .g1{--c:rgb(150 186 152 / .2)}
-.vt-home .vt-hero-stage::before{background:radial-gradient(closest-side,rgb(120 170 128 / .26),transparent 72%)}
+.vh-good::before,.vh-good .vh-mark,.vh-check .ok b{background:var(--ok-on-bg)}
+.vh-good code{box-shadow:inset 0 0 0 1px rgb(74 222 154 / .45)}
+.vt-home .vt-key{background:var(--tile)}
+.vt-home .vh-bento>.vh-b-main{background:radial-gradient(70% 90% at 100% 100%,rgb(60 170 130 / .12),transparent 70%),var(--tile)}
+.vt-home .vt-close{background:radial-gradient(60% 120% at 50% 110%,rgb(60 170 130 / .24),transparent 70%),linear-gradient(180deg,var(--tile),var(--bg))}
 .vt-home .vh-mcp .hw-cp-b{background:transparent;color:var(--ink);box-shadow:inset 0 0 0 1px rgb(255 255 255 / .18)}
 .vt-home .vh-mcp .hw-cp-b:hover{background:rgb(255 255 255 / .06)}
-/* accent: variant B's mint instead of the muted sage; success uses B's green so pass and brand stay one family */
-.vt-home{--sage:#6ee7b7;--accent:#6ee7b7;--accent-strong:#86efc4;--ok-on-bg:#4ade9a;--mark-bg:#6ee7b7;--mark-slip:#09090b;--mark-ink:#6ee7b7}
-.vt-home .vt-badge-dot{box-shadow:0 0 0 3px rgb(110 231 183 / .2)}
-.vt-home .vt-kicker::before{box-shadow:0 0 0 4px rgb(110 231 183 / .18)}
-.vt-home .vt-steps::before{border-color:rgb(110 231 183 / .3)}
-.vt-home .lp-bg .g1{--c:rgb(110 200 160 / .16)}
-.vt-home .lp-bg .g2{--c:rgb(60 170 130 / .24)}
-.vt-home .vt-hero-stage::before{background:radial-gradient(closest-side,rgb(80 200 160 / .22),transparent 72%)}
-.vt-home .btn{box-shadow:0 1px 2px rgb(0 0 0 / .4),0 8px 28px -10px rgb(110 231 183 / .35)}
-.vt-home .btn:hover{box-shadow:0 1px 2px rgb(0 0 0 / .4),0 10px 32px -10px rgb(110 231 183 / .5)}
-.vh-good::before,.vh-good .vh-mark,.vh-check .ok b{background:#4ade9a}
-.vh-good code{box-shadow:inset 0 0 0 1px rgb(74 222 154 / .45)}
-.vt-home .vh-bento>.vh-b-main{background:radial-gradient(70% 90% at 100% 100%,rgb(60 170 130 / .12),transparent 70%),var(--tile)}
-.vt-home .vt-close{background:radial-gradient(60% 120% at 50% 110%,rgb(60 170 130 / .24),transparent 70%),linear-gradient(180deg,#111113,#09090b)}
-.vt-home .vt-hero h1 .vt-dim{color:#8fdcbc}
