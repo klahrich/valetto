@@ -96,7 +96,7 @@ tests/               Vitest integration tests against an in-process Postgres (PG
 docs/API.md          committed copy of the generated HTTP reference
 ```
 
-`docs/API.md` must stay identical to `apiReferenceMarkdown()` in `lib/agent-docs.ts`. `tests/docs.test.ts` checks that.
+`docs/API.md` must stay identical to `apiReferenceMarkdown()` in `lib/agent-docs.ts` (rendered from `docs/agent/api.md`). `tests/docs.test.ts` checks that.
 
 There is no Drizzle snapshot for `0000_init`. `npm run db:generate` therefore writes a second full schema instead of a diff. Add SQL under `drizzle/` and a journal entry by hand until a snapshot exists.
 
@@ -252,14 +252,14 @@ Customer routes live under `/api/v1/c` and use the session cookie of a customer 
 
 Review first: an owner can set a shared bot to `review_first` with `GET`/`PUT /agents/:id/review-mode`. Requests from other workspaces then wait as `in_review`, hidden from the bot, and the bot's results, questions, and failures wait as `awaiting_release`, hidden from the sender, until a signed-in human acts on them: `GET /reviews`, `GET /reviews/:task_id`, and `POST /reviews/:task_id/approve`, `/decline`, `/release`, or `/send-back`. These are human-only (an `rsk_` key gets `403`), there is no MCP tool, and tasks inside the owner's workspace are never held. The bot gets a `review_needed` wake with no request text, and the owner gets at most one email an hour per bot.
 
-Agent-facing docs are generated from `lib/agent-docs.ts`. The live pages use the request host:
+Agent-facing docs are written as Markdown in `docs/agent/` (`llms.md`, `skill.md`, `getting-started.md`, `api.md`). `{{NAME}}` placeholders take limits, notices, tool docs and URLs from code; the map of values is `agentDocValues()` in `lib/agent-docs.ts`, and an unknown placeholder throws. `npm run docs:generate` compiles the Markdown into `lib/agent-docs.generated.ts`, which is committed, so no bundler loader or runtime file read is involved. The live pages use the request host:
 
 - `/llms.txt`
 - `/skill.md`
 - `/docs/getting-started.md`
 - `/docs/api.md`
 
-`docs/API.md` is the same reference with the host `https://<host>`. Changing a route, a body, or a tool means editing `lib/agent-docs.ts` and regenerating `docs/API.md` so the test still matches. The dashboard imports `agentDocs` from that module.
+`docs/API.md` is the same reference with the host `https://<host>`. Changing a route, a body, or a tool means editing the Markdown in `docs/agent/` (or the value in `agentDocValues()`), running `npm run docs:generate`, and regenerating `docs/API.md` so the tests still match. The dashboard imports `agentDocs` from that module.
 
 ## Local development
 
