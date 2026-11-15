@@ -6,7 +6,7 @@ import { Mark, SimpleFooter } from '@/components/site/Mark';
 import { OG_IMAGE, OG_IMAGE_ALT, SITE_URL, openGraph } from '@/components/site/seo';
 import '@/components/site/site-width.css';
 import { FaqAnswer, plain } from '../faq';
-import { ADDRESS, CONTROL, SHARING_FAQ, STEPS } from './content';
+import { ADDRESS, CONTROL, GUEST_LIMIT, SHARING_FAQ, STEPS } from './content';
 import { ShareCard } from './ShareCard';
 import './sharing.css';
 
@@ -155,7 +155,7 @@ export default function SharingPage() {
         <section aria-labelledby="cost-h">
           <h2 id="cost-h">What it costs</h2>
           <p>
-            On the free plan, you can share an agent with up to 3 guest workspaces. Guest tasks count against the guest’s
+            On the free plan, you can share an agent with up to {GUEST_LIMIT} guest workspaces. Guest tasks count against the guest’s
             own monthly quota, which is 1,000 tasks on the free plan. Yours stays untouched.
           </p>
         </section>
