@@ -47,6 +47,7 @@ import {
   loadOffersByName,
   lockOwnerAgent,
   notesMaxFor,
+  ownerAgent,
   replaceShareOffers,
   revokeShareRow,
 } from './sharing';
@@ -339,7 +340,7 @@ export async function createInvite(
 
 export async function listInvites(workspaceId: string, agentId: string): Promise<SerializedInvite[]> {
   const db = getDb();
-  await lockOwnerAgent(db, workspaceId, agentId);
+  await ownerAgent(db, workspaceId, agentId);
   const rows = await db
     .select()
     .from(agentInvites)
