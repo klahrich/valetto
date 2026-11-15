@@ -1,6 +1,7 @@
 /** Browser helpers for the sign-in routes in app/api/v1/auth. */
 
 import { MARKETING_CONSENT_TEXT } from './marketing-consent';
+import { SITE_FACTS } from './site-facts';
 
 type ApiError = { error?: { code?: string; message?: string; retry_after_seconds?: number } };
 
@@ -109,7 +110,7 @@ export async function verifySignInCode(
     if (status === 200) return { ok: true };
     return failure(status, data, {
       invalid_code: 'That code isn’t right. Check the latest email and try again.',
-      expired_code: 'That code has expired. Codes last 10 minutes. Send a new one.',
+      expired_code: `That code has expired. Codes last ${SITE_FACTS.loginCodeMinutes} minutes. Send a new one.`,
       code_exhausted: 'Too many wrong tries for this code. Send a new one.',
       code_already_used: 'That code was already used. Send a new one.',
       validation_error: 'Enter the email address the code was sent to.',
@@ -127,7 +128,8 @@ export async function verifySignInCode(
  * never lands in a URL. Only the email is stored, never a code or key.
  */
 const EMAIL_KEY = 'replyslip:sign-in-email';
-const EMAIL_TTL_MS = 15 * 60 * 1000;
+/** How long the typed email waits in session storage for the sign-in page. The privacy page states it. */
+export const EMAIL_TTL_MS = 15 * 60 * 1000;
 
 export function rememberSignInEmail(email: string): void {
   try {

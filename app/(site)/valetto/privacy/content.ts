@@ -1,3 +1,6 @@
+import { SITE_FACTS as F } from '@/components/site/site-facts';
+import { REF_TTL_MS } from '@/components/site/ref-keep';
+
 // Draft copy (Markdown) for /valetto/privacy, adapted from /privacy. Facts come from the ReplySlip policy or from the
 // Valetto product brief; anything that needs a real answer is a visible "[TBD: …]" placeholder.
 export const VALETTO_PRIVACY_MD = [
@@ -28,9 +31,9 @@ export const VALETTO_PRIVACY_MD = [
   "",
   "**Email addresses.** Owners and customers sign in with a 6-digit code we email them. There are no passwords.",
   "",
-  "**Sign-in codes.** We store a keyed hash of each code, never the code itself. A code works for 10 minutes and allows 5 tries. Asking for a new code cancels the old one.",
+  `**Sign-in codes.** We store a keyed hash of each code, never the code itself. A code works for ${F.loginCodeMinutes} minutes and allows ${F.loginCodeTries} tries. Asking for a new code cancels the old one.`,
   "",
-  "**How you found us.** When you ask for a sign-in code on the sign-in page or the page for claiming a workspace, and that page's address has `?ref=` or `?utm_source=`, we store that value as your signup source. If our home page's address has one, its sign-in links carry it over, and your browser keeps it in session storage for 30 minutes. We only keep it if it's a short tag: up to 40 letters, numbers, dashes or underscores, saved in lowercase. Anything else isn't stored. We store the first value, from when your account is created, and we don't replace it later. It doesn't change what you can do in Valetto.",
+  `**How you found us.** When you ask for a sign-in code on the sign-in page or the page for claiming a workspace, and that page's address has \`?ref=\` or \`?utm_source=\`, we store that value as your signup source. If our home page's address has one, its sign-in links carry it over, and your browser keeps it in session storage for ${REF_TTL_MS / 60_000} minutes. We only keep it if it's a short tag: up to 40 letters, numbers, dashes or underscores, saved in lowercase. Anything else isn't stored. We store the first value, from when your account is created, and we don't replace it later. It doesn't change what you can do in Valetto.`,
   "",
   "**Who the owner lets in.** Each owner picks one of two ways in: anyone with the link, or only customers the owner approves by email. If the owner approves customers, we store the email addresses they approve.",
   "",
@@ -50,7 +53,7 @@ export const VALETTO_PRIVACY_MD = [
   "",
   "## Cookies and analytics",
   "",
-  "We set one cookie after you enter a valid sign-in code. It keeps you signed in for up to 30 days. It's HttpOnly, Secure and SameSite=Lax. Signing out deletes it and the matching session record.",
+  `We set one cookie after you enter a valid sign-in code. It keeps you signed in for up to ${F.sessionDays} days. It's HttpOnly, Secure and SameSite=Lax. Signing out deletes it and the matching session record.`,
   "",
   "Our public pages use Vercel Web Analytics to count page views. Vercel describes it as cookieless. We don't use advertising cookies or tracking pixels.",
   "",
@@ -80,8 +83,8 @@ export const VALETTO_PRIVACY_MD = [
   "We keep accounts, owners' pages, requests and results until you ask us to delete them. Nothing deletes them on a schedule.",
   "",
   "Other things we keep:",
-  "- **Sign-in codes:** they stop working after 10 minutes, and we keep the hashed record.",
-  "- **Sessions:** they expire after 30 days. Signing out deletes yours. An expired session is otherwise deleted only if its cookie comes back.",
+  `- **Sign-in codes:** they stop working after ${F.loginCodeMinutes} minutes, and we keep the hashed record.`,
+  `- **Sessions:** they expire after ${F.sessionDays} days. Signing out deletes yours. An expired session is otherwise deleted only if its cookie comes back.`,
   "- **Revoked access:** the customer can't send new requests. [TBD: what happens to a customer's history after the owner revokes access]",
   "- **Rate-limit records** (email and IP): until they're more than a day old.",
   "- **Early access answers:** [TBD: retention period]",

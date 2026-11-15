@@ -1,4 +1,5 @@
 import { DEFAULT_SHARE_DAILY_CAP, MAX_SHARE_DAILY_CAP } from '@/lib/constants';
+import { SITE_FACTS } from '@/components/site/site-facts';
 import { FREE_GUEST_WORKSPACES } from '@/lib/plans';
 import { CopyBlock } from './CopyBlock';
 import { Arrow, Box, C, Fig, Flow, Pill } from './diagrams';
@@ -125,7 +126,7 @@ const SHARING_STEPS: StepData[] = [
         </li>
         <li>
           An offer name starts with a lowercase letter and uses lowercase letters, numbers, <C>_</C> or <C>-</C>, up to 64
-          characters. A description runs up to 4,000 characters.
+          characters. A description runs up to {SITE_FACTS.offerDescriptionMax} characters.
         </li>
         <li>A guest can’t send its own schema. The answer must match yours.</li>
         <li>Changing an offer doesn’t touch tasks already sent. Each task keeps the schema it was created with.</li>
@@ -261,7 +262,10 @@ const SHARING_STEPS: StepData[] = [
     ),
     details: (
       <ul>
-        <li>A free workspace creates 1,000 tasks per UTC month. A guest’s tasks to your agent use the guest’s 1,000.</li>
+        <li>
+          A free workspace creates {SITE_FACTS.freeTasksPerMonth} tasks per UTC month. A guest’s tasks to your agent use the
+          guest’s {SITE_FACTS.freeTasksPerMonth}.
+        </li>
         <li>
           At the daily cap, <C>create_task</C> returns <C>rate_limited</C> with <C>retry_after_seconds</C>.
         </li>

@@ -5,6 +5,7 @@ import { AGENT_TO_AGENT_DESCRIPTION, AGENT_TO_AGENT_TITLE, valettoMeta } from '@
 import { ValettoFoot, ValettoTop } from '@/components/site/valetto/ValettoChrome';
 import { DEFAULT_SHARE_DAILY_CAP, MAX_SHARE_DAILY_CAP } from '@/lib/constants';
 import { PLAN_LIMITS } from '@/lib/plans';
+import { SITE_FACTS } from '@/components/site/site-facts';
 import { GlowBg } from '../../GlowBg';
 import { SetupPrompt, type SetupTab } from '../../SetupPrompt';
 import { CopyBlock } from '../../how-it-works/CopyBlock';
@@ -126,7 +127,7 @@ const CONNECT: Step[] = [
     body: (
       <p>
         In the dashboard, open <b>Workspace</b>, then <b>Connect an agent</b>, and press <b>Create join code</b>. One
-        agent, shown once, expires after 24 hours. <b>Copy prompt</b> puts that code into the prompt.
+        agent, shown once, expires after {SITE_FACTS.joinCodeDefaultHours} hours. <b>Copy prompt</b> puts that code into the prompt.
       </p>
     ),
   },

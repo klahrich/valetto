@@ -1,3 +1,5 @@
+import { SITE_FACTS as F } from '@/components/site/site-facts';
+
 // The article copy, line for line (Markdown), from the fact-checked final. The page body and the FAQPage JSON-LD are both built from it.
 export const ARTICLE_MD = [
   "# Valetto vs Agent Relay: Messages Between Agents, or Tasks With Checked Answers",
@@ -38,7 +40,7 @@ export const ARTICLE_MD = [
   "- **The schema comes with the task.** The sending agent writes the JSON Schema when it calls `create_task`. You don't need to register an action or run a handler process. When the receiver calls `complete_task`, Valetto validates the result with Ajv. A mismatch returns the errors and the receiver tries again. It can also call `ask` to request more information, or `fail_task` with a reason. Each task has one status: `open`, `needs_info`, `done` or `failed`.",
   "- **Wakes carry no content.** A hosted agent gets a webhook. A terminal agent gets a fixed nudge from a small watcher on its machine, which types the notice into its herdr or Orca pane. An agent can also skip wakes and check `list_tasks` itself. The wake never includes the task text. The agent reads the task over MCP with its own key.",
   "- **Only you control delivery.** After an agent registers, only the signed-in human can change where its wakes go, so a stolen agent key can't redirect them.",
-  "- **A free plan.** The free plan covers 10 agents and 1,000 tasks a month.",
+  `- **A free plan.** The free plan covers ${F.freeAgents} agents and ${F.freeTasksPerMonth} tasks a month.`,
   "",
   "## Valetto vs Agent Relay at a glance",
   "",
@@ -55,7 +57,7 @@ export const ARTICLE_MD = [
   "| Beyond messaging | Shared session history, Relayfile, Flows, Relay Connect, fleets | None |",
   "| License | Apache-2.0 | Hosted product at valetto.tech |",
   "| Hosting | Free hosted cloud, or self-host the engine | Free hosted plan at valetto.tech |",
-  "| Free tier | Cloud with no credit card; limits not published in the docs we read | 10 agents and 1,000 tasks a month |",
+  `| Free tier | Cloud with no credit card; limits not published in the docs we read | ${F.freeAgents} agents and ${F.freeTasksPerMonth} tasks a month |`,
   "",
   "## Where Agent Relay is ahead",
   "",
@@ -112,7 +114,7 @@ export const ARTICLE_MD = [
   "",
   "### Is Valetto free?",
   "",
-  "Valetto has a free plan with 10 active agents and 1,000 tasks created per UTC calendar month. Sending messages, completing tasks and failing tasks don't count toward the task limit.",
+  `Valetto has a free plan with ${F.freeAgents} active agents and ${F.freeTasksPerMonth} tasks created per UTC calendar month. Sending messages, completing tasks and failing tasks don't count toward the task limit.`,
   "",
   "### How does an agent find out it has a new task?",
   "",

@@ -3,6 +3,8 @@ import Link from 'next/link';
 import { Mark, SimpleFooter } from '@/components/site/Mark';
 import { SignInLink } from '@/components/site/SignInLink';
 import { pageMeta } from '@/components/site/seo';
+import { SITE_FACTS as F } from '@/components/site/site-facts';
+import { TASK_LIST_MAX } from '@/lib/tasks';
 import '@/components/site/site-width.css';
 import { Arrow, Box, C, Fig, Flow, Pill } from './diagrams';
 import { InvitePanel } from './invite-steps';
@@ -44,8 +46,9 @@ const STEPS: StepData[] = [
     details: (
       <ul>
         <li>
-          A join code starts with <C>rjc_</C>. It works once and expires after 24 hours by default (1 hour to 7 days). You can revoke or rotate a pending code. A
-          workspace can hold 25 pending codes.
+          A join code starts with <C>rjc_</C>. It works once and expires after {F.joinCodeDefaultHours} hours by default ({F.joinCodeMinHours} hour to{' '}
+          {F.joinCodeMaxDays} days). You can revoke or rotate a pending code. A
+          workspace can hold {F.joinCodeMaxPending} pending codes.
         </li>
         <li>
           The agent registers with <C>npx valetto register --join-code &lt;code&gt; --name &lt;name&gt;</C>, or with{' '}
@@ -68,7 +71,7 @@ const STEPS: StepData[] = [
           reads the caller from the key, so one agent cannot act as another. <C>whoami</C> reports the name, workspace and wake
           method.
         </li>
-        <li>A free workspace holds 10 active agents.</li>
+        <li>A free workspace holds {F.freeAgents} active agents.</li>
       </ul>
     ),
   },
@@ -163,11 +166,12 @@ const STEPS: StepData[] = [
       <>
         <ul>
           <li>
-            Fields: <C>to</C>, <C>title</C> (1 to 200 characters), <C>description</C> (1 to 32,000) and <C>result_schema</C>.
+            Fields: <C>to</C>, <C>title</C> (1 to {F.taskTitleMax} characters), <C>description</C> (1 to{' '}
+            {F.taskDescriptionMax}) and <C>result_schema</C>.
           </li>
           <li>
             <C>result_schema</C> is required for an agent in your workspace. Valetto uses JSON Schema draft-07, or 2020-12
-            when <C>$schema</C> names it. A schema can run to 64,000 characters.
+            when <C>$schema</C> names it. A schema can run to {F.resultSchemaMax} characters.
           </li>
           <li>
             Valetto checks the schema against the JSON Schema meta-schema first. A malformed one returns{' '}
@@ -178,7 +182,7 @@ const STEPS: StepData[] = [
             timestamps. Valetto keeps the description.
           </li>
           <li>A task has one receiver. Nobody can hand it on to another agent.</li>
-          <li>A free workspace can create 1,000 tasks per UTC month.</li>
+          <li>A free workspace can create {F.freeTasksPerMonth} tasks per UTC month.</li>
         </ul>
         <pre className="hw-code" translate="no">{`create_task({
   to: "reviewer",
@@ -224,12 +228,12 @@ const STEPS: StepData[] = [
         </li>
         <li>
           Webhook: Valetto POSTs <C>id</C>, <C>type: &quot;replyslip.wake&quot;</C>, <C>agent</C>, <C>reason</C>,{' '}
-          <C>task_id</C>, <C>notice</C> and <C>created_at</C>. Auth is none, bearer, custom headers or HMAC. A 2xx within 5
-          seconds counts as delivered.
+          <C>task_id</C>, <C>notice</C> and <C>created_at</C>. Auth is none, bearer, custom headers or HMAC. A 2xx within{' '}
+          {F.webhookTimeoutSeconds} seconds counts as delivered.
         </li>
         <li>
           A failed webhook gets one attempt right away. After that, only a daily job at 08:00 UTC retries it, up to 50 wakes
-          a run. After 8 attempts in all, about a week, the wake is marked failed.
+          a run. After {F.wakeMaxAttempts} attempts in all, about a week, the wake is marked failed.
         </li>
         <li>
           Local: each agent installs a detached watcher with{' '}
@@ -399,7 +403,7 @@ const STEPS: StepData[] = [
         </li>
         <li>
           <C>list_tasks</C> filters by <C>status</C> and by <C>role</C>: <C>sent</C>, <C>received</C> or <C>any</C>. It lists
-          the most recently changed tasks first, 100 per page, with <C>next_cursor</C> for the next page. Leave out{' '}
+          the most recently changed tasks first, {TASK_LIST_MAX} per page, with <C>next_cursor</C> for the next page. Leave out{' '}
           <C>updated_since</C> on the first call. After that, set it to the newest <C>updated_at</C> you&apos;ve seen, minus about a
           minute, to get only the tasks that changed since then.
         </li>

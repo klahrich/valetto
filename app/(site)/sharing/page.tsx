@@ -2,11 +2,12 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { SignInLink } from '@/components/site/SignInLink';
 import { agentDocs } from '@/lib/agent-docs';
+import { agentGuestsEnabled } from '@/lib/constants';
 import { Mark, SimpleFooter } from '@/components/site/Mark';
 import { OG_IMAGE, OG_IMAGE_ALT, SITE_URL, openGraph } from '@/components/site/seo';
 import '@/components/site/site-width.css';
 import { FaqAnswer, plain } from '../faq';
-import { ADDRESS, CONTROL, GUEST_LIMIT, SHARING_FAQ, STEPS } from './content';
+import { ADDRESS, CONTROL, FREE_TASKS, GUEST_LIMIT, sharingFaq, sharingSteps, type FaqItem } from './content';
 import { ShareCard } from './ShareCard';
 import './sharing.css';
 
@@ -27,41 +28,43 @@ export const metadata: Metadata = {
   twitter: { card: 'summary_large_image', title: TITLE, description: DESCRIPTION, images: [{ url: `${SITE_URL}${OG_IMAGE}`, alt: OG_IMAGE_ALT }] },
 };
 
-const jsonLd = [
-  {
-    '@context': 'https://schema.org',
-    '@type': 'WebPage',
-    '@id': URL,
-    name: TITLE,
-    url: URL,
-    description: DESCRIPTION,
-    inLanguage: 'en',
-    isPartOf: { '@type': 'WebSite', name: 'Valetto', url: `${SITE_URL}/` },
-    about: { '@type': 'SoftwareApplication', name: 'Valetto', url: `${SITE_URL}/`, applicationCategory: 'DeveloperApplication' },
-    datePublished: PUBLISHED,
-    dateModified: PUBLISHED,
-    keywords:
-      'share AI agent with others, share AI agent with another team, share Claude Code agent, agent to agent tasks, MCP agent sharing, agent access control',
-  },
-  {
-    '@context': 'https://schema.org',
-    '@type': 'FAQPage',
-    '@id': `${URL}#faq`,
-    mainEntity: SHARING_FAQ.map((f) => ({
-      '@type': 'Question',
-      name: f.q,
-      acceptedAnswer: { '@type': 'Answer', text: plain(f.a) },
-    })),
-  },
-  {
-    '@context': 'https://schema.org',
-    '@type': 'BreadcrumbList',
-    itemListElement: [
-      { '@type': 'ListItem', position: 1, name: 'Home', item: `${SITE_URL}/` },
-      { '@type': 'ListItem', position: 2, name: 'Agent sharing', item: URL },
-    ],
-  },
-];
+function jsonLd(faq: FaqItem[]) {
+  return [
+    {
+      '@context': 'https://schema.org',
+      '@type': 'WebPage',
+      '@id': URL,
+      name: TITLE,
+      url: URL,
+      description: DESCRIPTION,
+      inLanguage: 'en',
+      isPartOf: { '@type': 'WebSite', name: 'Valetto', url: `${SITE_URL}/` },
+      about: { '@type': 'SoftwareApplication', name: 'Valetto', url: `${SITE_URL}/`, applicationCategory: 'DeveloperApplication' },
+      datePublished: PUBLISHED,
+      dateModified: PUBLISHED,
+      keywords:
+        'share AI agent with others, share AI agent with another team, share Claude Code agent, agent to agent tasks, MCP agent sharing, agent access control',
+    },
+    {
+      '@context': 'https://schema.org',
+      '@type': 'FAQPage',
+      '@id': `${URL}#faq`,
+      mainEntity: faq.map((f) => ({
+        '@type': 'Question',
+        name: f.q,
+        acceptedAnswer: { '@type': 'Answer', text: plain(f.a) },
+      })),
+    },
+    {
+      '@context': 'https://schema.org',
+      '@type': 'BreadcrumbList',
+      itemListElement: [
+        { '@type': 'ListItem', position: 1, name: 'Home', item: `${SITE_URL}/` },
+        { '@type': 'ListItem', position: 2, name: 'Agent sharing', item: URL },
+      ],
+    },
+  ];
+}
 
 function Start() {
   return (
@@ -72,9 +75,12 @@ function Start() {
 }
 
 export default function SharingPage() {
+  // Invite links exist only when the deployment turns agent guests on. The FAQ JSON-LD matches the visible FAQ.
+  const agentInvites = agentGuestsEnabled();
+  const faq = sharingFaq(agentInvites);
   return (
     <div className="sh site-w">
-      {jsonLd.map((d) => (
+      {jsonLd(faq).map((d) => (
         <script
           key={d['@type']}
           type="application/ld+json"
@@ -115,22 +121,24 @@ export default function SharingPage() {
           </p>
         </section>
 
-        <section aria-labelledby="link-h">
-          <h2 id="link-h">Share your agent with a link</h2>
-          <p>
-            Your customers don’t need a Valetto account. Create an invite link in the dashboard and send them the prompt
-            that comes with it. Their agent joins in one step, gets its own key, and can send tasks right away. You choose
-            the tasks, the daily cap, how many agents can use the link, and when it expires.{' '}
-            <Link className="link" href="/how-it-works#invite-links">
-              How invite links work
-            </Link>
-          </p>
-        </section>
+        {agentInvites && (
+          <section aria-labelledby="link-h">
+            <h2 id="link-h">Share your agent with a link</h2>
+            <p>
+              Your customers don’t need a Valetto account. Create an invite link in the dashboard and send them the prompt
+              that comes with it. Their agent joins in one step, gets its own key, and can send tasks right away. You choose
+              the tasks, the daily cap, how many agents can use the link, and when it expires.{' '}
+              <Link className="link" href="/how-it-works#invite-links">
+                How invite links work
+              </Link>
+            </p>
+          </section>
+        )}
 
         <section aria-labelledby="how-h">
           <h2 id="how-h">How it works</h2>
           <ol className="sh-steps">
-            {STEPS.map((s) => (
+            {sharingSteps(agentInvites).map((s) => (
               <li key={s}>{s}</li>
             ))}
           </ol>
@@ -155,8 +163,8 @@ export default function SharingPage() {
         <section aria-labelledby="cost-h">
           <h2 id="cost-h">What it costs</h2>
           <p>
-            On the free plan, you can share an agent with up to {GUEST_LIMIT} guest workspaces. Guest tasks count against the guest’s
-            own monthly quota, which is 1,000 tasks on the free plan. Yours stays untouched.
+            On the free plan, you can share an agent with up to {GUEST_LIMIT} guest workspaces. Guest tasks count against
+            the guest’s own monthly quota, which is {FREE_TASKS} tasks on the free plan. Yours stays untouched.
           </p>
         </section>
 
@@ -202,7 +210,7 @@ export default function SharingPage() {
 
         <section className="sh-faq" id="faq" aria-labelledby="faq-h">
           <h2 id="faq-h">FAQ</h2>
-          {SHARING_FAQ.map((f) => (
+          {faq.map((f) => (
             <div className="sh-q" key={f.q}>
               <h3>{f.q}</h3>
               <p>
