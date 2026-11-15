@@ -146,6 +146,8 @@ export const INPUT_VALIDATOR_CACHE_MAX = 500;
 export const MESSAGE_BODY_MAX = 32_000;
 export const TASK_DESCRIPTION_MAX = 32_000;
 export const TASK_TITLE_MAX = 200;
+/** create_task idempotency_key (#225): 1 to 128 of letters, digits, and . _ : - */
+export const IDEMPOTENCY_KEY_PATTERN = /^[A-Za-z0-9._:-]{1,128}$/;
 
 export const PRODUCT_NAME = 'Valetto';
 

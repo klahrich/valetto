@@ -281,6 +281,10 @@ export const tasks = pgTable(
     input: jsonb('input').$type<Record<string, unknown>>(),
     /** Customer-supplied idempotency key (R5). Unique per sending workspace. */
     clientRequestId: uuid('client_request_id'),
+    /** Agent-supplied create_task idempotency key (#225). Unique per sending agent (from_agent_id), no expiry. */
+    idempotencyKey: text('idempotency_key'),
+    /** sha256 of the canonical create_task request, set with idempotencyKey. A reused key with another hash is a 409. */
+    requestHash: text('request_hash'),
     /** When the current question was asked. Cleared when the sender answers. */
     questionAskedAt: ts('question_asked_at'),
     /** Copy of the target agent's review_mode when the task was created. review_first means the owner gates it. */
@@ -317,6 +321,10 @@ export const tasks = pgTable(
     uniqueIndex('tasks_client_request_unique')
       .on(table.fromWorkspaceId, table.clientRequestId)
       .where(sql`${table.clientRequestId} is not null`),
+    uniqueIndex('tasks_idempotency_key_unique')
+      .on(table.fromAgentId, table.idempotencyKey)
+      .where(sql`${table.idempotencyKey} is not null`),
+    check('tasks_idempotency_pair_check', sql`(${table.idempotencyKey} is null) = (${table.requestHash} is null)`),
   ],
 );
 
