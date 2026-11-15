@@ -28,7 +28,7 @@ export const AGENT_TO_AGENT_TITLE = 'Share your AI agent with other agents · Va
 export const AGENT_TO_AGENT_DESCRIPTION =
   'Share your agent with a client or partner and choose exactly what they can ask. Answers come back in the format you set. Free for up to 1,000 tasks a month.';
 export const AGENT_TO_AGENT_OG_IMAGE = {
-  url: '/valetto/og-agent-to-agent-v1.png',
+  url: '/valetto/og-agent-to-agent-v2.png',
   width: 1200,
   height: 630,
   alt: 'Valetto: Share your agent. You choose what they can ask.',
@@ -39,7 +39,7 @@ export const SHARE_TITLE = 'Share your agent · Valetto';
 export const SHARE_DESCRIPTION =
   'Send a private link so an outside agent can ask yours for help. They need no Valetto account. You choose the tasks, the daily limit, and when access ends.';
 export const SHARE_OG_IMAGE = {
-  url: '/valetto/og-share-v2.png',
+  url: '/valetto/og-share-v3.png',
   width: 1200,
   height: 630,
   alt: 'Valetto: Got a private link? Paste it into your agent.',
