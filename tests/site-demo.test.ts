@@ -41,6 +41,7 @@ import { RATE_LIMITS } from '@/lib/constants';
 import { cappedReply, needsOwnerReply } from '@/lib/site-assistant/replies';
 import { call } from './helpers';
 import { answer, createSiteBusiness, createSiteDemo, FIXTURE_DIR, fakeModel, MAPLE_CONTEXT, NO_MODEL, TEST_LLM_CONFIG } from './site-fixtures';
+import { realPostgres } from './test-database';
 
 const URL_BASE = 'http://localhost';
 
@@ -814,7 +815,8 @@ describe('caps', () => {
     return row!;
   }
 
-  it('lets exactly the cap through when requests race on separate connections', async () => {
+  // Races statements across separate sessions: real Postgres only (TEST_DATABASE_URL). PGlite would serialize them.
+  it.runIf(realPostgres)('lets exactly the cap through when requests race on separate connections', async () => {
     const { business, link } = await createSiteDemo({ dailyMessageCap: 5, visitorDailyMessageCap: 100 });
     const convo = await conversationFor(business.id, link.id);
     const day = usageDay();
@@ -831,7 +833,8 @@ describe('caps', () => {
     expect(usage!.messages).toBe(5);
   });
 
-  it('reserves worst-case cost atomically against the business cap, then settles to actual', async () => {
+  // Races statements across separate sessions: real Postgres only (TEST_DATABASE_URL). PGlite would serialize them.
+  it.runIf(realPostgres)('reserves worst-case cost atomically against the business cap, then settles to actual', async () => {
     const { business, link } = await createSiteDemo({ dailyCostCapMicroUsd: 1_000 });
     const convo = await conversationFor(business.id, link.id);
     const day = usageDay();

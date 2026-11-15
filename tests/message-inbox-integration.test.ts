@@ -8,6 +8,7 @@ import { POST as markMessagesRoute } from '@/app/api/v1/messages/read/route';
 import { POST as redeemRoute } from '@/app/api/v1/invites/redeem/route';
 import { PATCH as patchWorkspace } from '@/app/api/v1/workspaces/current/route';
 import { call, createAgent, createKey, mcpListTools, mcpTool, signIn } from './helpers';
+import { realPostgres } from './test-database';
 
 /**
  * Real Postgres, the migrated test database (including 0020), two extra connections.
@@ -50,7 +51,8 @@ async function pair() {
   };
 }
 
-describe('inbox arrival order versus commit order', () => {
+// Interleaves open transactions on separate sessions: real Postgres only (TEST_DATABASE_URL).
+describe.runIf(realPostgres)('inbox arrival order versus commit order', () => {
   const open: postgres.Sql[] = [];
 
   afterEach(async () => {
