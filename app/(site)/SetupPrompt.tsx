@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
+import { SITE_FACTS } from '@/components/site/site-facts';
 import './setup-prompt.css';
 
 export type SetupTab = { key: string; label: string; prompt: string; note: string | null };
@@ -120,7 +121,7 @@ export function SetupPrompt({ tabs = DEFAULT_TABS, localExtra }: { tabs?: readon
             <a className="link" href="/dashboard">
               dashboard
             </a>{' '}
-            and paste it in. Each code works once and expires after 24 hours.
+            and paste it in. Each code works once and expires after {SITE_FACTS.joinCodeDefaultHours} hours.
           </p>
           {t.key === 'local' && localExtra !== undefined && localExtra}
           {t.key === 'local' && localExtra === undefined && (

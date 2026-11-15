@@ -1,32 +1,49 @@
-import { FREE_CUSTOMERS_PER_BOT } from '@/lib/plans';
+import { SITE_FACTS } from '@/components/site/site-facts';
 import type { Part } from '../faq';
 
 /** Free-plan pending or approved guests per shared agent, as shown on the page. */
-export const GUEST_LIMIT = FREE_CUSTOMERS_PER_BOT.toLocaleString('en-US');
+export const GUEST_LIMIT = SITE_FACTS.freeGuestsPerAgent;
+/** A free workspace's monthly task quota, which a guest's tasks use. */
+export const FREE_TASKS = SITE_FACTS.freeTasksPerMonth;
+const CAP = SITE_FACTS.guestDailyCap;
 
 export const ADDRESS = '@karim/innovatorbot';
 
 /** Example menu on the hero card. Names only, no schema. */
 export const MENU = ['Review a pull request', 'Summarize a document', 'Draft release notes'];
 
-export const STEPS = [
-  'Set a workspace handle in the dashboard.',
-  `Turn on sharing for one agent. It gets an address like ${ADDRESS}.`,
-  'List the tasks it accepts, each with a result schema you write.',
-  'Invite a team by its Valetto handle and approve it, or send an invite link to anyone.',
-  'Their agents send tasks to the address over MCP.',
-  'Revoke access at any time. Their open tasks fail with “access revoked”.',
-];
+/**
+ * Agent invite links (rsi_) work only when the deployment sets VALETTO_AGENT_GUESTS=1. The page passes
+ * agentGuestsEnabled() so it never advertises them when they are off.
+ */
+export function sharingSteps(agentInvites: boolean): string[] {
+  return [
+    'Set a workspace handle in the dashboard.',
+    `Turn on sharing for one agent. It gets an address like ${ADDRESS}.`,
+    'List the tasks it accepts, each with a result schema you write.',
+    agentInvites
+      ? 'Invite a team by its Valetto handle and approve it, or send an invite link to anyone.'
+      : 'Invite a team by its Valetto handle and approve it.',
+    'Their agents send tasks to the address over MCP.',
+    'Revoke access at any time. Their open tasks fail with “access revoked”.',
+  ];
+}
 
 export const CONTROL: Part[][] = [
   ['You invite each team by its Valetto handle. Only you approve it, signed in to the dashboard. Agents can’t approve guests.'],
   ['Guests reach the one agent you shared. Your other agents stay private.'],
-  ['Each guest has a daily cap, 50 tasks by default. You can change it per guest.'],
+  [`Each guest has a daily cap, ${CAP} tasks by default. You can change it per guest.`],
   ['Guest tasks arrive marked as untrusted, so your agent knows the task came from outside.'],
 ];
 
-/** One source for the visible FAQ and the FAQPage JSON-LD. */
-export const SHARING_FAQ: { q: string; a: Part[] }[] = [
+export type FaqItem = { q: string; a: Part[] };
+
+/** One source for the visible FAQ and the FAQPage JSON-LD. Invite-link answers only when agent invites are on. */
+export function sharingFaq(agentInvites: boolean): FaqItem[] {
+  return [...FAQ_HEAD, ...(agentInvites ? FAQ_INVITE_LINKS : []), ...FAQ_TAIL];
+}
+
+const FAQ_HEAD: FaqItem[] = [
   {
     q: 'Can I share my AI agent with someone outside my workspace?',
     a: [
@@ -37,9 +54,7 @@ export const SHARING_FAQ: { q: string; a: Part[] }[] = [
   },
   {
     q: 'Who can send tasks to a shared agent?',
-    a: [
-      'Teams you invite by their Valetto handle and approve, or agents that redeem an invite link you created. Each guest gets a daily cap, 50 tasks by default.',
-    ],
+    a: [`Teams you invite by their Valetto handle and approve. Each guest gets a daily cap, ${CAP} tasks by default.`],
   },
   {
     q: 'Can a guest reach my other agents?',
@@ -57,6 +72,16 @@ export const SHARING_FAQ: { q: string; a: Part[] }[] = [
       `The guest does. Their tasks count against their own monthly quota, not yours. On the free plan, you can have up to ${GUEST_LIMIT} guest workspaces per shared agent.`,
     ],
   },
+];
+
+/** Agent invite links (VALETTO_AGENT_GUESTS=1). */
+const FAQ_INVITE_LINKS: FaqItem[] = [
+  {
+    q: 'Can an agent outside Valetto send tasks to my shared agent?',
+    a: [
+      `Yes, with an invite link you create. The agent redeems it and becomes a guest with the same daily cap, ${CAP} tasks by default.`,
+    ],
+  },
   {
     q: 'Does my customer need a Valetto account?',
     a: [
@@ -71,6 +96,9 @@ export const SHARING_FAQ: { q: string; a: Part[] }[] = [
     q: 'Can I stop an invite link?',
     a: ['Yes. Revoke it in the dashboard and nobody new can join with it. You can also revoke everyone who already joined with it in the same step.'],
   },
+];
+
+const FAQ_TAIL: FaqItem[] = [
   {
     q: 'How do I stop a guest?',
     a: ['Revoke their access in the dashboard. It takes effect at once, and their open tasks fail with the reason “access revoked”.'],

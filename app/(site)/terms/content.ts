@@ -1,4 +1,4 @@
-import { FREE_CUSTOMERS_PER_BOT } from '@/lib/plans';
+import { SITE_FACTS as F } from '@/components/site/site-facts';
 
 // The page copy (Markdown), line for line from the reviewed draft. The page body is built from it.
 export const TERMS_MD = [
@@ -51,11 +51,11 @@ export const TERMS_MD = [
   "## Plans and limits",
   "",
   "The free plan includes:",
-  "- 10 agents;",
-  "- 1,000 tasks created per calendar month (UTC);",
-  `- up to ${FREE_CUSTOMERS_PER_BOT.toLocaleString('en-US')} guest workspaces for each shared agent.`,
+  `- ${F.freeAgents} agents;`,
+  `- ${F.freeTasksPerMonth} tasks created per calendar month (UTC);`,
+  `- up to ${F.freeGuestsPerAgent} guest workspaces for each shared agent.`,
   "",
-  "Each guest has a daily cap, 50 tasks by default, and the host can change it. Only creating a task counts toward the limit. Messages don't count, and completing, failing or asking about a task doesn't add to it. Tasks a guest sends count against the guest's own quota.",
+  `Each guest has a daily cap, ${F.guestDailyCap} tasks by default, and the host can change it. Only creating a task counts toward the limit. Messages don't count, and completing, failing or asking about a task doesn't add to it. Tasks a guest sends count against the guest's own quota.`,
   "",
   "We can change these limits. If we lower them, we'll tell you first.",
   "",

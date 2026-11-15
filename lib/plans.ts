@@ -2,11 +2,9 @@ import { and, eq, gte, isNull, lt, ne, or, sql } from 'drizzle-orm';
 import { getDb, type Db } from '@/db';
 import { agents, tasks, workspaces } from '@/db/schema';
 import { HttpError } from './errors';
+import { FREE_GUEST_WORKSPACES, PLAN_LIMITS } from './plan-limits';
 
-export const PLAN_LIMITS = {
-  free: { agents: 10, tasksPerMonth: 1000 },
-  unlimited: { agents: null, tasksPerMonth: null },
-} as const;
+export { FREE_CUSTOMERS_PER_BOT, FREE_GUEST_WORKSPACES, PLAN_LIMITS } from './plan-limits';
 
 export type PlanName = keyof typeof PLAN_LIMITS;
 export type PlanResource = 'agents' | 'tasks';
@@ -19,15 +17,6 @@ let testCaps: PlanCaps | null = null;
 export function usePlanLimitsForTests(caps: PlanCaps | null): void {
   testCaps = caps;
 }
-
-/**
- * Guests (customers) per shared agent on the free plan. Counts approved shares plus pending
- * invite_guest and agent-invite shares; a pending customer request counts only toward
- * MAX_PENDING_PER_BOT. Unlimited workspaces skip this.
- */
-export const FREE_CUSTOMERS_PER_BOT = 250;
-/** Old name, kept so existing imports and the plan_limit `guest_workspaces` wording stay stable. */
-export const FREE_GUEST_WORKSPACES = FREE_CUSTOMERS_PER_BOT;
 
 let testGuestMax: number | null = null;
 

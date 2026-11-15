@@ -1,3 +1,7 @@
+import { SITE_FACTS as F } from '@/components/site/site-facts';
+import { REF_TTL_MS } from '@/components/site/ref-keep';
+import { EMAIL_TTL_MS } from '@/components/site/auth-client';
+
 // The page copy (Markdown), line for line from the reviewed draft. The page body is built from it.
 export const PRIVACY_MD = [
   "# Privacy policy",
@@ -19,9 +23,9 @@ export const PRIVACY_MD = [
   "",
   "**Your email address.** You sign in with a 6-digit code we email you. There are no passwords. Your user record is created when you first ask for a code, even if you never enter it. You can't change the email address on an account yet.",
   "",
-  "**Sign-in codes.** We store a keyed hash of each code, never the code itself. A code works for 10 minutes and allows 5 tries. Asking for a new code cancels the old one.",
+  `**Sign-in codes.** We store a keyed hash of each code, never the code itself. A code works for ${F.loginCodeMinutes} minutes and allows ${F.loginCodeTries} tries. Asking for a new code cancels the old one.`,
   "",
-  "**How you found us.** When you ask for a sign-in code on the home page, the sign-in page or the page for claiming a workspace, and that page's address has `?ref=` or `?utm_source=`, we store that value as your signup source. If a link brings you to one of our pages with `?ref=` or `?utm_source=`, your browser keeps that label in session storage for up to 30 minutes, and our sign-in links add it back, so it's still attached when you sign up. We only keep it if it's a short tag: up to 40 letters, numbers, dashes or underscores, saved in lowercase. Anything else isn't stored. We store the first value, from when your user record is created, and we don't replace it later. If you came from our sharing page, we also note that you were interested in sharing. Neither of these changes what you can do in ReplySlip.",
+  `**How you found us.** When you ask for a sign-in code on the home page, the sign-in page or the page for claiming a workspace, and that page's address has \`?ref=\` or \`?utm_source=\`, we store that value as your signup source. If a link brings you to one of our pages with \`?ref=\` or \`?utm_source=\`, your browser keeps that label in session storage for up to ${REF_TTL_MS / 60_000} minutes, and our sign-in links add it back, so it's still attached when you sign up. We only keep it if it's a short tag: up to 40 letters, numbers, dashes or underscores, saved in lowercase. Anything else isn't stored. We store the first value, from when your user record is created, and we don't replace it later. If you came from our sharing page, we also note that you were interested in sharing. Neither of these changes what you can do in ReplySlip.`,
   "",
   "**Marketing consent.** The sign-in page has an unchecked box: \"Email me about new plans and features. Unsubscribe anytime.\" If you check it, we record that, with the exact wording and the time. If you unsubscribe, we record that time too. We keep the consent record after you unsubscribe, as proof of what you agreed to. We don't send marketing email yet.",
   "",
@@ -53,11 +57,11 @@ export const PRIVACY_MD = [
   "",
   "## Cookies and browser storage",
   "",
-  "We set one cookie, `replyslip_session`, after you enter a valid sign-in code. It keeps you signed in for up to 30 days. It's HttpOnly, Secure and SameSite=Lax. Signing out deletes it and the matching session record.",
+  `We set one cookie, \`replyslip_session\`, after you enter a valid sign-in code. It keeps you signed in for up to ${F.sessionDays} days. It's HttpOnly, Secure and SameSite=Lax. Signing out deletes it and the matching session record.`,
   "",
   "Your browser's session storage holds three small items, and your browser clears it when you close the tab:",
-  "- the email you typed on the home page, for up to 15 minutes, so it doesn't have to go in a URL;",
-  "- a `ref` value from the page address, for 30 minutes, so it carries over to sign-in;",
+  `- the email you typed on the home page, for up to ${EMAIL_TTL_MS / 60_000} minutes, so it doesn't have to go in a URL;`,
+  `- a \`ref\` value from the page address, for ${REF_TTL_MS / 60_000} minutes, so it carries over to sign-in;`,
   "- a note that you closed the \"Hi HN\" message.",
   "",
   "The storage itself isn't sent to us, but sign-in uses these values: the email to send your code, and the ref value as your signup source.",
@@ -108,9 +112,9 @@ export const PRIVACY_MD = [
   "We keep your account, workspace, agents, tasks, messages and wake records until you ask us to delete them. Nothing deletes them on a schedule.",
   "",
   "Other things we keep:",
-  "- **Sign-in codes:** they stop working after 10 minutes, and we keep the hashed record.",
-  "- **Join codes:** they stop working when they expire, after 1 hour to 7 days, and we keep the record.",
-  "- **Sessions:** they expire after 30 days. Signing out deletes yours. An expired session is otherwise deleted only if its cookie comes back.",
+  `- **Sign-in codes:** they stop working after ${F.loginCodeMinutes} minutes, and we keep the hashed record.`,
+  `- **Join codes:** they stop working when they expire, after ${F.joinCodeMinHours} hour to ${F.joinCodeMaxDays} days, and we keep the record.`,
+  `- **Sessions:** they expire after ${F.sessionDays} days. Signing out deletes yours. An expired session is otherwise deleted only if its cookie comes back.`,
   "- **Revoking:** revoking an agent, key, join code or guest access stops it from working right away. Its record stays, including the agent's description, webhook URL, encrypted webhook secret, tasks and messages.",
   "- **Rate-limit records** (email and IP): until they're more than a day old.",
   "",
