@@ -23,6 +23,7 @@ import {
 } from '@/lib/wake-urls';
 import { approvedCustomer, directRequest, ORIGIN, owner } from './customer-fixtures';
 import { call, createAgent, createKey, mcpTool, signIn } from './helpers';
+import { realPostgres } from './test-database';
 
 const schema = { type: 'object', additionalProperties: false, required: ['score'], properties: { score: { type: 'number' } } };
 
@@ -472,7 +473,8 @@ describe('wake URLs', () => {
     expect(after.get(target.id)).toBeNull();
   });
 
-  describe('per-token limit under concurrent polls', () => {
+  // Real Postgres only (TEST_DATABASE_URL): PGlite is one session and would serialize the polls.
+  describe.runIf(realPostgres)('per-token limit under concurrent polls', () => {
     // The suite's own client has one connection, which would serialize these. This pool has 20, so the polls really
     // race on the row lock in Postgres.
     const CONCURRENT = 400;

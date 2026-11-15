@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { and, eq } from 'drizzle-orm';
 import postgres from 'postgres';
 import { afterEach, describe, expect, it } from 'vitest';
+import { realPostgres } from './test-database';
 import { GET as listAgentsRoute } from '@/app/api/v1/agents/route';
 import { GET as getAccess, PUT as putAccess } from '@/app/api/v1/agents/[id]/customer-access/route';
 import { GET as listInvitesRoute, POST as postInvite } from '@/app/api/v1/agents/[id]/invites/route';
@@ -686,7 +687,8 @@ async function inviteRow(id: string) {
 }
 
 describe('customer links: concurrency (spec 13.8 #18)', () => {
-  it('an accept racing a rotate waits on the agent lock, then fails like an unknown link, with no deadlock', async () => {
+  // Needs a second session holding row locks while the app waits on them: real Postgres only (TEST_DATABASE_URL).
+  it.runIf(realPostgres)('an accept racing a rotate waits on the agent lock, then fails like an unknown link, with no deadlock', async () => {
     const o = await owner();
     await setAccess(o, { mode: 'open_link' });
     const { token, invite } = await createLink(o, { kind: 'public' });
@@ -708,7 +710,8 @@ describe('customer links: concurrency (spec 13.8 #18)', () => {
     expect((await inviteRow(invite.id)).uses).toBe(0);
   });
 
-  it('an accept racing a revoke waits, then fails, and never leaves a share behind', async () => {
+  // Needs a second session holding row locks while the app waits on them: real Postgres only (TEST_DATABASE_URL).
+  it.runIf(realPostgres)('an accept racing a revoke waits, then fails, and never leaves a share behind', async () => {
     const o = await owner();
     await setAccess(o, { mode: 'open_link' });
     const { token, invite } = await createLink(o, { kind: 'public' });
@@ -744,7 +747,8 @@ describe('customer links: concurrency (spec 13.8 #18)', () => {
     expect((await inviteRow(invite.id)).uses).toBe(approved);
   });
 
-  it('holds the real free cap of 250 customers per bot when two accepts race for the last slot', async () => {
+  // Needs a second session holding row locks while the app waits on them: real Postgres only (TEST_DATABASE_URL).
+  it.runIf(realPostgres)('holds the real free cap of 250 customers per bot when two accepts race for the last slot', async () => {
     const o = await owner();
     await setAccess(o, { mode: 'open_link' });
     const { token } = await createLink(o, { kind: 'public' });

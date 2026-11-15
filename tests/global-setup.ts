@@ -1,91 +1,53 @@
-import { drizzle } from 'drizzle-orm/postgres-js';
-import { migrate } from 'drizzle-orm/postgres-js/migrator';
+import { PGlite } from '@electric-sql/pglite';
+import { PGLiteSocketServer } from '@electric-sql/pglite-socket';
+import { drizzle as drizzlePglite } from 'drizzle-orm/pglite';
+import { migrate as migratePglite } from 'drizzle-orm/pglite/migrator';
+import { drizzle as drizzlePostgres } from 'drizzle-orm/postgres-js';
+import { migrate as migratePostgres } from 'drizzle-orm/postgres-js/migrator';
 import postgres from 'postgres';
-import { TEST_DATABASE_PREFIX, maintenanceUrl, runPid, testDatabase } from './test-database';
+import { testDatabaseOverride } from './test-database';
 
-function quoteIdent(name: string): string {
-  return `"${name.replace(/"/g, '""')}"`;
-}
+const MIGRATIONS = './drizzle';
 
-function processAlive(pid: number): boolean {
+/** Migrates the existing database named by TEST_DATABASE_URL. Nothing to tear down. */
+async function migrateServer(url: string): Promise<() => Promise<void>> {
+  const sql = postgres(url, { max: 1, onnotice: () => {} });
   try {
-    process.kill(pid, 0);
-    return true;
-  } catch (err) {
-    return (err as NodeJS.ErrnoException).code === 'EPERM';
-  }
-}
-
-function isLocalHost(url: string): boolean {
-  const host = new URL(url).hostname;
-  return host === '127.0.0.1' || host === 'localhost' || host === '::1' || host === '[::1]';
-}
-
-async function withMaintenance<T>(url: string, fn: (sql: postgres.Sql) => Promise<T>): Promise<T> {
-  const sql = postgres(maintenanceUrl(url), { max: 1, onnotice: () => {} });
-  try {
-    return await fn(sql);
+    await migratePostgres(drizzlePostgres(sql), { migrationsFolder: MIGRATIONS });
   } finally {
     await sql.end();
   }
+  process.env.DATABASE_URL = url;
+  return async () => {};
 }
 
-/** Drop databases left by runs that were killed before teardown (their pid is gone). Local server only. */
-async function sweepStale(sql: postgres.Sql, current: string): Promise<void> {
-  const rows = await sql<{ datname: string }[]>`
-    select datname from pg_database where datname like ${`${TEST_DATABASE_PREFIX}%`}
-  `;
-  for (const { datname } of rows) {
-    const pid = runPid(datname);
-    if (datname === current || pid === null || processAlive(pid)) continue;
-    // No FORCE: a database somebody is still connected to stays.
-    await sql.unsafe(`drop database if exists ${quoteIdent(datname)}`).catch(() => {});
+/**
+ * A fresh in-memory PGlite for this run, migrated, then served over the Postgres wire protocol on a free local port.
+ * Workers are started after global setup and inherit DATABASE_URL from this process.
+ */
+async function startPglite(): Promise<() => Promise<void>> {
+  const db = new PGlite();
+  let server: PGLiteSocketServer | undefined;
+  try {
+    await migratePglite(drizzlePglite(db), { migrationsFolder: MIGRATIONS });
+    // Generous: every postgres client a test opens counts until it closes. PGlite still runs one query at a time.
+    server = new PGLiteSocketServer({ db, host: '127.0.0.1', port: 0, maxConnections: 100 });
+    await server.start();
+  } catch (err) {
+    await server?.stop().catch(() => {});
+    await db.close().catch(() => {});
+    throw err;
   }
-}
-
-async function dropDatabase(url: string, name: string): Promise<void> {
-  await withMaintenance(url, (sql) => sql.unsafe(`drop database if exists ${quoteIdent(name)} with (force)`));
+  // getServerConn() is "127.0.0.1:<port>" once listening on port 0.
+  process.env.DATABASE_URL = `postgres://postgres:postgres@${server.getServerConn()}/postgres`;
+  const listening = server;
+  return async () => {
+    await listening.stop();
+    await db.close();
+  };
 }
 
 export default async function setup(): Promise<() => Promise<void>> {
-  const db = testDatabase();
-  if (db.owned) {
-    await withMaintenance(db.url, async (sql) => {
-      if (isLocalHost(db.url)) await sweepStale(sql, db.name);
-      await sql.unsafe(`create database ${quoteIdent(db.name)}`);
-    });
-  }
-
-  let dropped = false;
-  const drop = async () => {
-    if (!db.owned || dropped) return;
-    dropped = true;
-    await dropDatabase(db.url, db.name);
-  };
-  const onSignal = (signal: NodeJS.Signals) => {
-    void drop().finally(() => process.kill(process.pid, signal));
-  };
-
-  try {
-    const sql = postgres(db.url, { max: 1, onnotice: () => {} });
-    try {
-      await migrate(drizzle(sql), { migrationsFolder: './drizzle' });
-    } finally {
-      await sql.end();
-    }
-  } catch (err) {
-    await drop().catch(() => {});
-    throw err;
-  }
-
-  if (db.owned) {
-    process.once('SIGINT', onSignal);
-    process.once('SIGTERM', onSignal);
-  }
-
-  return async () => {
-    process.off('SIGINT', onSignal);
-    process.off('SIGTERM', onSignal);
-    await drop();
-  };
+  const override = testDatabaseOverride();
+  return override ? migrateServer(override) : startPglite();
 }

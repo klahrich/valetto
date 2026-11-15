@@ -92,7 +92,7 @@ scripts/migrate.ts   npm run db:migrate
 scripts/bundle-valetto.mjs   rebuild packages/cli/valetto.mjs (esbuild, Node 18, zero npm deps)
 packages/cli/        npm run valetto -- watch | register | key-path, and the served valetto.mjs bundle (nudge drivers in src/drivers)
 docs/drivers.md      how to add a local nudge driver
-tests/               Vitest integration tests against local Postgres
+tests/               Vitest integration tests against an in-process Postgres (PGlite)
 docs/API.md          committed copy of the generated HTTP reference
 ```
 
@@ -275,9 +275,9 @@ npm run dev
 
 The app listens on `http://localhost:3000`. With `RESEND_API_KEY` empty, the sign-in code is in the dev server log.
 
-`npm test` does not read `.env`. `vitest.config.ts` sets the test variables itself. Each run creates its own database on the local server at `127.0.0.1:5432` (role `replyslip`, password `replyslip`, which needs `CREATEDB`), named `replyslip_test_<pid>_<random>`. `tests/global-setup.ts` migrates it before the tests and drops it afterwards, also when the tests fail. A run that was killed before teardown leaves its database behind; the next run on the same machine drops it when that pid is gone. Several runs can go at once without sharing rows.
+`npm test` needs no database server. It does not read `.env`; `vitest.config.ts` sets the test variables itself. `tests/global-setup.ts` starts a fresh in-memory Postgres for each run with [PGlite](https://pglite.dev), applies the migrations in `drizzle/`, and serves it over the Postgres wire protocol on a free `127.0.0.1` port. Tests reach it through `DATABASE_URL` and `getDb()` exactly as the app reaches a real server, and it is gone when the run ends. Several runs can go at once without sharing rows.
 
-To use one existing database instead, set `TEST_DATABASE_URL`, for example `TEST_DATABASE_URL=postgres://replyslip:replyslip@127.0.0.1:5432/replyslip_test npm test`. That database is migrated but never created or dropped, and parallel runs against it share rows again.
+PGlite is a single Postgres session: concurrent connections are queued onto it one transaction at a time. The few tests that need truly concurrent sessions (one connection holding row locks while another waits, or statements racing across connections) are gated with `realPostgres` from `tests/test-database.ts` and are skipped by default. To run them, point `TEST_DATABASE_URL` at an existing database on a real server, for example `TEST_DATABASE_URL=postgres://valetto:valetto@127.0.0.1:5432/valetto_test npm test`. That database is migrated but never created or dropped, and parallel runs against it share rows.
 
 | Script | Command |
 | --- | --- |
