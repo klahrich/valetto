@@ -10,6 +10,7 @@
     "start": "next start",
     "test": "vitest run",
     "db:generate": "drizzle-kit generate",
+    "docs:generate": "tsx scripts/generate-agent-docs.ts",
     "db:migrate": "tsx scripts/migrate.ts",
     "telegram:setup": "tsx scripts/telegram-setup.ts",
     "valetto": "tsx packages/cli/src/index.ts",

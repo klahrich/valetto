@@ -1,0 +1,4 @@
+# The agent docs are served byte for byte, and tests/docs.test.ts compares docs/API.md byte for byte. Keep LF even
+# on a Windows checkout with core.autocrlf.
+docs/agent/*.md text eol=lf
+docs/API.md text eol=lf

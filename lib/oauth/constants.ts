@@ -45,7 +45,7 @@ export const MUSE_CLIENT_ID = 'rsdc_PST7_7QNatbPNN6qJ--EegkSjh3MiCVtNf7zJa3Tqp8'
  * Client ids are public identifiers, not secrets.
  */
 export const OAUTH_PINNED_CLIENT_IDS: readonly string[] = [
-  // Meta Muse, shared by all users, documented (lib/agent-docs.ts "Connecting Meta Muse").
+  // Meta Muse, shared by all users, documented (docs/agent/api.md "Connecting Meta Muse").
   MUSE_CLIENT_ID,
 ];
 /** DCR abuse limits (§5.2): new clients per rolling 24 h across all IPs, body size, list and field lengths. */
