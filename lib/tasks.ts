@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { and, desc, eq, inArray, or, sql } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 import { getDb, type Db } from '@/db';
@@ -14,8 +15,8 @@ import {
   type TaskRow,
 } from '@/db/schema';
 import type { AgentPrincipal } from './agents';
-import { MESSAGE_BODY_MAX, TASK_ANSWER_MAX } from './constants';
-import { HttpError } from './errors';
+import { IDEMPOTENCY_KEY_PATTERN, MESSAGE_BODY_MAX, TASK_ANSWER_MAX } from './constants';
+import { HttpError, isUniqueViolation } from './errors';
 import { assertExternalCredential } from './invites';
 import { OWN_TASKS_ONLY_MESSAGE } from './oauth/scopes';
 import { assertResultSchema, validateResult } from './validate';
@@ -330,20 +331,116 @@ export async function sendMessage(
   return written.payload;
 }
 
-export async function createTask(
-  caller: AgentPrincipal,
-  input: {
-    to: string;
-    title?: string;
-    description?: string;
-    input?: unknown;
-    resultSchema?: unknown;
-    offer?: string;
-    /** Customer idempotency key (R5). Unique per sending workspace. */
-    clientRequestId?: string;
-  },
-) {
+export type CreateTaskInput = {
+  to: string;
+  title?: string;
+  description?: string;
+  input?: unknown;
+  resultSchema?: unknown;
+  offer?: string;
+  /** Customer idempotency key (R5). Unique per sending workspace. */
+  clientRequestId?: string;
+  /** Agent idempotency key (#225). Unique per sending agent, no expiry. */
+  idempotencyKey?: string;
+};
+
+function canonicalJson(value: unknown): string {
+  if (value === undefined || value === null) return 'null';
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`;
+  if (typeof value === 'object') {
+    const record = value as Record<string, unknown>;
+    const entries = Object.keys(record)
+      .filter((key) => record[key] !== undefined)
+      .sort()
+      .map((key) => `${JSON.stringify(key)}:${canonicalJson(record[key])}`);
+    return `{${entries.join(',')}}`;
+  }
+  return JSON.stringify(value);
+}
+
+/** sha256 of the semantic create_task request (to, offer, title, description, input, result_schema), key order ignored. */
+export function createTaskRequestHash(input: CreateTaskInput): string {
+  const canonical = canonicalJson({
+    to: input.to,
+    offer: input.offer ?? null,
+    title: input.title ?? null,
+    description: input.description ?? null,
+    input: input.input ?? null,
+    result_schema: input.resultSchema ?? null,
+  });
+  return createHash('sha256').update(canonical).digest('hex');
+}
+
+export function assertIdempotencyKey(key: string): string {
+  if (!IDEMPOTENCY_KEY_PATTERN.test(key)) {
+    throw new HttpError(
+      400,
+      'validation_error',
+      'idempotency_key must be 1 to 128 characters: letters, digits, period, underscore, colon, or hyphen.',
+    );
+  }
+  return key;
+}
+
+/**
+ * The task this agent already created with this idempotency key, as create_task returned it, or null. A different
+ * request under the same key is a 409. Scoped to the caller's own agent, so it only ever returns the caller's task.
+ */
+async function replayIdempotentTask(caller: AgentPrincipal, key: string, hash: string) {
+  const db = getDb();
+  const [task] = await db
+    .select()
+    .from(tasks)
+    .where(and(eq(tasks.fromAgentId, caller.agentId), eq(tasks.idempotencyKey, key)))
+    .limit(1);
+  if (!task) return null;
+  if (task.requestHash !== hash) {
+    throw new HttpError(
+      409,
+      'idempotency_key_reused',
+      'This idempotency_key was already used for a different request. Use a new key for a new task.',
+    );
+  }
+  await assertSentGrantLive(db, task, caller.workspaceId);
+  const names = await namesFor(db, task);
+  const labels = await labelsFor(db, [task]);
+  return presentTask(caller, serializeTask(task, names.from, names.to, caller.workspaceId, labels.get(task.id)));
+}
+
+export async function createTask(caller: AgentPrincipal, input: CreateTaskInput) {
+  return (await createTaskOrReplay(caller, input)).task;
+}
+
+/**
+ * Creates a task, or, when idempotency_key matches a task this agent already created with the same request, returns
+ * that task with replayed true: no new row, no wake, and no monthly quota, daily cap, or rate limit is spent.
+ */
+export async function createTaskOrReplay(caller: AgentPrincipal, input: CreateTaskInput) {
   assertExternalCredential(caller);
+  const key = input.idempotencyKey === undefined ? null : assertIdempotencyKey(input.idempotencyKey);
+  const requestHash = key ? createTaskRequestHash(input) : null;
+  if (key && requestHash) {
+    const replayed = await replayIdempotentTask(caller, key, requestHash);
+    if (replayed) return { task: replayed, replayed: true };
+  }
+  try {
+    return { task: await insertTask(caller, input, key, requestHash), replayed: false };
+  } catch (err) {
+    if (key && requestHash && isUniqueViolation(err)) {
+      // A concurrent duplicate won the insert. This transaction rolled back, caps included; return the winner.
+      const replayed = await replayIdempotentTask(caller, key, requestHash);
+      if (replayed) return { task: replayed, replayed: true };
+    }
+    throw err;
+  }
+}
+
+async function insertTask(
+  caller: AgentPrincipal,
+  input: CreateTaskInput,
+  idempotencyKey: string | null,
+  requestHash: string | null,
+) {
   const address = parseRecipient(input.to);
   if (caller.externalGuest && address.kind === 'workspace') {
     throw new HttpError(403, 'insufficient_scope', 'This link can only send tasks to the shared agent it was granted.');
@@ -420,6 +517,8 @@ export async function createTask(
         inputSchema,
         input: formInput,
         clientRequestId: input.clientRequestId ?? null,
+        idempotencyKey,
+        requestHash,
         status: review ? 'in_review' : 'open',
         reviewMode: review ? 'review_first' : null,
       })

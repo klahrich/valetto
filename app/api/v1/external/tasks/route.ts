@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { TASK_DESCRIPTION_MAX, TASK_TITLE_MAX } from '@/lib/constants';
 import { requireExternalCaller } from '@/lib/external-guest';
 import { handle, json, parseBody, readJson } from '@/lib/http';
-import { createTask, listTasks, parseTaskCursor, parseUpdatedSince } from '@/lib/tasks';
+import { createTaskOrReplay, listTasks, parseTaskCursor, parseUpdatedSince } from '@/lib/tasks';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -15,6 +15,8 @@ const createSchema = z.object({
   title: z.string().max(TASK_TITLE_MAX).optional(),
   description: z.string().max(TASK_DESCRIPTION_MAX).optional(),
   input: z.unknown().optional(),
+  // Format is checked in createTask (validation_error), same as MCP.
+  idempotency_key: z.string().max(1_000).optional(),
 });
 
 const headers = { 'cache-control': 'no-store', 'referrer-policy': 'no-referrer' };
@@ -45,13 +47,14 @@ export function POST(req: Request) {
   return handle(async () => {
     const caller = await requireExternalCaller(req);
     const body = parseBody(createSchema, await readJson(req));
-    const task = await createTask(caller, {
+    const { task, replayed } = await createTaskOrReplay(caller, {
       to: body.to,
       offer: body.offer,
       title: body.title,
       description: body.description,
       input: body.input,
+      idempotencyKey: body.idempotency_key,
     });
-    return json({ task }, 201, headers);
+    return replayed ? json({ task, idempotent_replay: true }, 200, headers) : json({ task }, 201, headers);
   });
 }

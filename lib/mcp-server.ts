@@ -29,7 +29,7 @@ import {
   answerTask,
   askTask,
   completeTask,
-  createTask,
+  createTaskOrReplay,
   failTask,
   getTask,
   listTasks,
@@ -198,15 +198,16 @@ export const mcpHandler = createMcpHandler(
       async (args, ctx) => {
         try {
           requireToolScope(ctx as ToolCtx, 'create_task');
-          const task = await createTask(principalFrom(ctx as ToolCtx), {
+          const { task, replayed } = await createTaskOrReplay(principalFrom(ctx as ToolCtx), {
             to: args.to,
             title: args.title,
             description: args.description,
             resultSchema: args.result_schema,
             offer: args.offer,
             input: args.input,
+            idempotencyKey: args.idempotency_key,
           });
-          return ok({ task });
+          return ok(replayed ? { task, idempotent_replay: true } : { task });
         } catch (err) {
           return fail(err);
         }

@@ -54,7 +54,7 @@ export const TOOL_DOCS: ToolDoc[] = [
     name: 'create_task',
     title: 'Create task',
     description:
-      'Ask exactly one other agent for a result. A bare name is an agent in your workspace: title, description, and result_schema are required. @handle/agentname is a shared agent: pass offer from get_agent_card and do not send result_schema. The stored schema is the owner offer. If the offer has input_schema, send input that matches it, leave out title (the server sets it), and put optional notes in description (at most notes_max characters; none when notes_max is 0). If the offer has no input_schema, send title and description and do not send input. The task starts open and the target is woken. You cannot hand this task on.',
+      'Ask exactly one other agent for a result. A bare name is an agent in your workspace: title, description, and result_schema are required. @handle/agentname is a shared agent: pass offer from get_agent_card and do not send result_schema. The stored schema is the owner offer. If the offer has input_schema, send input that matches it, leave out title (the server sets it), and put optional notes in description (at most notes_max characters; none when notes_max is 0). If the offer has no input_schema, send title and description and do not send input. The task starts open and the target is woken. You cannot hand this task on. To retry safely after a timeout, send the same idempotency_key with the same request.',
     args: [
       {
         name: 'to',
@@ -94,6 +94,13 @@ export const TOOL_DOCS: ToolDoc[] = [
         type: 'object',
         description:
           'Form fields for an offer with input_schema. Must validate against it (no extra keys). Forbidden for a bare name and for an offer without input_schema (input_not_allowed).',
+      },
+      {
+        name: 'idempotency_key',
+        required: false,
+        type: 'string',
+        description:
+          'Optional retry key, 1 to 128 of letters, digits, . _ : -. Unique per sending agent and never expires. Retrying with the same key and the same request returns the original task with idempotent_replay true and spends nothing; the same key with a different request is idempotency_key_reused.',
       },
     ],
   },
@@ -383,6 +390,8 @@ export const toolInputs = {
     result_schema: jsonObject.optional().describe(TOOL_DOCS[1]!.args[3]!.description),
     offer: z.string().min(1).max(64).optional().describe(TOOL_DOCS[1]!.args[4]!.description),
     input: jsonObject.optional().describe(TOOL_DOCS[1]!.args[5]!.description),
+    // Format is checked in createTask so a bad key is the same validation_error on MCP and HTTP.
+    idempotency_key: z.string().max(1_000).optional().describe(TOOL_DOCS[1]!.args[6]!.description),
   }),
   get_task: z.object({
     id: z.uuid().describe('Task id.'),

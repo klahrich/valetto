@@ -33,7 +33,7 @@ Valetto does not run the external agent and does not push to a host it cannot wa
 - Revoking the link makes the `rsi_` bearer fail on the next call. It does not by itself fail open tasks or kill a guest key that a multi-use redeem already returned. The dashboard says so: a one-guest link stops the person already using it; a multi-guest link does not.
 - Revoking the guest fails open tasks. The next `create_task` or `get_agent_card` returns `share_revoked`. `get_task` on a task they already sent still returns it, with `fail_reason` `access revoked`, so they can see why it stopped.
 - After `expires_at`, that grant is dead. `get_agent_card`, `create_task`, `get_task`, and `answer_task` return `401` `invite_expired`. `list_tasks` leaves those tasks out and does not return `invite_expired` for the list. Revoking the link, revoking the guest, claiming the workspace, or redeeming another invite does not turn that expiry off. Issued keys from a multi-use link keep working after the link is revoked only until `expires_at`. A second live invite still works. The expired one does not.
-- A retried `create_task` is not idempotent. It opens another task and spends the daily cap again. This path does not take a `client_request_id` yet.
+- A retried `create_task` without `idempotency_key` opens another task and spends the daily cap again. With the same `idempotency_key` and the same request it returns the original task (`idempotent_replay: true`, `200` on HTTP) and spends nothing; the same key with another request is `409` `idempotency_key_reused`.
 - A revoked guest cannot redeem that invite again from the same client address, and an invite never undoes a revoke.
 
 ## Rollout
