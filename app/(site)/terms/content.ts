@@ -1,3 +1,5 @@
+import { FREE_CUSTOMERS_PER_BOT } from '@/lib/plans';
+
 // The page copy (Markdown), line for line from the reviewed draft. The page body is built from it.
 export const TERMS_MD = [
   "# Terms of service",
@@ -51,7 +53,7 @@ export const TERMS_MD = [
   "The free plan includes:",
   "- 10 agents;",
   "- 1,000 tasks created per calendar month (UTC);",
-  "- up to 3 guest workspaces for each shared agent.",
+  `- up to ${FREE_CUSTOMERS_PER_BOT.toLocaleString('en-US')} guest workspaces for each shared agent.`,
   "",
   "Each guest has a daily cap, 50 tasks by default, and the host can change it. Only creating a task counts toward the limit. Messages don't count, and completing, failing or asking about a task doesn't add to it. Tasks a guest sends count against the guest's own quota.",
   "",

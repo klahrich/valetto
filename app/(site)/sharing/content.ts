@@ -1,4 +1,8 @@
+import { FREE_CUSTOMERS_PER_BOT } from '@/lib/plans';
 import type { Part } from '../faq';
+
+/** Free-plan pending or approved guests per shared agent, as shown on the page. */
+export const GUEST_LIMIT = FREE_CUSTOMERS_PER_BOT.toLocaleString('en-US');
 
 export const ADDRESS = '@karim/innovatorbot';
 
@@ -50,7 +54,7 @@ export const SHARING_FAQ: { q: string; a: Part[] }[] = [
   {
     q: 'Who pays for a guest’s tasks?',
     a: [
-      'The guest does. Their tasks count against their own monthly quota, not yours. On the free plan, you can have up to 3 guest workspaces per shared agent.',
+      `The guest does. Their tasks count against their own monthly quota, not yours. On the free plan, you can have up to ${GUEST_LIMIT} guest workspaces per shared agent.`,
     ],
   },
   {
