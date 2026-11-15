@@ -168,9 +168,15 @@ export async function setWorkspaceHandle(workspaceId: string, handle: string | n
   }
 }
 
+/** ownerAgent under a `for update` row lock. Call it inside a transaction; outside one it locks nothing. */
 export async function lockOwnerAgent(tx: Db, workspaceId: string, agentId: string): Promise<AgentRow> {
   await tx.execute(sql`select id from agents where id = ${agentId} and workspace_id = ${workspaceId} for update`);
-  const [agent] = await tx
+  return ownerAgent(tx, workspaceId, agentId);
+}
+
+/** The workspace's active agent by id, or 404. No row lock: use it for reads outside a transaction. */
+export async function ownerAgent(db: Db, workspaceId: string, agentId: string): Promise<AgentRow> {
+  const [agent] = await db
     .select()
     .from(agents)
     .where(and(eq(agents.id, agentId), eq(agents.workspaceId, workspaceId)))
@@ -320,7 +326,7 @@ function assertNotesSetting(inputSchema: unknown, notesEnabled: boolean): void {
 }
 
 export async function listOffers(workspaceId: string, agentId: string) {
-  await lockOwnerAgent(getDb(), workspaceId, agentId);
+  await ownerAgent(getDb(), workspaceId, agentId);
   const rows = await getDb()
     .select()
     .from(agentOffers)
@@ -673,7 +679,7 @@ export function dedupeOfferNames(names: string[]): string[] {
 
 export async function listShares(workspaceId: string, agentId: string) {
   const db = getDb();
-  await lockOwnerAgent(db, workspaceId, agentId);
+  await ownerAgent(db, workspaceId, agentId);
   const rows = await db
     .select({
       share: agentShares,
@@ -917,7 +923,8 @@ export async function revokeShare(workspaceId: string, agentId: string, shareId:
 
 async function shareIdForGuest(workspaceId: string, agentId: string, guestHandle: string): Promise<string> {
   const handle = assertTargetHandle(guestHandle);
-  const agent = await agentInWorkspaceByName(workspaceId, (await lockOwnerAgent(getDb(), workspaceId, agentId)).name);
+  // (workspace_id, name) is unique, so the by-id lookup is the same row the old by-name re-lookup found.
+  const agent = await ownerAgent(getDb(), workspaceId, agentId);
   const [row] = await getDb()
     .select({ id: agentShares.id })
     .from(agentShares)
@@ -1174,34 +1181,51 @@ export async function listExternalGrants(
   workspaceId: string,
 ): Promise<{ address: string; status: string; offers: string[] }[]> {
   const db = getDb();
-  const shares = await db.select().from(agentShares).where(eq(agentShares.guestWorkspaceId, workspaceId));
-  const grants = [];
-  for (const share of shares) {
-    const [agent] = await db.select().from(agents).where(eq(agents.id, share.agentId)).limit(1);
-    if (!agent) continue;
-    const [owner] = await db
-      .select({ handle: workspaces.handle })
-      .from(workspaces)
-      .where(eq(workspaces.id, agent.workspaceId))
-      .limit(1);
-    if (!owner?.handle) continue;
-    if (share.inviteId) {
-      const [invite] = await db
-        .select({ expiresAt: agentInvites.expiresAt })
-        .from(agentInvites)
-        .where(eq(agentInvites.id, share.inviteId))
-        .limit(1);
-      if (!invite || invite.expiresAt.getTime() <= Date.now()) continue;
-    }
-    const offers = await db
-      .select({ name: agentOffers.name })
+  // Shares whose agent or owner workspace is gone drop out of the inner joins; an invite share
+  // whose invite row is gone keeps a null expiresAt from the left join and is skipped below.
+  const rows = await db
+    .select({
+      shareId: agentShares.id,
+      status: agentShares.status,
+      inviteId: agentShares.inviteId,
+      agentName: agents.name,
+      ownerHandle: workspaces.handle,
+      inviteExpiresAt: agentInvites.expiresAt,
+    })
+    .from(agentShares)
+    .innerJoin(agents, eq(agents.id, agentShares.agentId))
+    .innerJoin(workspaces, eq(workspaces.id, agents.workspaceId))
+    .leftJoin(agentInvites, eq(agentInvites.id, agentShares.inviteId))
+    .where(eq(agentShares.guestWorkspaceId, workspaceId))
+    .orderBy(agentShares.createdAt, agentShares.id);
+  const now = Date.now();
+  const live = rows.filter(
+    (row) => row.ownerHandle && (!row.inviteId || (row.inviteExpiresAt && row.inviteExpiresAt.getTime() > now)),
+  );
+  const offersByShare = new Map<string, string[]>();
+  if (live.length > 0) {
+    const offerRows = await db
+      .select({ shareId: agentShareOffers.shareId, name: agentOffers.name })
       .from(agentShareOffers)
       .innerJoin(agentOffers, eq(agentOffers.id, agentShareOffers.offerId))
-      .where(eq(agentShareOffers.shareId, share.id))
+      .where(
+        inArray(
+          agentShareOffers.shareId,
+          live.map((row) => row.shareId),
+        ),
+      )
       .orderBy(agentOffers.name);
-    grants.push({ address: `@${owner.handle}/${agent.name}`, status: share.status, offers: offers.map((offer) => offer.name) });
+    for (const offer of offerRows) {
+      const list = offersByShare.get(offer.shareId) ?? [];
+      list.push(offer.name);
+      offersByShare.set(offer.shareId, list);
+    }
   }
-  return grants;
+  return live.map((row) => ({
+    address: `@${row.ownerHandle}/${row.agentName}`,
+    status: row.status,
+    offers: offersByShare.get(row.shareId) ?? [],
+  }));
 }
 
 export async function getAgentCard(caller: AgentPrincipal, to: string) {

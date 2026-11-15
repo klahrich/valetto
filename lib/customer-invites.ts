@@ -42,6 +42,7 @@ import {
   deliverWakeIds,
   loadOffersByName,
   lockOwnerAgent,
+  ownerAgent,
   replaceShareOffers,
   revokeShareRow,
 } from './sharing';
@@ -279,7 +280,7 @@ export async function createCustomerInvite(
 
 export async function listCustomerInvites(workspaceId: string, agentId: string): Promise<SerializedCustomerInvite[]> {
   const db = getDb();
-  const agent = await lockOwnerAgent(db, workspaceId, agentId);
+  const agent = await ownerAgent(db, workspaceId, agentId);
   const rows = await db
     .select()
     .from(customerInvites)
@@ -459,7 +460,7 @@ async function accessFor(db: Db, agent: AgentRow): Promise<CustomerAccess> {
 
 export async function getCustomerAccess(workspaceId: string, agentId: string): Promise<CustomerAccess> {
   const db = getDb();
-  return accessFor(db, await lockOwnerAgent(db, workspaceId, agentId));
+  return accessFor(db, await ownerAgent(db, workspaceId, agentId));
 }
 
 /** Switching modes never changes existing shares. preapproved_emails, when sent, replaces the whole list. */

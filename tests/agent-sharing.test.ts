@@ -9,10 +9,10 @@ import { POST as revokeShare } from '@/app/api/v1/agents/[id]/shares/[shareId]/r
 import { PUT as putSharing } from '@/app/api/v1/agents/[id]/sharing/route';
 import { PATCH as patchWorkspace } from '@/app/api/v1/workspaces/current/route';
 import { getDb } from '@/db';
-import { tasks, workspaces } from '@/db/schema';
+import { agentInvites, agentOffers, agentShareOffers, agentShares, agents, tasks, workspaces } from '@/db/schema';
 import { ACCESS_REVOKED_REASON, DEFAULT_SHARE_DAILY_CAP } from '@/lib/constants';
 import { HttpError } from '@/lib/errors';
-import { assertTargetHandle } from '@/lib/sharing';
+import { assertTargetHandle, listExternalGrants } from '@/lib/sharing';
 import { FREE_GUEST_WORKSPACES, setGuestWorkspaceLimitForTests, usePlanLimitsForTests, workspacePlanUsage } from '@/lib/plans';
 import { CROSS_WORKSPACE_TASK_NOTICE, guestTaskWakeNotice } from '@/lib/wake-notice';
 import { call, createAgent, createKey, mcpListTools, mcpTool, setWebhook, signIn, startReceiver } from './helpers';
@@ -705,5 +705,122 @@ describe('agent sharing', () => {
     });
     expect(stored.status).toBe(400);
     expect(stored.data.error.code).toBe('invalid_handle');
+  });
+});
+
+/** The per-share listExternalGrants from before #228, kept to prove the joined version returns the same thing. */
+async function legacyExternalGrants(workspaceId: string) {
+  const db = getDb();
+  const shares = await db
+    .select()
+    .from(agentShares)
+    .where(eq(agentShares.guestWorkspaceId, workspaceId))
+    .orderBy(agentShares.createdAt, agentShares.id);
+  const grants = [];
+  for (const share of shares) {
+    const [agent] = await db.select().from(agents).where(eq(agents.id, share.agentId)).limit(1);
+    if (!agent) continue;
+    const [owner] = await db
+      .select({ handle: workspaces.handle })
+      .from(workspaces)
+      .where(eq(workspaces.id, agent.workspaceId))
+      .limit(1);
+    if (!owner?.handle) continue;
+    if (share.inviteId) {
+      const [invite] = await db
+        .select({ expiresAt: agentInvites.expiresAt })
+        .from(agentInvites)
+        .where(eq(agentInvites.id, share.inviteId))
+        .limit(1);
+      if (!invite || invite.expiresAt.getTime() <= Date.now()) continue;
+    }
+    const offers = await db
+      .select({ name: agentOffers.name })
+      .from(agentShareOffers)
+      .innerJoin(agentOffers, eq(agentOffers.id, agentShareOffers.offerId))
+      .where(eq(agentShareOffers.shareId, share.id))
+      .orderBy(agentOffers.name);
+    grants.push({ address: `@${owner.handle}/${agent.name}`, status: share.status, offers: offers.map((offer) => offer.name) });
+  }
+  return grants;
+}
+
+describe('listExternalGrants', () => {
+  it('lists every live grant across owners in share creation order, with offers sorted by name', async () => {
+    const db = getDb();
+    const guest = await signIn();
+    const guestWs = await setHandle(guest.cookie, handleName('g'));
+    const ownerA = await signIn();
+    const ownerB = await signIn();
+    const noHandle = await signIn();
+    const handleA = handleName('a');
+    const handleB = handleName('b');
+    await setHandle(ownerA.cookie, handleA);
+    await setHandle(ownerB.cookie, handleB);
+
+    const planner = await createAgent(ownerA.cookie, 'Planner');
+    const writer = await createAgent(ownerA.cookie, 'Writer');
+    const expired = await createAgent(ownerA.cookie, 'Expired');
+    const live = await createAgent(ownerA.cookie, 'Live');
+    const quoter = await createAgent(ownerB.cookie, 'Quoter');
+    const hidden = await createAgent(noHandle.cookie, 'Hidden');
+    const zeta = await addOffer(ownerA.cookie, planner.id, 'zeta');
+    const alpha = await addOffer(ownerA.cookie, planner.id, 'alpha');
+    const mid = await addOffer(ownerA.cookie, planner.id, 'mid');
+    const draft = await addOffer(ownerB.cookie, quoter.id, 'draft');
+    const hiddenOffer = await addOffer(noHandle.cookie, hidden.id, 'draft');
+
+    const [liveAgent] = await db.select().from(agents).where(eq(agents.id, live.id));
+    const invite = (expiresAt: Date) => ({
+      agentId: liveAgent!.id,
+      workspaceId: liveAgent!.workspaceId,
+      tokenHash: randomUUID(),
+      tokenPrefix: 'vi_test',
+      createdByAgentId: liveAgent!.id,
+      expiresAt,
+    });
+    const [expiredInvite] = await db
+      .insert(agentInvites)
+      .values({ ...invite(new Date(Date.now() - 60_000)), agentId: expired.id })
+      .returning();
+    const [liveInvite] = await db.insert(agentInvites).values(invite(new Date(Date.now() + 3_600_000))).returning();
+
+    // Explicit, distinct created_at values so the order under test is the order written here.
+    const base = Date.now() - 10 * 60_000;
+    const shareRows = [
+      { agentId: quoter.id, status: 'approved', offers: [draft.id] },
+      { agentId: planner.id, status: 'approved', offers: [zeta.id, alpha.id, mid.id] },
+      { agentId: hidden.id, status: 'approved', offers: [hiddenOffer.id] },
+      { agentId: writer.id, status: 'pending', offers: [] },
+      { agentId: expired.id, status: 'approved', offers: [], inviteId: expiredInvite!.id, source: 'agent_invite' },
+      { agentId: live.id, status: 'revoked', offers: [], inviteId: liveInvite!.id, source: 'agent_invite' },
+    ];
+    for (const [i, row] of shareRows.entries()) {
+      const [share] = await db
+        .insert(agentShares)
+        .values({
+          agentId: row.agentId,
+          guestWorkspaceId: guestWs.id,
+          status: row.status,
+          inviteId: row.inviteId ?? null,
+          source: row.source ?? 'handle',
+          createdAt: new Date(base + i * 1000),
+        })
+        .returning();
+      if (row.offers.length > 0) {
+        await db.insert(agentShareOffers).values(row.offers.map((offerId) => ({ shareId: share!.id, offerId })));
+      }
+    }
+
+    const grants = await listExternalGrants(guestWs.id);
+    expect(grants).toEqual([
+      { address: `@${handleB}/Quoter`, status: 'approved', offers: ['draft'] },
+      { address: `@${handleA}/Planner`, status: 'approved', offers: ['alpha', 'mid', 'zeta'] },
+      { address: `@${handleA}/Writer`, status: 'pending', offers: [] },
+      { address: `@${handleA}/Live`, status: 'revoked', offers: [] },
+    ]);
+    expect(grants).toEqual(await legacyExternalGrants(guestWs.id));
+    // A workspace that holds no grants.
+    expect(await listExternalGrants(liveAgent!.workspaceId)).toEqual([]);
   });
 });
