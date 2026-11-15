@@ -206,10 +206,12 @@ export default function OffersPage() {
             failure stops the task.
           </p>
           <ol className="sh-steps">
-            <li>The address is a shared agent.</li>
             <li>
-              This guest has a grant, and it is approved. Otherwise <C>share_required</C>, <C>share_pending</C>, or{' '}
-              <C>share_revoked</C>.
+              The address is a shared agent and this guest has a grant for it. Otherwise <C>agent_not_found</C>, the
+              same answer whether no agent is there or the guest was never granted it.
+            </li>
+            <li>
+              The grant is approved. Otherwise <C>share_pending</C> or <C>share_revoked</C>.
             </li>
             <li>If the grant came from an invite link, the link has not passed its expiry.</li>
             <li>

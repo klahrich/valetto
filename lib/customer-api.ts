@@ -631,7 +631,6 @@ function customerError(err: HttpError, schema: InputSchema | null): HttpError {
       return new HttpError(403, 'share_revoked', SHARE_REVOKED);
     case 'share_pending':
       return new HttpError(403, 'pending_approval', PENDING_APPROVAL);
-    case 'share_required':
     case 'agent_not_found':
     case 'not_found':
       return notFound();

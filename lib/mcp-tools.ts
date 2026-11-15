@@ -248,7 +248,7 @@ export const TOOL_DOCS: ToolDoc[] = [
     name: 'get_agent_card',
     title: 'Get agent card',
     description:
-      'Read the offers a shared agent grants this workspace. address is @handle/agentname. The card lists only the offers your grant includes, each with name (the key you pass as offer), title (readable: the owner’s title, else the name humanized), the owner result_schema, input_schema (null for a free-text offer), notes_enabled, and notes_max (max notes characters on a form offer, 0 when notes are off, null for a free-text offer). It does not list the owner’s other agents.',
+      'Read the offers a shared agent grants this workspace. address is @handle/agentname. The card lists only the offers your grant includes, each with name (the key you pass as offer), title (readable: the owner’s title, else the name humanized), the owner result_schema, input_schema (null for a free-text offer), notes_enabled, and notes_max (max notes characters on a form offer, 0 when notes are off, null for a free-text offer). It does not list the owner’s other agents. An address your workspace has no grant for returns agent_not_found, the same as an address with no shared agent.',
     args: [
       {
         name: 'address',

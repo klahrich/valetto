@@ -21,7 +21,7 @@ import { GET as invitePreview } from '@/app/api/v1/invites/preview/route';
 import { POST as redeemRoute } from '@/app/api/v1/invites/redeem/route';
 import { PATCH as patchWorkspace } from '@/app/api/v1/workspaces/current/route';
 import { getDb } from '@/db';
-import { agentInvites, agentKeys, agentShares, agents, workspaces } from '@/db/schema';
+import { agentInvites, agentKeys, agentShares, agents, tasks, workspaces } from '@/db/schema';
 import { ACCESS_REVOKED_REASON, INVITE_WORKSPACE_IDLE_DAYS } from '@/lib/constants';
 import { cleanupUnclaimedInviteWorkspaces } from '@/lib/invites';
 import { setGuestWorkspaceLimitForTests } from '@/lib/plans';
@@ -1068,5 +1068,78 @@ describe('cleanup of unclaimed invite workspaces', () => {
 
     expect(await cleanupUnclaimedInviteWorkspaces(2)).toEqual({ deleted: 1 });
     expect(await getDb().select().from(workspaces).where(eq(workspaces.id, idle.data.workspace.id))).toHaveLength(0);
+  });
+});
+
+describe('shared agent existence (issue #231)', () => {
+  it('answers a caller with no grant exactly like an address with no shared agent', async () => {
+    const o = await owner();
+    const made = await createInvite(o);
+    // The invite guest has a grant on Grok only, so it is a real guest of this owner.
+    const card = await mcpTool(made.token, 'get_agent_card', { address: `@${o.handle}/Grok` });
+    expect(card.isError).toBe(false);
+    // A second workspace with an rsk_ key and no grant on anything of this owner's.
+    const stranger = await signIn();
+    const strangerBot = await createAgent(stranger.cookie, 'Stranger');
+    const strangerKey = await createKey(stranger.cookie, strangerBot.id);
+
+    const to = `@${o.handle}/Ghost`;
+    const task = { to, offer: 'draft', title: 'Probe', description: 'Is anything here?' };
+    const mcp = async (token: string) => {
+      const created = await mcpTool(token, 'create_task', task);
+      const carded = await mcpTool(token, 'get_agent_card', { address: to });
+      return {
+        create_task: { httpStatus: created.httpStatus, isError: created.isError, payload: created.payload },
+        get_agent_card: { httpStatus: carded.httpStatus, isError: carded.isError, payload: carded.payload },
+      };
+    };
+    const probe = async () => {
+      const httpTask = await call(postExternalTasks, 'http://localhost/api/v1/external/tasks', { bearer: made.token, body: task });
+      const httpCard = await call(postExternalCard, 'http://localhost/api/v1/external/card', { bearer: made.token, body: { to } });
+      return {
+        mcpInvite: await mcp(made.token),
+        mcpKey: await mcp(strangerKey),
+        http: {
+          tasks: { status: httpTask.status, data: httpTask.data },
+          card: { status: httpCard.status, data: httpCard.data },
+        },
+      };
+    };
+
+    // 1. No agent at the address.
+    const missing = await probe();
+    const notFound = { error: 'agent_not_found', message: `No shared agent was found at that address. (${to})`, details: null };
+    const mcpNotFound = {
+      create_task: { httpStatus: 200, isError: true, payload: notFound },
+      get_agent_card: { httpStatus: 200, isError: true, payload: notFound },
+    };
+    const httpNotFound = { status: 404, data: { error: { code: 'agent_not_found', message: notFound.message } } };
+    expect(missing).toEqual({ mcpInvite: mcpNotFound, mcpKey: mcpNotFound, http: { tasks: httpNotFound, card: httpNotFound } });
+
+    // 2. The agent exists, with an offer of the probed name, but is not shared.
+    const ghost = await createAgent(o.cookie, 'Ghost');
+    const offer = await call(postOffer, `http://localhost/api/v1/agents/${ghost.id}/offers`, {
+      cookie: o.cookie,
+      params: { id: ghost.id },
+      body: { name: 'draft', description: 'Do a draft.', result_schema: offerSchema },
+    });
+    expect(offer.status).toBe(201);
+    expect(await probe()).toEqual(missing);
+
+    // 3. The agent is shared, and neither caller has a grant on it.
+    const shared = await call(putSharing, `http://localhost/api/v1/agents/${ghost.id}/sharing`, {
+      method: 'PUT',
+      cookie: o.cookie,
+      params: { id: ghost.id },
+      body: { shared: true },
+    });
+    expect(shared.status).toBe(200);
+    expect(await probe()).toEqual(missing);
+
+    // No probe left a task or a grant behind.
+    const ghostTasks = await getDb().select().from(tasks).where(eq(tasks.toAgentId, ghost.id));
+    expect(ghostTasks).toHaveLength(0);
+    const ghostShares = await getDb().select().from(agentShares).where(eq(agentShares.agentId, ghost.id));
+    expect(ghostShares).toHaveLength(0);
   });
 });
