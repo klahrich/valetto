@@ -134,12 +134,12 @@ describe('agent-to-agent landing', () => {
     expect(page).not.toMatch(/<details[^>]*\sopen[\s>]/);
   });
 
-  it('keeps the FAQ metadata and does not touch the shop homepage or the share guide', () => {
+  it('keeps the FAQ metadata and does not touch the homepage or the share guide', () => {
     expect(page).toContain("'@type': 'FAQPage'");
     expect(page).toContain('AGENT_TO_AGENT_TITLE');
     expect(page).toContain('AGENT_TO_AGENT_DESCRIPTION');
-    expect(home).toContain('text="Answer every customer."');
-    expect(home).not.toContain('/agent-to-agent');
+    expect(home).toContain('text="Let other companies’ agents work with yours."');
+    expect(home).toContain('href={AGENT_TO_AGENT}');
     expect(share).toContain('id="share-your-agent"');
     expect(share).toContain('id="got-a-link"');
   });

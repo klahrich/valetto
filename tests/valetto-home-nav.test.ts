@@ -6,14 +6,13 @@ const ROOT = join(__dirname, '..');
 const home = readFileSync(join(ROOT, 'app/(site)/valetto/page.tsx'), 'utf8');
 const css = readFileSync(join(ROOT, 'components/site/valetto/valetto.css'), 'utf8');
 
-describe('Valetto homepage agents link', () => {
-  it('keeps Valetto for agents in the header, including the phone rules that hide other links', () => {
-    expect(home).toContain('Valetto for agents');
+describe('Valetto homepage developers link', () => {
+  it('keeps Developers in the header, including the phone rules that hide other links', () => {
+    expect(home).toContain('>Developers<');
     expect(home).toContain('href={AGENT_TO_AGENT}');
     expect(home).toContain('className="vt-nav-agents"');
-    expect(home).toContain('Ask for early access');
     const header = home.slice(home.indexOf('<header'), home.indexOf('</header>'));
-    expect(header).not.toMatch(/Early access/);
+    expect(header).not.toMatch(/Early access/i);
     expect(css).toContain('flex-wrap:nowrap');
     expect(home).not.toMatch(/vt-nav-agents[^>]*hidden|hidden[^>]*vt-nav-agents/);
     expect(css).toContain('.vt .top nav li.vt-nav-agents{display:list-item}');

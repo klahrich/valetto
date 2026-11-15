@@ -21,30 +21,20 @@ import {
 const ROOT = join(__dirname, '..');
 
 describe('Valetto social image', () => {
-  it('share text matches the shop-owner hero', () => {
+  it('share text matches the agent-to-agent hero', () => {
     const page = readFileSync(join(ROOT, 'app/(site)/valetto/page.tsx'), 'utf8');
-    const phone = readFileSync(join(ROOT, 'components/site/valetto/PhoneChat.tsx'), 'utf8');
     const sub = (page.match(/<p className="vt-sub">([\s\S]*?)<\/p>/)?.[1] ?? '').replace(/\s+/g, ' ');
-    expect(VALETTO_TITLE).toBe('Answer every customer. Web, phone, and email.');
+    expect(VALETTO_TITLE).toBe('Let other companies’ agents work with yours');
     expect(VALETTO_TITLE.length).toBeLessThanOrEqual(60);
     expect(VALETTO_TITLE.startsWith('Valetto')).toBe(false);
-    expect(VALETTO_DESCRIPTION).toBe(
-      'One smart bot for your shop. It answers on the web, by phone, and by email, so you save up to 7 hours a week and stop losing jobs.',
-    );
     expect(VALETTO_DESCRIPTION.length).toBeLessThanOrEqual(155);
-    expect(VALETTO_DESCRIPTION).not.toMatch(/approv|review first/i);
-    expect(VALETTO_OG_IMAGE.alt).toBe('Valetto: Answer every customer. On the web. On the phone. In their inbox.');
-    expect(page).toContain('text="Answer every customer."');
-    expect(page).toContain('text="On the web. On the phone. In their inbox."');
-    expect(sub).toContain('One smart bot for your shop.');
-    expect(sub).toContain('save up to 7 hours a week');
-    expect(sub).toContain('protect your reputation');
-    expect(sub).toContain('stop losing jobs to whoever answers first');
-    expect(sub).not.toMatch(/approv|review first/i);
-    // The homepage body is the shop story. Guest links, revoke, and job-form demos stay off it.
-    const home = `${page}\n${phone}`;
-    expect(home).not.toMatch(/valetto\.tech\/c\/|Private page|You decide what your bot does|Jobs your bot can do|Render my ring|daily limit/i);
-    expect(home.replace('In their inbox.', '')).not.toMatch(/\binbox\b|\bfiles\b/i);
+    expect(VALETTO_DESCRIPTION).toContain('approve which companies can ask');
+    expect(VALETTO_OG_IMAGE.alt).toBe('Valetto: Let other companies’ agents work with yours. On your terms, in the format you set.');
+    expect(page).toContain('text="Let other companies’ agents work with yours."');
+    expect(page).toContain('text="On your terms, in the format you set."');
+    expect(sub).toContain('Valetto checks every answer before it leaves.');
+    // The shop answering bot is gone from the homepage.
+    expect(page).not.toMatch(/PhoneChat|Answer every customer|early access|7 hours/i);
   });
 
   it('is a 1200x630 PNG in public at the path the metadata uses', () => {

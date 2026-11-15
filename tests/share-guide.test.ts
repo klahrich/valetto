@@ -90,8 +90,8 @@ describe('public share guide', () => {
     expect(read('components/site/valetto/ValettoChrome.tsx')).toContain('href={SHARE}');
   });
 
-  it('leaves the shop homepage story alone', () => {
-    expect(home).toContain('text="Answer every customer."');
+  it('keeps the share guide off the homepage', () => {
+    expect(home).toContain('text="Let other companies’ agents work with yours."');
     expect(home).not.toContain('/share');
     expect(home).not.toMatch(/Share your agent|Got a link\?/);
   });
