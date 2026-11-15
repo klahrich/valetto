@@ -1,7 +1,7 @@
 /* /sharing, scoped under .sh */
 .sh main{margin:0 var(--mr) 0 var(--al);max-width:760px}
 .sh .sh-hero{margin-top:clamp(48px,10vh,120px)}
-.sh .sh-tag{display:inline-block;padding:4px 10px;border-radius:var(--r);background:#22332a;color:var(--accent);font-size:var(--s-small);font-weight:600}
+.sh .sh-tag{display:inline-block;padding:4px 10px;border-radius:var(--r);background:var(--tint,#22332a);color:var(--accent);font-size:var(--s-small);font-weight:600}
 .sh h1{margin-top:18px;font-size:clamp(2rem,1rem + 3.4vw,3.5rem);line-height:1.04;letter-spacing:-.02em;max-width:18ch}
 .sh .lead{margin-top:20px;font-size:var(--s-lead);line-height:1.4;max-width:30em}
 .sh .sh-cta{margin-top:28px;display:flex;flex-wrap:wrap;align-items:center;gap:12px 20px}
@@ -26,7 +26,7 @@
 /* hero card: your agent | lane | friend's agent; stacked on phones */
 .sh-card{margin:44px 0 0;display:grid;grid-template-columns:minmax(0,1.15fr) minmax(120px,1fr) minmax(0,.9fr);align-items:stretch;background:var(--surface);border-radius:8px;padding:20px;gap:0}
 .sh-agent{background:var(--bg);border-radius:6px;padding:16px 18px;position:relative}
-.sh-you{background:#22332a}
+.sh-you{background:var(--tint,#22332a)}
 .sh-who{font-weight:600;font-size:var(--s-body)}
 .sh-addr{margin-top:4px;font:500 .9375rem/1.3 var(--mono);color:var(--accent);overflow-wrap:anywhere} /* taste-skill-ignore: literal code, tool names and file paths only */
 .sh-menu-h{margin-top:16px;font-size:.75rem;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
