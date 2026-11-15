@@ -1037,27 +1037,36 @@ export async function resolveSharedTask(
   const offer = assertOfferName(offerName);
   const [owner] = await tx.select().from(workspaces).where(eq(workspaces.handle, address.handle)).limit(1);
   if (!owner) throw notShared(shown);
-  await tx.execute(sql`select id from agents where workspace_id = ${owner.id} and name = ${address.agentName} for update`);
-  const [recipient] = await tx
+  // Read the agent and this workspace's grant before taking any lock. A caller with no grant row gets the same
+  // 404 as an address with no shared agent (issue #231), and takes the same path to it: no row lock, no write.
+  const [candidate] = await tx
     .select()
     .from(agents)
-    .where(and(eq(agents.workspaceId, owner.id), eq(agents.name, address.agentName), isNull(agents.revokedAt)))
+    .where(and(eq(agents.workspaceId, owner.id), eq(agents.name, address.agentName), isNull(agents.revokedAt), eq(agents.shared, true)))
     .limit(1);
-  if (!recipient || !recipient.shared) throw notShared(shown);
-  if (recipient.workspaceId === caller.workspaceId) {
+  if (!candidate) throw notShared(shown);
+  // Only an agent of the caller's own workspace reaches these. The caller already knows those agents.
+  if (candidate.workspaceId === caller.workspaceId) {
     throw new HttpError(400, 'invalid_recipient', 'Use the bare agent name for an agent in your workspace.');
   }
-  if (recipient.id === caller.agentId) {
+  if (candidate.id === caller.agentId) {
     throw new HttpError(400, 'invalid_recipient', 'A task needs a different agent. There is no hand-off of your own task.');
   }
   const [share] = await tx
     .select()
     .from(agentShares)
-    .where(and(eq(agentShares.agentId, recipient.id), eq(agentShares.guestWorkspaceId, caller.workspaceId)))
+    .where(and(eq(agentShares.agentId, candidate.id), eq(agentShares.guestWorkspaceId, caller.workspaceId)))
     .limit(1);
-  if (!share) {
-    throw new HttpError(403, 'share_required', `This workspace does not have access to ${shown}.`);
-  }
+  if (!share) throw notShared(shown);
+  // A grant exists, so the caller may learn the agent exists. Lock the agent and read it again: sharing turned off
+  // or the agent revoked since the first read is still a plain 404.
+  await tx.execute(sql`select id from agents where id = ${candidate.id} for update`);
+  const [recipient] = await tx
+    .select()
+    .from(agents)
+    .where(and(eq(agents.id, candidate.id), eq(agents.name, address.agentName), isNull(agents.revokedAt), eq(agents.shared, true)))
+    .limit(1);
+  if (!recipient) throw notShared(shown);
   await tx.execute(sql`select id from agent_shares where id = ${share.id} for update`);
   const [fresh] = await tx.select().from(agentShares).where(eq(agentShares.id, share.id)).limit(1);
   if (!fresh || fresh.status === 'revoked') {
@@ -1227,7 +1236,8 @@ export async function getAgentCard(caller: AgentPrincipal, to: string) {
     .from(agentShares)
     .where(and(eq(agentShares.agentId, recipient.id), eq(agentShares.guestWorkspaceId, caller.workspaceId)))
     .limit(1);
-  if (!share) throw new HttpError(403, 'share_required', `This workspace does not have access to ${shown}.`);
+  // No grant row looks exactly like no shared agent at this address (issue #231).
+  if (!share) throw notShared(shown);
   if (share.status === 'revoked') throw new HttpError(403, 'share_revoked', `Access to ${shown} was revoked.`);
   if (share.status !== 'approved') throw new HttpError(403, 'share_pending', `Access to ${shown} is not approved yet.`);
   await assertShareInviteLive(db, share.inviteId);
