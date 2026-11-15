@@ -71,24 +71,33 @@ const STEPS: { h: string; p: string }[] = [
   },
 ];
 
-const TRUST: { h: string; p: string }[] = [
+const TRUST: { h: string; p: string; k: string }[] = [
   {
-    h: 'Only the fields you defined go out',
-    p: 'No open-ended chat. Every answer must match the schema on the offer, or it is rejected and never delivered.',
-  },
-  {
+    k: 'approve',
     h: 'A person approves every company',
     p: 'Nothing reaches your agent until someone on your team approves the workspace. An agent cannot approve itself.',
   },
   {
+    k: 'limits',
     h: 'Limits and an off switch',
     p: 'Each company gets a daily task limit. Revoke access and their open tasks close at once.',
   },
   {
+    k: 'review',
     h: 'Review first, when it matters',
     p: 'Hold each request and each answer until you approve it. Send it back with a note if it needs work.',
   },
 ];
+
+/** The schema tile's check: each answer field against the offer. */
+const CHECKS: { f: string; t: string; ok: boolean }[] = [
+  { f: 'price', t: 'number', ok: true },
+  { f: 'currency', t: '"CAD"', ok: true },
+  { f: 'valid_until', t: 'date', ok: true },
+  { f: 'notes', t: 'not in the offer', ok: false },
+];
+
+const WORKS_WITH = ['Claude', 'ChatGPT', 'Cursor', 'Codex', 'Any MCP client'];
 
 /** Example offers: the jobs that run on email today. in = what they send, out = the answer's shape. */
 const OFFERS: { name: string; who: string; in: string[]; out: string[] }[] = [
@@ -204,6 +213,14 @@ export default function ValettoPage() {
                 How it works
               </a>
             </div>
+            <div className="vh-works">
+              <span>Works with</span>
+              <ul>
+                {WORKS_WITH.map((w) => (
+                  <li key={w}>{w}</li>
+                ))}
+              </ul>
+            </div>
           </div>
           <div className="vt-hero-stage">
             <OfferCard />
@@ -247,9 +264,28 @@ export default function ValettoPage() {
         <section className="vt-sec" id="trust" aria-labelledby="trust-h">
           <p className="vt-kicker">Control</p>
           <h2 id="trust-h">Say yes to outside agents without opening the door</h2>
-          <ul className="vh-trust">
+          <ul className="vh-bento">
+            <li className="vh-b-main">
+              <h3>Answers in your format, or not at all</h3>
+              <p>
+                Every answer is checked against the schema on the offer. One that doesn’t match is sent back to your agent and
+                never delivered. Lock the schema to your fields and nothing else gets through.
+              </p>
+              <p className="vh-check-h" aria-hidden="true">
+                answer → <b>quote_request</b>
+              </p>
+              <ul className="vh-check" aria-label="An answer checked against the quote_request offer">
+                {CHECKS.map((c) => (
+                  <li key={c.f} className={c.ok ? 'ok' : 'no'}>
+                    <code>{c.f}</code>
+                    <span>{c.t}</span>
+                    <b aria-label={c.ok ? 'passes' : 'rejected'}>{c.ok ? '✓' : '✕'}</b>
+                  </li>
+                ))}
+              </ul>
+            </li>
             {TRUST.map((t) => (
-              <li key={t.h}>
+              <li key={t.k} className={`vh-b-${t.k}`}>
                 <h3>{t.h}</h3>
                 <p>{t.p}</p>
               </li>
