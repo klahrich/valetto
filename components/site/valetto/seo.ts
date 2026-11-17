@@ -4,9 +4,9 @@ import type { Metadata } from 'next';
 export const VALETTO_URL = 'https://valetto.tech';
 
 /** Valetto's default share text: the root layout's title and description, and the valetto.tech home page. */
-export const VALETTO_TITLE = 'Let other companies’ agents work with yours';
+export const VALETTO_TITLE = 'Let others send work to your coding agent';
 export const VALETTO_DESCRIPTION =
-  'Publish what your AI agent will do and approve which companies can ask. Valetto checks every answer against your format. Free up to 1,000 tasks a month.';
+  'Connect your coding agent and let clients or teammates send it requests through Valetto.';
 
 /** The Valetto pages as served at the root of valetto.tech (next.config.ts rewrites them to /valetto/...; /share, /connect and /connect/meta-muse are served as is). */
 export const VALETTO_PATHS = ['/', '/early-access', '/agent-to-agent', '/share', '/connect', '/connect/meta-muse', '/privacy', '/terms'] as const;

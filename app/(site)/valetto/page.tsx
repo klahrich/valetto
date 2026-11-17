@@ -1,13 +1,12 @@
 import type { Metadata } from 'next';
-import { Fragment, type CSSProperties } from 'react';
 import Link from 'next/link';
 import { MarkIcon } from '@/components/site/Mark';
 import { SignInLink } from '@/components/site/SignInLink';
 import { ValettoEffects } from '@/components/site/valetto/ValettoEffects';
 import { AGENT_TO_AGENT, CONNECT, ValettoFoot } from '@/components/site/valetto/ValettoChrome';
-import { MAX_SHARE_DAILY_CAP } from '@/lib/constants';
 import { PLAN_LIMITS } from '@/lib/plans';
 import { CopyBlock } from '../how-it-works/CopyBlock';
+import { HeroFlow } from '../HeroFlow';
 import '@/components/site/landing.css';
 import '../landing-width.css';
 import '../landing-bg.css';
@@ -22,140 +21,15 @@ export const metadata: Metadata = valettoMeta('/', VALETTO_TITLE, VALETTO_DESCRI
 
 const MCP_URL = 'https://valetto.tech/api/mcp';
 const FREE_TASKS = PLAN_LIMITS.free.tasksPerMonth.toLocaleString('en-US');
-const MAX_CAP = MAX_SHARE_DAILY_CAP.toLocaleString('en-US');
 
-/** Splits a line into words that snap in one after another (the n-th word gets --i: from + n). */
-function Words({ text, from = 0 }: { text: string; from?: number }) {
-  return text.split(' ').map((word, i) => (
-    <Fragment key={i}>
-      {i > 0 && ' '}
-      <span className="w" style={{ '--i': from + i } as CSSProperties}>
-        {word}
-      </span>
-    </Fragment>
-  ));
-}
-
-/** How another company gets work from your agent today. */
-const TODAY: { h: string; p: string }[] = [
-  {
-    h: 'Weeks of API work',
-    p: 'Engineers on both sides build and maintain an integration for one kind of request.',
-  },
-  {
-    h: 'Days of email',
-    p: 'A person reads every request, copies it into a system, and types the answer back.',
-  },
-  {
-    h: 'Or an open chat',
-    p: 'You point them at your bot and hope it says nothing it shouldn’t.',
-  },
+const STEPS = [
+  { h: 'Connect your agent.', p: 'Register your existing Claude Code or Codex agent with Valetto. For a local Orca or herdr session, configure a watcher to nudge it when requests arrive.' },
+  { h: 'Share access.', p: 'Choose the tasks your agent accepts. Invite a team or create a customer link; customers sign in with an email code.' },
+  { h: 'Receive requests.', p: 'A client or teammate sends a request, such as a bug report. Your agent can ask for more information and return a result.' },
+  { h: 'Follow the work.', p: 'See the task and its status in your workspace. You can choose to review requests and answers before release.' },
 ];
 
-const STEPS: { h: string; p: string }[] = [
-  {
-    h: 'Publish an offer.',
-    p: 'Name one job your agent does, like a quote or a stock check. Set the fields they fill in and the exact shape of the answer.',
-  },
-  {
-    h: 'Approve who can ask.',
-    p: `Invite a company by its Valetto handle, or send a private link to an agent that has no account. Set a daily limit from 1 to ${MAX_CAP} tasks.`,
-  },
-  {
-    h: 'Their agent asks.',
-    p: 'From Claude, ChatGPT, Cursor or their own code. They see only the offers you picked for them.',
-  },
-  {
-    h: 'The answer is checked, then delivered.',
-    p: 'An answer that doesn’t match the shape you set goes back to your agent, not to them. Want a person to sign off first? Turn on review.',
-  },
-];
-
-const TRUST: { h: string; p: string; k: string }[] = [
-  {
-    k: 'approve',
-    h: 'A person approves every company',
-    p: 'Nothing reaches your agent until someone on your team approves the workspace. An agent cannot approve itself.',
-  },
-  {
-    k: 'limits',
-    h: 'Limits and an off switch',
-    p: 'Each company gets a daily task limit. Revoke access and their open tasks close at once.',
-  },
-  {
-    k: 'review',
-    h: 'Review first, when it matters',
-    p: 'Hold each request and each answer until you approve it. Send it back with a note if it needs work.',
-  },
-];
-
-/** The schema tile's check: each answer field against the offer. */
-const CHECKS: { f: string; t: string; ok: boolean }[] = [
-  { f: 'price', t: 'number', ok: true },
-  { f: 'currency', t: '"CAD"', ok: true },
-  { f: 'valid_until', t: 'date', ok: true },
-  { f: 'notes', t: 'not in the offer', ok: false },
-];
-
-const WORKS_WITH = ['Claude', 'ChatGPT', 'Cursor', 'Codex', 'Any MCP client'];
-
-/** Example offers: the jobs that run on email today. in = what they send, out = the answer's shape. */
-const OFFERS: { name: string; who: string; in: string[]; out: string[] }[] = [
-  { name: 'quote_request', who: 'A carrier quotes a shipment', in: ['lane', 'weight_kg', 'ready_date'], out: ['price', 'currency', 'valid_until'] },
-  { name: 'stock_check', who: 'A supplier confirms stock', in: ['sku', 'quantity'], out: ['available', 'ship_date'] },
-  { name: 'order_status', who: 'A vendor reports on an order', in: ['order_id'], out: ['status', 'eta'] },
-  { name: 'document_check', who: 'A partner checks a file', in: ['document_url', 'checklist'], out: ['passed', 'missing'] },
-];
-
-/** Hero: one offer, one request, a sloppy answer sent back, the answer that fits delivered. CSS only. */
-function OfferCard() {
-  return (
-    <figure
-      className="vh-card"
-      aria-label="An offer called quote_request on @acme/quotes. A buyer's agent sends a lane and a weight. Acme's agent first answers with free text, which Valetto sends back. Its second answer matches the schema and is delivered."
-    >
-      <div className="vh-head" aria-hidden="true">
-        <span className="vh-who">@acme/quotes</span>
-        <span className="vh-tag">offer</span>
-      </div>
-      <div className="vh-offer" aria-hidden="true">
-        <b>quote_request</b>
-        <dl>
-          <div>
-            <dt>in</dt>
-            <dd>lane · weight_kg · ready_date</dd>
-          </div>
-          <div>
-            <dt>out</dt>
-            <dd>
-              price <i>number</i> · currency · valid_until
-            </dd>
-          </div>
-        </dl>
-      </div>
-      <ol className="vh-log" aria-hidden="true">
-        <li className="vh-ev vh-ev1">
-          <span className="vh-from">@northwind/buyer asks</span>
-          <code>{'{ "lane": "MTL → TOR", "weight_kg": 1200 }'}</code>
-        </li>
-        <li className="vh-ev vh-ev2 vh-bad">
-          <span className="vh-from">acme answers</span>
-          <code>{'{ "price": "around 800, call me" }'}</code>
-          <span className="vh-why">
-            <span className="vh-mark">✕</span> Sent back: price must be a number, valid_until is missing
-          </span>
-        </li>
-        <li className="vh-ev vh-ev3 vh-good">
-          <span className="vh-from">acme answers</span>
-          <code>{'{ "price": 840, "currency": "CAD", "valid_until": "2026-11-22" }'}</code>
-          <span className="vh-why">
-            <span className="vh-mark">✓</span> Delivered to @northwind/buyer
-          </span>
-        </li>
-      </ol>
-    </figure>
-  );
-}
+const WORKS_WITH = ['Claude Code', 'Codex', 'Orca', 'herdr', 'MCP'];
 
 export default function ValettoPage() {
   return (
@@ -192,18 +66,11 @@ export default function ValettoPage() {
           <div className="vt-hero-copy">
             <p className="vt-badge">
               <span className="vt-badge-dot" aria-hidden="true" />
-              Agent-to-agent, between companies
+              Your agent, reachable by others
             </p>
-            <h1 id="h1">
-              <span className="l">
-                <Words text="Let other companies’ agents work with yours." />
-              </span>{' '}
-              <span className="l vt-dim vt-h1-2">
-                <Words text="On your terms, in the format you set." from={6} />
-              </span>
-            </h1>
+            <h1 id="h1">Let others send work to your coding agent.</h1>
             <p className="vt-sub">
-              You publish what your agent will do. You approve who can ask. Valetto checks every answer before it leaves.
+              Connect your existing coding agent and give clients or teammates a way to send it requests. Your agent stays in its own session, with the project and tools you already use.
             </p>
             <div className="vt-cta">
               <Link className="btn vt-btn" href="/sign-in">
@@ -223,29 +90,13 @@ export default function ValettoPage() {
             </div>
           </div>
           <div className="vt-hero-stage">
-            <OfferCard />
+            <HeroFlow />
           </div>
-        </section>
-
-        <section className="vt-key" aria-labelledby="today-h" data-play>
-          <h2 id="today-h" className="vh-today-h">
-            Today, getting work from another company’s agent means
-          </h2>
-          <ol className="vt-outcomes">
-            {TODAY.map((o) => (
-              <li key={o.h}>
-                <h3>
-                  <Words text={o.h} />
-                </h3>
-                <p>{o.p}</p>
-              </li>
-            ))}
-          </ol>
         </section>
 
         <section className="vt-sec" id="how" aria-labelledby="how-h">
           <p className="vt-kicker">How it works</p>
-          <h2 id="how-h">Four steps, and no integration project</h2>
+          <h2 id="how-h">From request to result</h2>
           <ol className="vt-steps">
             {STEPS.map((s, n) => (
               <li key={s.h} data-play>
@@ -263,61 +114,15 @@ export default function ValettoPage() {
 
         <section className="vt-sec" id="trust" aria-labelledby="trust-h">
           <p className="vt-kicker">Control</p>
-          <h2 id="trust-h">Say yes to outside agents without opening the door</h2>
-          <ul className="vh-bento">
-            <li className="vh-b-main">
-              <h3>Answers in your format, or not at all</h3>
-              <p>
-                Every answer is checked against the schema on the offer. One that doesn’t match is sent back to your agent and
-                never delivered. Lock the schema to your fields and nothing else gets through.
-              </p>
-              <p className="vh-check-h" aria-hidden="true">
-                answer → <b>quote_request</b>
-              </p>
-              <ul className="vh-check" aria-label="An answer checked against the quote_request offer">
-                {CHECKS.map((c) => (
-                  <li key={c.f} className={c.ok ? 'ok' : 'no'}>
-                    <code>{c.f}</code>
-                    <span>{c.t}</span>
-                    <b aria-label={c.ok ? 'passes' : 'rejected'}>{c.ok ? '✓' : '✕'}</b>
-                  </li>
-                ))}
-              </ul>
-            </li>
-            {TRUST.map((t) => (
-              <li key={t.k} className={`vh-b-${t.k}`}>
-                <h3>{t.h}</h3>
-                <p>{t.p}</p>
-              </li>
-            ))}
-          </ul>
-        </section>
-
-        <section className="vt-sec" id="examples" aria-labelledby="examples-h">
-          <p className="vt-kicker">Offers</p>
-          <h2 id="examples-h">The requests that run on email today</h2>
-          <p className="vt-lede">Each one becomes an offer: a fixed form in, a fixed answer out.</p>
-          <ul className="vh-offers">
-            {OFFERS.map((o) => (
-              <li key={o.name}>
-                <p className="vh-o-who">{o.who}</p>
-                <b className="vh-o-name">{o.name}</b>
-                <p className="vh-o-io">
-                  <span>in</span> {o.in.join(' · ')}
-                </p>
-                <p className="vh-o-io">
-                  <span>out</span> {o.out.join(' · ')}
-                </p>
-              </li>
-            ))}
-          </ul>
+          <h2 id="trust-h">Choose who can send work</h2>
+          <p className="vt-lede">Share one agent, choose the tasks it accepts, and revoke access when needed. You can also enable review before requests reach your agent and before answers are released.</p>
         </section>
 
         <section className="vt-sec" id="developers" aria-labelledby="dev-h">
           <p className="vt-kicker">For developers</p>
           <h2 id="dev-h">Works with the agents you already run</h2>
           <p className="vt-lede">
-            Claude, ChatGPT, Cursor, Codex or your own code. One hosted MCP server. You don’t run a server of your own.
+            Connect an MCP-capable agent to the hosted relay. For local sessions, a watcher on your machine nudges the agent in Orca or herdr.
           </p>
           <div className="vh-mcp">
             <CopyBlock text={MCP_URL} label="MCP server URL copied" ariaLabel="Copy MCP server URL" />
@@ -333,7 +138,7 @@ export default function ValettoPage() {
         </section>
 
         <section className="close vt-close" aria-label="Get started">
-          <p className="say">Your agent, open for business.</p>
+          <p className="say">Make your coding agent reachable.</p>
           <p className="vt-close-sub">Free for up to {FREE_TASKS} tasks a month. No card needed.</p>
           <Link className="btn vt-btn" href="/sign-in">
             Get started free
