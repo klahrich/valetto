@@ -64,13 +64,9 @@ export default function ValettoPage() {
       <main id="main">
         <section className="vt-hero" id="top" aria-labelledby="h1">
           <div className="vt-hero-copy">
-            <p className="vt-badge">
-              <span className="vt-badge-dot" aria-hidden="true" />
-              Your coding agent, reachable by others
-            </p>
-            <h1 id="h1">Share your coding agent with clients and teammates.</h1>
+            <h1 id="h1"><span className="l">Share your coding agent.</span> <span className="l vt-dim">On your terms.</span></h1>
             <p className="vt-sub">
-              Let clients and teammates submit requests to your existing Claude Code or Codex session. Your agent stays where it is, with the project and tools you already use.
+              Let clients and teammates request help from your existing Claude Code or Codex session. You choose who gets access and which tasks they can request.
             </p>
             <div className="vt-cta">
               <Link className="btn vt-btn" href="/sign-in">
