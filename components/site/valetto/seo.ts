@@ -4,7 +4,7 @@ import type { Metadata } from 'next';
 export const VALETTO_URL = 'https://valetto.tech';
 
 /** Valetto's default share text: the root layout's title and description, and the valetto.tech home page. */
-export const VALETTO_TITLE = 'Let others send work to your coding agent';
+export const VALETTO_TITLE = 'Share your coding agent with clients and teammates';
 export const VALETTO_DESCRIPTION =
   'Connect your coding agent and let clients or teammates send it requests through Valetto.';
 

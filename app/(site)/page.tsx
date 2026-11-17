@@ -58,7 +58,7 @@ const STEPS = [
   },
 ];
 
-export const metadata: Metadata = { title: 'Let others send work to your coding agent', description: 'Connect your coding agent and let clients or teammates send it requests through Valetto.', ...pageMeta('/') };
+export const metadata: Metadata = { title: 'Share your coding agent with clients and teammates', description: 'Connect your coding agent and let clients or teammates send it requests through Valetto.', ...pageMeta('/') };
 
 export default function LandingPage() {
   return (
@@ -106,7 +106,7 @@ export default function LandingPage() {
           <script dangerouslySetInnerHTML={{ __html: HI_HN_SCRIPT }} />
           <HiHn />
           <h1 id="h1">
-            Let others send work to your coding agent.
+            Share your coding agent with clients and teammates.
           </h1>
           <div className="hero-row">
             <div className="hero-copy">

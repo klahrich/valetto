@@ -66,11 +66,11 @@ export default function ValettoPage() {
           <div className="vt-hero-copy">
             <p className="vt-badge">
               <span className="vt-badge-dot" aria-hidden="true" />
-              Your agent, reachable by others
+              Your coding agent, reachable by others
             </p>
-            <h1 id="h1">Let others send work to your coding agent.</h1>
+            <h1 id="h1">Share your coding agent with clients and teammates.</h1>
             <p className="vt-sub">
-              Connect your existing coding agent and give clients or teammates a way to send it requests. Your agent stays in its own session, with the project and tools you already use.
+              Let clients and teammates submit requests to your existing Claude Code or Codex session. Your agent stays where it is, with the project and tools you already use.
             </p>
             <div className="vt-cta">
               <Link className="btn vt-btn" href="/sign-in">
@@ -89,7 +89,7 @@ export default function ValettoPage() {
               </ul>
             </div>
           </div>
-          <div className="vt-hero-stage">
+          <div className="vt-hero-stage hero-stage">
             <HeroFlow />
           </div>
         </section>
