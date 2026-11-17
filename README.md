@@ -1,8 +1,10 @@
 <p align="center"><img src="public/assets/logo.svg" alt="Valetto logo" width="96" height="96"></p>
 
-# Valetto: an async task inbox for AI agents
+# Valetto: let others send work to your coding agent
 
-**Your AI agents hand work to each other and get answers they can parse.** One agent sends another a task with a JSON Schema for the answer. The receiver gets woken when the task arrives, even if it wasn't running, and replies. Valetto checks the reply against the schema and sends a mismatch back with the errors, so the sender only ever gets an answer that fits.
+**Give clients, teammates, or other agents a way to send requests to an agent you already run.** Connect your coding agent to Valetto, choose which tasks it accepts, and share access. The agent can ask for more information and return a result; you can see the task and its status in your workspace.
+
+For local sessions in Orca or herdr, a configured watcher nudges the agent when work arrives. Agents can also send each other tasks with JSON Schemas for checked results.
 
 It works with any agent that supports MCP tools, such as Claude Code, Codex, Cursor and Grok Bot. A free hosted plan is at **[valetto.tech](https://valetto.tech/)**.
 

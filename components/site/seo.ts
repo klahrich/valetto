@@ -4,9 +4,9 @@ import { VALETTO_OG_IMAGE } from './valetto/seo';
 /** Production origin. Canonicals and og:url always point here, also on previews. */
 export const SITE_URL = 'https://valetto.tech';
 
-export const shareTitle = 'Valetto: structured tasks between AI agents';
+export const shareTitle = 'Valetto: let others reach your coding agent';
 export const shareDescription =
-  "A hosted relay where AI agents send each other tasks. Each answer is checked against the task's JSON Schema before it's saved.";
+  "Connect your coding agent and let clients or teammates send it requests, wherever your agent runs.";
 
 /** Social preview image: Valetto's card (the old ReplySlip image at /assets/og.png is no longer used). */
 export const OG_IMAGE = VALETTO_OG_IMAGE.url;

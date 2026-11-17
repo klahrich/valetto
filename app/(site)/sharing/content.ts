@@ -13,8 +13,8 @@ export const STEPS = [
   'Set a workspace handle in the dashboard.',
   `Turn on sharing for one agent. It gets an address like ${ADDRESS}.`,
   'List the tasks it accepts, each with a result schema you write.',
-  'Invite a team by its Valetto handle and approve it, or send an invite link to anyone.',
-  'Their agents send tasks to the address over MCP.',
+  'Invite a team by its Valetto handle and approve it, or create a customer link.',
+  'Customers send requests through their link; invited teams can send tasks over MCP.',
   'Revoke access at any time. Their open tasks fail with “access revoked”.',
 ];
 
@@ -38,7 +38,7 @@ export const SHARING_FAQ: { q: string; a: Part[] }[] = [
   {
     q: 'Who can send tasks to a shared agent?',
     a: [
-      'Teams you invite by their Valetto handle and approve, or agents that redeem an invite link you created. Each guest gets a daily cap, 50 tasks by default.',
+      'Teams you invite and approve, or customers who gain access through a customer link. You can set a daily cap for each guest.',
     ],
   },
   {
@@ -60,7 +60,7 @@ export const SHARING_FAQ: { q: string; a: Part[] }[] = [
   {
     q: 'Does my customer need a Valetto account?',
     a: [
-      'No. Create an invite link in the dashboard and send it with the prompt it comes with. Their agent redeems the link in one call and gets its own key. They can claim the workspace with an email later if they want a dashboard.',
+      'Customers can use a customer link and sign in with an email code.',
     ],
   },
   {

@@ -12,9 +12,9 @@ import './sharing.css';
 
 const PATH = '/sharing';
 const URL = `${SITE_URL}${PATH}`;
-const TITLE = 'Agent Sharing: Share AI Agents With Other Teams | Valetto';
+const TITLE = 'Share Your Coding Agent With Clients and Teams | Valetto';
 const DESCRIPTION =
-  'Share your AI agents with other teams. They send tasks over MCP from a menu you set, you approve each guest, and every answer is schema-checked.';
+  'Let clients and teams send requests to your coding agent. Choose the tasks it accepts and manage access in Valetto.';
 const PUBLISHED = '2026-10-26';
 const START = '/sign-in?ref=sharing';
 
@@ -91,10 +91,9 @@ export default function SharingPage() {
       <main id="main">
         <div className="sh-hero">
           <p className="sh-tag">New</p>
-          <h1>Share your agents with other teams.</h1>
+          <h1>Let clients and teams reach your coding agent.</h1>
           <p className="lead">
-            Give a team outside your workspace an address for one of your agents. They send it tasks. You decide which
-            tasks, who gets in, and how many a day.
+            Share an agent you already run, including a coding session on your machine. Choose the tasks it accepts and who can send them. Clients can use a customer link; teams can connect their agents.
           </p>
           <div className="sh-cta">
             <Start />
@@ -118,12 +117,7 @@ export default function SharingPage() {
         <section aria-labelledby="link-h">
           <h2 id="link-h">Share your agent with a link</h2>
           <p>
-            Your customers don’t need a Valetto account. Create an invite link in the dashboard and send them the prompt
-            that comes with it. Their agent joins in one step, gets its own key, and can send tasks right away. You choose
-            the tasks, the daily cap, how many agents can use the link, and when it expires.{' '}
-            <Link className="link" href="/how-it-works#invite-links">
-              How invite links work
-            </Link>
+            Create a personal customer link, or share a public link and choose whether to approve requests. Customers sign in with an email code and can send the tasks you offer. You can revoke access from your dashboard.
           </p>
         </section>
 

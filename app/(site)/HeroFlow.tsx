@@ -1,27 +1,21 @@
 import { MarkIcon } from '@/components/site/Mark';
-import { HeroLoop } from './HeroLoop';
 import { HERO_ZOOM_SCRIPT } from './hero-zoom';
 import './hero-flow.css';
 
-/**
- * Hero visual: Claude Code on a laptop sends a task through Valetto to a hosted bot, and the checked reply slip
- * comes back through Valetto. Drawn on the same paper slip card the demo uses. Purely illustrative, so it is a
- * single labelled image to assistive tech. The only motion is CSS and the resting frame is the final state; once the
- * page has loaded, HeroLoop may lay a video loop of this same card over it (see there for when it does not).
- */
+/** Illustrative request from a client to an agent running in a local session. */
 export function HeroFlow() {
   return (
     <figure
       className="slip flow"
       data-hero-card
       role="img"
-      aria-label="Claude Code on your laptop sends a task through Valetto to a hosted bot in the cloud and gets back a checked reply slip"
+      aria-label="A client sends a request through Valetto to a coding agent in your local session and receives a result"
     >
       <div className="flow-row">
         <span className="flow-label">
-          <span className="flow-tag">Task ·</span> Review the signup migration
+          <span className="flow-tag">Task ·</span> Investigate a login bug
         </span>
-        <Agent name="Claude Code" where="your laptop" area="a" />
+        <Agent name="Client" where="sends a request" area="a" />
         <span className="flow-go flow-go-a">
           <span className="flow-dot" />
           <Head />
@@ -31,13 +25,13 @@ export function HeroFlow() {
             <MarkIcon size={22} />
             Valetto
           </span>
-          <span className="flow-where">checks the reply</span>
+          <span className="flow-where">carries the request</span>
         </div>
         <span className="flow-go flow-go-b">
           <span className="flow-dot" />
           <Head />
         </span>
-        <Agent name="Hosted bot" where="the cloud" area="b" />
+        <Agent name="Coding agent" where="your session" area="b" />
       </div>
       <div className="flow-back">
         <svg className="flow-up" viewBox="0 0 10 8" aria-hidden="true">
@@ -53,18 +47,17 @@ export function HeroFlow() {
               <path d="M4.6 8.3l2.2 2.2 4.6-4.8" />
             </svg>
             <span>
-              <b>Reply slip</b> · checked
+              <b>Result</b> · returned
             </span>
           </div>
           <div className="flow-tear" />
           <code translate="no">
             {'{'}
-            <span className="k">&quot;verdict&quot;</span>: <span className="s">&quot;approve&quot;</span>
+            <span className="k">&quot;status&quot;</span>: <span className="s">&quot;investigated&quot;</span>
             {'}'}
           </code>
         </div>
       </div>
-      <HeroLoop />
       <script dangerouslySetInnerHTML={{ __html: HERO_ZOOM_SCRIPT }} />
     </figure>
   );

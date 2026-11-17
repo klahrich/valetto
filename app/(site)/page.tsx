@@ -1,5 +1,4 @@
 import type { Metadata } from 'next';
-import { Fragment, type CSSProperties } from 'react';
 import Link from 'next/link';
 import { SignInLink } from '@/components/site/SignInLink';
 import { WAKE_NOTICE } from '@/lib/wake-notice';
@@ -24,22 +23,6 @@ import { GlowBg } from './GlowBg';
 import { HeroFlow } from './HeroFlow';
 import { SetupPrompt } from './SetupPrompt';
 import { TOOL_LIST } from './tool-list';
-
-const RELAY_A = 'Right now, you are the relay.';
-const RELAY_B = 'You copy each answer, check it, and paste it into the next agent.';
-const RELAY_SUB = 'It checks each answer against your schema before handing it back.';
-
-/** One beat of the relay line, split into words that snap in one after another (the n-th word gets --i: n). */
-function Words({ text, from = 0 }: { text: string; from?: number }) {
-  return text.split(' ').map((word, i) => (
-    <Fragment key={i}>
-      {i > 0 && ' '}
-      <span className="w" style={{ '--i': from + i } as CSSProperties}>
-        {word}
-      </span>
-    </Fragment>
-  ));
-}
 
 /** How a task works: each step pairs its words with the example call in FRAMES at the same index. */
 const STEPS = [
@@ -75,7 +58,7 @@ const STEPS = [
   },
 ];
 
-export const metadata: Metadata = pageMeta('/');
+export const metadata: Metadata = { title: 'Let others send work to your coding agent', description: 'Connect your coding agent and let clients or teammates send it requests through Valetto.', ...pageMeta('/') };
 
 export default function LandingPage() {
   return (
@@ -86,7 +69,7 @@ export default function LandingPage() {
       </a>
       <p className="announce">
         <Link href="/sharing">
-          <strong>New:</strong> share your agents with other teams.{' '}
+          <strong>Share your agent:</strong> give clients and teammates a way to send requests.{' '}
           <span className="announce-go">
             <span className="announce-more">See how it works </span>→
           </span>
@@ -123,15 +106,15 @@ export default function LandingPage() {
           <script dangerouslySetInnerHTML={{ __html: HI_HN_SCRIPT }} />
           <HiHn />
           <h1 id="h1">
-            Any agent can hand tasks to any other through MCP.
+            Let others send work to your coding agent.
           </h1>
           <div className="hero-row">
             <div className="hero-copy">
               <p className="sub">
-                Your agents send each other tasks. They get back clean, checked JSON.
+                Connect your existing coding agent and give clients or teammates a way to send it requests.
               </p>
               <p className="eg">
-                Example: connect your Claude Code locally, your Codex on a server, and your Grok bots.
+                Your agent stays in its own session, with the project and tools you already use.
               </p>
               <EmailStart id="top" />
               <div className="after">
@@ -149,52 +132,23 @@ export default function LandingPage() {
         </section>
 
         <section className="setup wide" id="setup" aria-labelledby="setup-h">
-          <h2 id="setup-h">Set up an agent</h2>
+          <h2 id="setup-h">From request to result</h2>
+          <p>Connect an MCP-capable coding agent, such as Claude Code or Codex. For a local Orca or herdr session, configure a watcher to nudge it when work arrives.</p>
+          <p>Choose the tasks your agent accepts and share access with a client or teammate. Customers can use an email sign-in link; other agents can connect through MCP.</p>
+          <p>They send a request, such as a bug report. Your agent can ask for more information and return a result. You can check the task and its status in your workspace.</p>
+          <Link className="link" href="/sharing">See how sharing works</Link>
+          <h2>Connect your agent</h2>
           <SetupPrompt />
-        </section>
-
-        <section className="statement relay" aria-label="The problem" data-relay>
-          <div className="relay-rest">
-            <p className="r-prob">
-              {RELAY_A} {RELAY_B}
-            </p>
-            <p className="r-big">
-              Right now, <span className="r-acc">Valetto</span> is the relay.
-            </p>
-            <p className="r-sub">{RELAY_SUB}</p>
-          </div>
-          <div className="relay-stage" aria-hidden="true">
-            <p className="r-big ba">
-              <Words text="Right now," />{' '}
-              <span className="w slot" style={{ '--i': 2 } as CSSProperties}>
-                <span className="roll">
-                  <span>you are</span>
-                  <span>
-                    <span className="r-acc">Valetto</span> is
-                  </span>
-                </span>
-              </span>{' '}
-              <Words text="the relay." from={3} />
-            </p>
-            <div className="r-low">
-              <p className="bb">
-                <Words text={RELAY_B} />
-              </p>
-              <p className="bs">
-                <Words text={RELAY_SUB} />
-              </p>
-            </div>
-          </div>
         </section>
 
         <section className="how wide" id="how-a-task-works" aria-labelledby="how-h" data-how>
           <h2 id="how-h">
-            Agent to agent tasks, each with a verified reply slip.
+            Structured handoffs between agents.
           </h2>
           <div className="scenes">
             <div className="scene how-row">
               <p className="intro">
-                One agent asks another for a review and says exactly what the answer must contain. The ids and agent
+                Agents can also send each other tasks and specify the shape of the result. The ids and agent
                 names below are examples.
               </p>
               <div className="how-try">
