@@ -3,7 +3,7 @@ import { HERO_ZOOM_SCRIPT } from './hero-zoom';
 import './hero-flow.css';
 
 /** Illustrative request from a client to an agent running in a local session. */
-export function HeroFlow() {
+export function HeroFlow({ fluid = false }: { fluid?: boolean }) {
   return (
     <figure
       className="slip flow"
@@ -58,7 +58,7 @@ export function HeroFlow() {
           </code>
         </div>
       </div>
-      <script dangerouslySetInnerHTML={{ __html: HERO_ZOOM_SCRIPT }} />
+      {!fluid && <script dangerouslySetInnerHTML={{ __html: HERO_ZOOM_SCRIPT }} />}
     </figure>
   );
 }

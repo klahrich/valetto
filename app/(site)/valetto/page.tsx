@@ -85,8 +85,8 @@ export default function ValettoPage() {
               </ul>
             </div>
           </div>
-          <div className="vt-hero-stage hero-stage">
-            <HeroFlow />
+          <div className="vt-hero-stage">
+            <HeroFlow fluid />
           </div>
         </section>
 

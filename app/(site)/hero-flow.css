@@ -18,6 +18,18 @@
 .lp .hero-stage>.flow{border-radius:2px;margin:0 0 12px 12px;box-shadow:-6px 6px 0 -1px var(--paper-2),-6px 6px 0 0 rgba(0,0,0,.28),-12px 12px 0 -2px color-mix(in srgb,var(--paper-2) 88%,var(--paper-line)),-12px 12px 0 -1px rgba(0,0,0,.32),-6px 22px 34px rgba(0,0,0,.42)}
 .lp .hero-stage::before{content:"";position:absolute;inset:10% 4%;z-index:-1;background:radial-gradient(closest-side,color-mix(in srgb,var(--accent) 30%,transparent),transparent);filter:blur(30px)}
 
+/* The Valetto homepage has its own two-column grid. Size the diagram to its column. */
+.vt-home .vt-hero-stage{container-type:inline-size;min-width:0}
+.vt-home .vt-hero-stage>.flow{
+  margin:0 0 12px 12px;
+  box-shadow:-6px 6px 0 -1px var(--paper-2),-12px 12px 0 -1px var(--paper-line),-6px 22px 34px rgb(0 0 0 / .42);
+}
+@container (max-width:560px){
+  .vt-home .flow-node{height:auto;min-height:46px;flex-wrap:wrap;gap:4px 12px;padding-block:8px}
+  .vt-home .flow-where{white-space:normal}
+  .vt-home .flow-reply code{white-space:normal;overflow-wrap:anywhere}
+}
+
 .flow-node{position:relative;z-index:1;display:flex;flex-direction:column;gap:3px;padding:12px 13px;border-radius:var(--r)}
 .flow-agent{width:var(--chip);flex:0 0 auto;background:var(--well);border:1px solid var(--paper-line)}
 .flow-name{display:flex;align-items:center;gap:8px;font-weight:600;color:var(--paper-ink);white-space:nowrap}

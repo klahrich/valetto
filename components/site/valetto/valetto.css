@@ -350,7 +350,10 @@ fieldset.vt-ea-f[aria-invalid=true] .vt-ea-pills label:not(.on){border-color:var
 }
 @keyframes vh-in{from{opacity:0;transform:translateY(8px)}}
 @keyframes vh-strike{from{text-decoration-color:transparent;color:var(--ink)}}
-@media (max-width:859px){.vt-home .vt-hero{grid-template-columns:1fr}.vt-home .vt-hero-stage{justify-self:stretch;display:flex;justify-content:center}}
+@media (max-width:859px){
+  .vt-home .vt-hero{grid-template-columns:minmax(0,1fr)}
+  .vt-home .vt-hero-stage{width:100%;max-width:560px;justify-self:center}
+}
 
 .vh-today-h{margin:0 0 clamp(28px,4vw,44px);font-size:var(--s-small);font-weight:600;color:var(--accent)}
 .vh-offers{list-style:none;margin:36px 0 0;padding:0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
@@ -489,11 +492,3 @@ fieldset.vt-ea-f[aria-invalid=true] .vt-ea-pills label:not(.on){border-color:var
 .vt-home .vt-close{background:radial-gradient(60% 120% at 50% 110%,rgb(60 170 130 / .24),transparent 70%),linear-gradient(180deg,var(--tile),var(--bg))}
 .vt-home .vh-mcp .hw-cp-b{background:transparent;color:var(--ink);box-shadow:inset 0 0 0 1px rgb(255 255 255 / .18)}
 .vt-home .vh-mcp .hw-cp-b:hover{background:rgb(255 255 255 / .06)}
-
-/* Allow the hero and its diagram to shrink within narrow viewports. */
-.vt-hero-copy,.vt-hero-stage{min-width:0}
-.vt .vt-hero-stage.hero-stage{width:min(546px,45vw)}
-@media (max-width:859px){
-  .vt-hero{grid-template-columns:minmax(0,1fr)}
-  .vt .vt-hero-stage.hero-stage{width:100%;max-width:546px;justify-self:center}
-}
