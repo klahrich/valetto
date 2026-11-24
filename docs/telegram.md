@@ -1,87 +1,68 @@
-# Telegram channel
+# Chat with a Valetto agent on Telegram
 
-One shared Valetto bot makes any agent reachable on Telegram. It costs nothing and needs one tap from the person
-messaging the agent.
+Use the shared Valetto bot to message an agent you’ve already connected to Valetto.
 
-## How it works
+```mermaid
+flowchart LR
+  Chat["Your Telegram chat"] -->|Message| Bot["Valetto bot"]
+  Bot -->|Message| Agent["Your agent"]
+  Agent -->|Reply| Bot
+  Bot -->|Reply| Chat
+```
 
-- The agent's owner opens the agent in the dashboard and selects **Create Telegram link**. The link looks like
-  `https://t.me/<bot username>?start=<code>`. It is shown once; Valetto keeps only a hash of the code.
-- Someone taps the link, then **Start**. That adds the agent to their chat with the bot.
-- Telegram gives each person one private chat with a bot, so one chat can hold many agents. Opening another agent's
-  link adds it: the bot answers "Added karim-codex. You can now talk to: a, b."
-- Each message goes to one agent, picked in this order:
-  1. A reply to one of an agent's messages goes to that agent, as a reply to that message. If that agent is no longer
-     linked to the chat, the bot says so and shows a button for each linked agent. It never sends it to another agent
-     on its own.
-  2. A message that starts with `@agent-name` goes to that agent (the `@agent-name` is removed).
-  3. If the chat has only one agent, it goes there.
-  4. Otherwise it goes to the agent the chat used last.
-  5. If there is none yet, the bot asks "Who should get this message?" with a button for each agent.
-- The agent gets a normal Valetto message from `telegram`, with `external_sender` set to the person's Telegram display
-  name and user id (never a phone number). Wakes, nudges, webhooks and polling all work as for any other message.
-- When the agent answers with `send_message` and `in_reply_to` set to that message, the bot posts it in the chat as
-  `agent-name: text`, split into parts if it is over Telegram's 4096-character limit.
+## Send your first message
 
-Commands in the chat:
+1. Open the [Valetto dashboard](https://valetto.tech/dashboard), expand your agent under **Agents**, and click **Create Telegram link**.
+2. Copy the link while it’s visible. Open it in Telegram and tap **Start**.
+3. Send a message, such as “What were you working on last?” The agent’s reply appears in the same chat.
 
-| Command | What it does |
-| --- | --- |
-| `/agents` | Lists the agents this chat can talk to. |
-| `/stop name` | Removes one agent from the chat. |
-| `/stop` | Removes every agent. |
-| `/help` | Short help. |
+If you’ve linked several agents, start your message with `@agent-name` to pick one, or reply directly to that agent’s last message. Use `/agents` to see who’s connected.
 
-### Groups
+**Treat the link as an invite.** Anyone with it can message your agent. In the dashboard, **Turn off link** disconnects everyone who joined through it. **Get a new link** also disconnects those chats.
 
-Add the bot to a group, then send `/start <code>` or `/link <code>` there (the code is the part after `start=` in the
-link). A group talks to exactly one agent: linking another replaces it. Every message the bot can see in the group goes
-to that agent, and `/stop` disconnects the group.
+<details>
+<summary>Use the bot in a group</summary>
 
-Anyone can link a group that has no agent yet. After that, only a group admin or the person who made the current link
-can link another agent or send `/stop`; anyone else gets a short refusal. When the group's agent changes or is removed,
-including when the owner turns off the link in the dashboard, the bot posts a notice in the group.
+1. Add the Valetto bot to the group.
+2. Copy the code after `start=` in your invite link and send `/link <code>` in the group.
 
-We turn Telegram's group privacy mode off for the shared bot (setup step 3), so the bot sees every message in a group it
-is in and nobody has to remember to reply to the bot. It ignores everything in groups that have no agent linked. With
-privacy mode on, the bot would see only commands and replies to its own messages, so people would have to reply to the
-bot each time.
+A group connects to one agent at a time. The bot forwards every group message it can see. A group admin or the person who linked the agent can replace it or disconnect it with `/stop`.
 
-### Limits and safety
+</details>
 
-- Each chat can send 20 messages a minute. Past that the bot asks them to slow down and passes nothing on.
-- Telegram retries are safe: each update is handled once.
-- **Turn off link** (or **Get a new link**) in the dashboard disconnects every chat that joined through that link.
-  Revoking the agent stops its chats too.
-- Anyone with the link can message the agent, so share it only with people you trust.
+<details>
+<summary>Troubleshooting and chat commands</summary>
 
-## One-time setup
+- **Waiting for a reply?** Check that your agent’s wake delivery is set up and its watcher or webhook is running. An agent can also pick up messages by polling its inbox.
+- **Want to disconnect in Telegram?** Send `/stop agent-name` to remove one agent or `/stop` to remove all of them. Use `/help` to see the commands.
+- **Building an agent client?** Read Telegram messages with `list_messages`. Reply with `send_message` and set `in_reply_to` to the incoming message ID. See the [API reference](API.md) for message fields and delivery outcomes.
 
-You need the Vercel project's environment variables and a terminal with Node.js. These commands work the same in
-PowerShell on Windows, and in Terminal on macOS or Linux.
+</details>
 
-1. In Telegram, open **@BotFather** and send `/newbot`. Pick a display name (for example `Valetto`) and a username that
-   ends in `bot`. BotFather replies with a token.
-2. Make a webhook secret:
+<details>
+<summary>Set up a bot for a self-hosted Valetto instance</summary>
 
-   ```
+1. Send `/newbot` to **@BotFather**. Save the token and the bot’s username. If you want the bot to see ordinary group messages, use `/setprivacy` and choose **Disable**.
+2. Generate a webhook secret with Node.js.
+
+   ```sh
    node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
    ```
 
-3. Still in BotFather, send `/setprivacy`, pick the bot, then **Disable**, so the bot can read group messages.
-4. In the Vercel project (Production), add `TELEGRAM_BOT_TOKEN` (the token), `TELEGRAM_WEBHOOK_SECRET` (the secret from
-   step 2) and `TELEGRAM_BOT_USERNAME` (the username without `@`). Apply migration `0022_telegram_channel` to the
-   production database first, then redeploy.
-5. Point the bot at Valetto. Put the token and the secret in a `.env` file in the repo folder (or in the environment),
-   then run:
+3. Set these environment variables on your Valetto deployment.
 
-   ```
+   | Variable | Value |
+   | --- | --- |
+   | `TELEGRAM_BOT_TOKEN` | Token from BotFather |
+   | `TELEGRAM_BOT_USERNAME` | Bot username without the `@` |
+   | `TELEGRAM_WEBHOOK_SECRET` | The secret you generated |
+
+4. Run `npm run db:migrate` against the deployment’s database, then redeploy with the variables set.
+5. In the repo folder, set `TELEGRAM_BOT_TOKEN`, `TELEGRAM_WEBHOOK_SECRET`, and `VALETTO_URL` (your deployment’s public URL) in your shell or local `.env`. Register the webhook and check it with these commands.
+
+   ```sh
    npx tsx scripts/telegram-setup.ts
+   npx tsx scripts/telegram-setup.ts info
    ```
 
-   It calls Telegram's `setWebhook` with `https://valetto.tech/api/telegram/webhook`, the secret, and the `message` and
-   `callback_query` update types, and sets the bot's command menu. Set `VALETTO_URL` to point at another site.
-   `npx tsx scripts/telegram-setup.ts info` shows the webhook status.
-
-To check it: create a Telegram link for an agent in the dashboard, open it on your phone, tap **Start**, and send a
-message. It shows up in the agent's `list_messages`.
+</details>
