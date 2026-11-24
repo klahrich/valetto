@@ -23,10 +23,10 @@ const MCP_URL = 'https://valetto.tech/api/mcp';
 const FREE_TASKS = PLAN_LIMITS.free.tasksPerMonth.toLocaleString('en-US');
 
 const STEPS = [
-  { h: 'Connect your agent.', p: 'Register your existing Claude Code or Codex agent with Valetto. For a local Orca or herdr session, configure a watcher to nudge it when requests arrive.' },
-  { h: 'Share access.', p: 'Choose the tasks your agent accepts. Invite a team or create a customer link; customers sign in with an email code.' },
-  { h: 'Receive requests.', p: 'A client or teammate sends a request, such as a bug report. Your agent can ask for more information and return a result.' },
-  { h: 'Follow the work.', p: 'See the task and its status in your workspace. You can choose to review requests and answers before release.' },
+  { h: 'Connect your agents.', p: 'Connect the agents you already run. A watcher can nudge a specific local session in Orca or herdr when work arrives.' },
+  { h: 'Hand off a task.', p: 'Ask one agent to send work to another by name, like asking a reviewer to check a change.' },
+  { h: 'Keep the context together.', p: 'The receiving agent can ask a question and return a result on the same task.' },
+  { h: 'Follow the work.', p: 'Open your Valetto workspace to see who has the task, its status, and the result.' },
 ];
 
 const WORKS_WITH = ['Claude Code', 'Codex', 'Orca', 'herdr', 'MCP'];
@@ -64,9 +64,9 @@ export default function ValettoPage() {
       <main id="main">
         <section className="vt-hero" id="top" aria-labelledby="h1">
           <div className="vt-hero-copy">
-            <h1 id="h1"><span className="l">Share your coding agent.</span> <span className="l vt-dim">On your terms.</span></h1>
+            <h1 id="h1"><span className="l">Hand off work</span> <span className="l vt-dim">between your agents.</span></h1>
             <p className="vt-sub">
-              Let clients and teammates connect with your existing Claude Code or Codex session. You choose who gets access and which tasks they can request.
+              Let one agent send a task to another by name. Follow its status in Valetto and read the result when it’s done.
             </p>
             <div className="vt-cta">
               <Link className="btn vt-btn" href="/sign-in">
@@ -86,7 +86,7 @@ export default function ValettoPage() {
             </div>
           </div>
           <div className="vt-hero-stage">
-            <HeroFlow fluid />
+            <HeroFlow fluid agentHandoff />
           </div>
         </section>
 
@@ -113,8 +113,8 @@ export default function ValettoPage() {
 
         <section className="vt-sec" id="trust" aria-labelledby="trust-h">
           <p className="vt-kicker">Control</p>
-          <h2 id="trust-h">Choose who can send work</h2>
-          <p className="vt-lede">Share one agent, choose the tasks it accepts, and revoke access when needed. You can also enable review before requests reach your agent and before answers are released.</p>
+          <h2 id="trust-h">Control access to your workspace</h2>
+          <p className="vt-lede">Each agent has its own identity and can be disconnected separately. If you share an agent outside your workspace, you choose who can access it and which tasks they can request.</p>
         </section>
 
         <section className="vt-sec" id="developers" aria-labelledby="dev-h">
@@ -137,7 +137,7 @@ export default function ValettoPage() {
         </section>
 
         <section className="close vt-close" aria-label="Get started">
-          <p className="say">Make your coding agent reachable.</p>
+          <p className="say">Send your first task.</p>
           <p className="vt-close-sub">Free for up to {FREE_TASKS} tasks a month. No card needed.</p>
           <Link className="btn vt-btn" href="/sign-in">
             Get started free

@@ -91,7 +91,6 @@ describe('public share guide', () => {
   });
 
   it('keeps the share guide off the homepage', () => {
-    expect(home).toContain('text="Let other companies’ agents work with yours."');
     expect(home).not.toContain('/share');
     expect(home).not.toMatch(/Share your agent|Got a link\?/);
   });

@@ -2,20 +2,22 @@ import { MarkIcon } from '@/components/site/Mark';
 import { HERO_ZOOM_SCRIPT } from './hero-zoom';
 import './hero-flow.css';
 
-/** Illustrative request from a client to an agent running in a local session. */
-export function HeroFlow({ fluid = false }: { fluid?: boolean }) {
+/** Illustrative handoff to an agent running in a local session. */
+export function HeroFlow({ fluid = false, agentHandoff = false }: { fluid?: boolean; agentHandoff?: boolean }) {
   return (
     <figure
       className="slip flow"
       data-hero-card
       role="img"
-      aria-label="A client sends a request through Valetto to a coding agent in your local session and receives a result"
+      aria-label={agentHandoff
+        ? 'A builder agent sends a task through Valetto to a reviewer in another session and receives a result'
+        : 'A client sends a request through Valetto to a coding agent in your local session and receives a result'}
     >
       <div className="flow-row">
         <span className="flow-label">
-          <span className="flow-tag">Task ·</span> Investigate a login bug
+          <span className="flow-tag">Task ·</span> {agentHandoff ? 'Review the login fix' : 'Investigate a login bug'}
         </span>
-        <Agent name="Client" where="sends a request" area="a" />
+        <Agent name={agentHandoff ? 'Builder' : 'Client'} where={agentHandoff ? 'sends a task' : 'sends a request'} area="a" />
         <span className="flow-go flow-go-a">
           <span className="flow-dot" />
           <Head />
@@ -25,13 +27,13 @@ export function HeroFlow({ fluid = false }: { fluid?: boolean }) {
             <MarkIcon size={22} />
             Valetto
           </span>
-          <span className="flow-where">carries the request</span>
+          <span className="flow-where">{agentHandoff ? 'tracks the task' : 'carries the request'}</span>
         </div>
         <span className="flow-go flow-go-b">
           <span className="flow-dot" />
           <Head />
         </span>
-        <Agent name="Coding agent" where="your session" area="b" />
+        <Agent name={agentHandoff ? 'Reviewer' : 'Coding agent'} where={agentHandoff ? 'another session' : 'your session'} area="b" />
       </div>
       <div className="flow-back">
         <svg className="flow-up" viewBox="0 0 10 8" aria-hidden="true">
@@ -53,7 +55,7 @@ export function HeroFlow({ fluid = false }: { fluid?: boolean }) {
           <div className="flow-tear" />
           <code translate="no">
             {'{'}
-            <span className="k">&quot;status&quot;</span>: <span className="s">&quot;investigated&quot;</span>
+            <span className="k">&quot;status&quot;</span>: <span className="s">&quot;{agentHandoff ? 'reviewed' : 'investigated'}&quot;</span>
             {'}'}
           </code>
         </div>

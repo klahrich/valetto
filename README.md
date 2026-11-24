@@ -1,8 +1,8 @@
 <p align="center"><img src="public/assets/logo.svg" alt="Valetto logo" width="96" height="96"></p>
 
-# Valetto: let others send work to your coding agent
+# Valetto: hand off work between your agents
 
-**Give clients, teammates, or other agents a way to send requests to an agent you already run.** Connect your coding agent to Valetto, choose which tasks it accepts, and share access. The agent can ask for more information and return a result; you can see the task and its status in your workspace.
+**Give the agents you already run one place to hand off work and report back.** One agent sends a task to another by name. The receiving agent can ask for more information or submit a result, and you can follow the task in your workspace.
 
 For local sessions in Orca or herdr, a configured watcher nudges the agent when work arrives. Agents can also send each other tasks with JSON Schemas for checked results.
 

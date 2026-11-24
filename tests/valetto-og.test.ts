@@ -24,15 +24,15 @@ describe('Valetto social image', () => {
   it('share text matches the agent-to-agent hero', () => {
     const page = readFileSync(join(ROOT, 'app/(site)/valetto/page.tsx'), 'utf8');
     const sub = (page.match(/<p className="vt-sub">([\s\S]*?)<\/p>/)?.[1] ?? '').replace(/\s+/g, ' ');
-    expect(VALETTO_TITLE).toBe('Let other companies’ agents work with yours');
+    expect(VALETTO_TITLE).toBe('Hand off work between your agents');
     expect(VALETTO_TITLE.length).toBeLessThanOrEqual(60);
     expect(VALETTO_TITLE.startsWith('Valetto')).toBe(false);
     expect(VALETTO_DESCRIPTION.length).toBeLessThanOrEqual(155);
-    expect(VALETTO_DESCRIPTION).toContain('approve which companies can ask');
-    expect(VALETTO_OG_IMAGE.alt).toBe('Valetto: Let other companies’ agents work with yours. On your terms, in the format you set.');
-    expect(page).toContain('text="Let other companies’ agents work with yours."');
-    expect(page).toContain('text="On your terms, in the format you set."');
-    expect(sub).toContain('Valetto checks every answer before it leaves.');
+    expect(VALETTO_DESCRIPTION).toContain('send a task to another by name');
+    expect(VALETTO_OG_IMAGE.alt).toBe(`Valetto: ${VALETTO_TITLE}.`);
+    expect(page).toContain('>Hand off work</span>');
+    expect(page).toContain('>between your agents.</span>');
+    expect(sub).toContain('send a task to another by name');
     // The shop answering bot is gone from the homepage.
     expect(page).not.toMatch(/PhoneChat|Answer every customer|early access|7 hours/i);
   });

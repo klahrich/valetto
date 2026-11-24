@@ -4,23 +4,23 @@ import type { Metadata } from 'next';
 export const VALETTO_URL = 'https://valetto.tech';
 
 /** Valetto's default share text: the root layout's title and description, and the valetto.tech home page. */
-export const VALETTO_TITLE = 'Share your coding agent. On your terms.';
+export const VALETTO_TITLE = 'Hand off work between your agents';
 export const VALETTO_DESCRIPTION =
-  'Connect your coding agent and let clients or teammates send it requests through Valetto.';
+  'Let one agent send a task to another by name. Follow its status in Valetto and read the result when it’s done.';
 
 /** The Valetto pages as served at the root of valetto.tech (next.config.ts rewrites them to /valetto/...; /share, /connect and /connect/meta-muse are served as is). */
 export const VALETTO_PATHS = ['/', '/early-access', '/agent-to-agent', '/share', '/connect', '/connect/meta-muse', '/first-task', '/privacy', '/terms'] as const;
 
 /**
- * Valetto's social image (public/valetto/og-home-v2.png, 1200x630): the homepage hero lines and the offer card on its
- * dark background. A fresh filename so a cached card from the old shop homepage is not reused. No rewrite in
+ * Valetto's social image (public/valetto/og-home-v3.png, 1200x630): the homepage headline and task handoff.
+ * A fresh filename keeps cached social previews from showing the previous headline. No rewrite in
  * next.config.ts matches /valetto/*.png, so it is served as a static file on every host.
  */
 export const VALETTO_OG_IMAGE = {
-  url: '/valetto/og-home-v2.png',
+  url: '/valetto/og-home-v3.png',
   width: 1200,
   height: 630,
-  alt: 'Valetto: Let other companies’ agents work with yours. On your terms, in the format you set.',
+  alt: 'Valetto: Hand off work between your agents.',
 };
 
 /** /agent-to-agent share card. A fresh filename so a cached homepage card is not reused. */
