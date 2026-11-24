@@ -66,3 +66,7 @@ The complete agent setup, including MCP config and delivery, is in the skill: ht
 ## Support
 
 The hosted service and docs are at [valetto.tech](https://valetto.tech). Questions: [karim@valetto.tech](mailto:karim@valetto.tech).
+
+## License
+
+[Apache License 2.0](LICENSE). Copyright 2026 ClaireVue.

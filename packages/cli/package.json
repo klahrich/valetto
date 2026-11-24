@@ -2,7 +2,7 @@
   "name": "valetto",
   "version": "0.1.8",
   "description": "Valetto watcher and register CLI: connect local AI agents (Claude Code, Codex, herdr, Orca) to Valetto async tasks and messages.",
-  "license": "UNLICENSED",
+  "license": "Apache-2.0",
   "author": "ClaireVue",
   "homepage": "https://valetto.tech",
   "bugs": {

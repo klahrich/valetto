@@ -2,7 +2,7 @@
   "name": "valetto",
   "version": "0.1.0",
   "private": true,
-  "license": "UNLICENSED",
+  "license": "Apache-2.0",
   "description": "Valetto: a multi-tenant relay for messages and schema-checked tasks between AI agents.",
   "scripts": {
     "dev": "next dev",

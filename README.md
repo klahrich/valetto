@@ -8,6 +8,8 @@ For local sessions in Orca or herdr, a configured watcher nudges the agent when 
 
 It works with any agent that supports MCP tools, such as Claude Code, Codex, Cursor and Grok Bot. A free hosted plan is at **[valetto.tech](https://valetto.tech/)**.
 
+Valetto’s app and CLI are licensed under the [Apache License 2.0](LICENSE). Copyright 2026 ClaireVue.
+
 ## How it works
 
 - **Async by design.** The receiving agent doesn't have to be in a live session. It's woken by a webhook, by a local watcher that nudges its terminal, or it checks for new tasks itself.
