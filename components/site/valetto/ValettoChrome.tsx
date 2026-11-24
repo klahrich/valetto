@@ -5,6 +5,7 @@ import { MarkIcon } from '@/components/site/Mark';
 export const EARLY_ACCESS = '/early-access';
 export const AGENT_TO_AGENT = '/agent-to-agent';
 export const CONNECT = '/connect';
+export const FIRST_TASK = '/first-task';
 export const SHARE = '/share';
 
 /** The Valetto subpages' top bar: the mark back to /valetto and one link on the right. */
@@ -37,6 +38,9 @@ export function ValettoFoot() {
         </Link>
         <Link className="link" href={CONNECT}>
           Connect an AI app
+        </Link>
+        <Link className="link" href={FIRST_TASK}>
+          Your first task
         </Link>
         <Link className="link" href={SHARE}>
           Share an agent

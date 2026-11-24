@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { MarkIcon } from '@/components/site/Mark';
 import { SignInLink } from '@/components/site/SignInLink';
 import { ValettoEffects } from '@/components/site/valetto/ValettoEffects';
-import { AGENT_TO_AGENT, CONNECT, ValettoFoot } from '@/components/site/valetto/ValettoChrome';
+import { AGENT_TO_AGENT, CONNECT, FIRST_TASK, ValettoFoot } from '@/components/site/valetto/ValettoChrome';
 import { PLAN_LIMITS } from '@/lib/plans';
 import { CopyBlock } from '../how-it-works/CopyBlock';
 import { HeroFlow } from '../HeroFlow';
@@ -106,6 +106,9 @@ export default function ValettoPage() {
               </li>
             ))}
           </ol>
+          <p className="vh-dev-links">
+            <Link className="link" href={FIRST_TASK}>Send your first task</Link>
+          </p>
         </section>
 
         <section className="vt-sec" id="trust" aria-labelledby="trust-h">

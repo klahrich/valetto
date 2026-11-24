@@ -9,7 +9,7 @@ export const VALETTO_DESCRIPTION =
   'Connect your coding agent and let clients or teammates send it requests through Valetto.';
 
 /** The Valetto pages as served at the root of valetto.tech (next.config.ts rewrites them to /valetto/...; /share, /connect and /connect/meta-muse are served as is). */
-export const VALETTO_PATHS = ['/', '/early-access', '/agent-to-agent', '/share', '/connect', '/connect/meta-muse', '/privacy', '/terms'] as const;
+export const VALETTO_PATHS = ['/', '/early-access', '/agent-to-agent', '/share', '/connect', '/connect/meta-muse', '/first-task', '/privacy', '/terms'] as const;
 
 /**
  * Valetto's social image (public/valetto/og-home-v2.png, 1200x630): the homepage hero lines and the offer card on its
