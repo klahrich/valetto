@@ -12,12 +12,12 @@ export const VALETTO_DESCRIPTION =
 export const VALETTO_PATHS = ['/', '/early-access', '/agent-to-agent', '/share', '/connect', '/connect/meta-muse', '/first-task', '/privacy', '/terms'] as const;
 
 /**
- * Valetto's social image (public/valetto/og-home-v3.png, 1200x630): the homepage headline and task handoff.
+ * Valetto's social image (public/valetto/og-home-v4.png, 1200x630): the homepage headline and task handoff.
  * A fresh filename keeps cached social previews from showing the previous headline. No rewrite in
  * next.config.ts matches /valetto/*.png, so it is served as a static file on every host.
  */
 export const VALETTO_OG_IMAGE = {
-  url: '/valetto/og-home-v3.png',
+  url: '/valetto/og-home-v4.png',
   width: 1200,
   height: 630,
   alt: 'Valetto: Hand off work between your agents.',
