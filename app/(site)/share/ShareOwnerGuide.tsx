@@ -1,4 +1,6 @@
 import type { ReactNode } from 'react';
+import Link from 'next/link';
+import { CopyBlock } from '../how-it-works/CopyBlock';
 import {
   DEFAULT_SHARE_DAILY_CAP,
   INVITE_DEFAULT_TTL_DAYS,
@@ -9,6 +11,7 @@ import {
   MAX_SHARE_DAILY_CAP,
 } from '@/lib/constants';
 import { FREE_GUEST_WORKSPACES, PLAN_LIMITS } from '@/lib/plans';
+import '../how-it-works/sharing.css';
 
 const DAYS = INVITE_DEFAULT_TTL_DAYS;
 const CAP = DEFAULT_SHARE_DAILY_CAP;
@@ -19,6 +22,13 @@ const MAX_CAP = MAX_SHARE_DAILY_CAP;
 const ACTIVE_LINKS = INVITE_MAX_ACTIVE_PER_AGENT;
 const GUEST_MONTH = PLAN_LIMITS.free.tasksPerMonth;
 const GUEST_SLOTS = FREE_GUEST_WORKSPACES;
+const OFFER_PROMPT = [
+  'Use Valetto MCP to create an offer on your own agent for [describe the task].',
+  'Ask me if you need more detail about what the other agent should send or what you should return.',
+  'If I give you the recipient’s Valetto workspace handle, enable sharing and invite that workspace to use this offer only.',
+  'Ask me before replacing an existing offer or changing an existing guest’s access, and if we need to choose a public workspace handle.',
+  'Tell me the offer name and what I need to do in the dashboard.',
+].join('\n\n');
 
 function n(value: number): string {
   return value.toLocaleString('en-US');
@@ -38,23 +48,25 @@ export function ShareOwnerGuide() {
     <>
       <div className="sg-head">
         <div>
-          <p className="sg-kicker">For the owner</p>
-          <h2 id="owner-heading">Share your agent</h2>
-          <p className="sg-sub">You create the link while signed in. They do not sign in.</p>
+          <h2 id="owner-heading">Share one offer</h2>
+          <p className="sg-sub">An offer defines a task another agent can request, what it should send, and what your agent returns.</p>
         </div>
         <span className="sg-tag">You control access</span>
       </div>
 
       <div className="sg-callout">
-        <p>
-          <strong>Don’t see Agent invite links?</strong> It isn’t on your account yet.
-        </p>
-        <p>
-          Teams with a Valetto workspace: <strong>Invite a workspace by handle</strong>. People in a browser:{' '}
-          <strong>Customer links</strong>.
-        </p>
+        <h3>1. Create the offer</h3>
+        <p>Copy the prompt into your connected agent and replace <strong>[describe the task]</strong> with what you want it to do.</p>
+        <p><strong>Example</strong> “Find a meeting time. Ask for a meeting length and proposed times. Return one time that works, with its time zone.”</p>
+        <CopyBlock text={OFFER_PROMPT} pre ariaLabel="Copy prompt to create a Valetto offer" />
+        <p>For an OAuth connection, the app needs <strong>Manage your workspace settings and guests</strong> permission.</p>
       </div>
 
+      <h3 className="sg-invite-heading">2. Give the other agent access</h3>
+      <div className="sg-callout">
+        <p><strong>They have a Valetto workspace.</strong> Give your agent their workspace handle so it can prepare the invite. Approve the new grant under <strong>Sharing → Guests</strong> in the <Link className="link" href="/dashboard">dashboard</Link>.</p>
+        <p><strong>They need an invite link.</strong> Create it in the dashboard using the steps below. They can paste the copied instructions into their agent without signing up.</p>
+      </div>
       <div className="sg-split">
         <ol className="sg-steps">
           <Step title="Open Sharing and choose your agent">
@@ -65,31 +77,20 @@ export function ShareOwnerGuide() {
           </Step>
           <Step title="Choose the tasks they can send">
             <p>
-              Under <strong>Agent invite links</strong>, tick <strong>Tasks they can send</strong>.
-            </p>
-          </Step>
-          <Step title="Set expiry, daily tasks, and how many">
-            <p>
-              Set <strong>Expires after (days)</strong> and <strong>Tasks per day, per guest</strong>. Leave{' '}
-              <strong>One customer</strong> for one agent.
-            </p>
-          </Step>
-          <Step title="Decide when they can start">
-            <p>
-              <strong>They can use these tasks as soon as they connect</strong> starts on. Uncheck it to approve each
-              guest under <strong>Guests</strong>.
+              In <strong>Agent invite links → Tasks they can send</strong>, select only the offer you want to share.
+              Leave <strong>One customer</strong> selected for one external agent.
             </p>
           </Step>
           <Step title="Create the link and send it">
             <p>
-              Press <strong>Create invite link</strong>, then <strong>Copy message</strong> or <strong>Copy prompt</strong>.
+              Press <strong>Create invite link</strong>, then <strong>Copy message</strong> or <strong>Copy prompt</strong> and send it to the recipient.
             </p>
           </Step>
         </ol>
 
         <aside className="sg-aside" aria-label="Defaults and what to watch">
-          <div className="sg-card">
-            <h3>Defaults</h3>
+          <details className="sg-card">
+            <summary>Invite link settings</summary>
             <dl className="sg-defaults">
               <div>
                 <dt>Connected agents</dt>
@@ -108,10 +109,9 @@ export function ShareOwnerGuide() {
                 <dd>On</dd>
               </div>
             </dl>
-            <p className="sg-micro">
-              <strong>Up to … agents</strong> starts at 10, not selected.
-            </p>
-          </div>
+            <p>Change <strong>Expires after (days)</strong> or <strong>Tasks per day, per guest</strong> when you need different limits.</p>
+            <p>Uncheck <strong>They can use these tasks as soon as they connect</strong> to approve the guest under <strong>Guests</strong>.</p>
+          </details>
           <div className="sg-card">
             <h3>Keep your agent available</h3>
             <p>A link does not run your agent. It has to be running, or already set to wake.</p>
@@ -134,6 +134,8 @@ export function ShareOwnerGuide() {
           <strong>Send it only to the person it’s for.</strong>
         </p>
       </div>
+
+      <p className="sg-sub"><strong>Missing Agent invite links?</strong> If your deployment has link sharing disabled, use <strong>Invite a workspace by handle</strong> for an existing Valetto workspace.</p>
 
       <details className="sg-more" id="revoke">
         <summary>Revoke, Stop sharing, and limits</summary>

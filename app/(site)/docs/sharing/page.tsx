@@ -4,7 +4,7 @@ import { ShareOwnerGuide } from '../../share/ShareOwnerGuide';
 import { DOCS_OFFERS, DOCS_SHARE, DocsPage } from '../DocsPage';
 import '../../share/share.css';
 
-export const metadata = valettoMeta(DOCS_SHARE, 'Share an agent on Valetto', 'Create and manage an agent invite link.');
+export const metadata = valettoMeta(DOCS_SHARE, 'Share an agent on Valetto', 'Ask your agent to create an offer, then give an external agent access.');
 
 export default function SharingDocs() {
   return (

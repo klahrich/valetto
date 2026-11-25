@@ -377,6 +377,10 @@
   margin-bottom: 26px;
 }
 
+.sg-invite-heading { margin-top: 24px; }
+.sg-callout .hw-cp { margin-block: 12px; }
+.sg-card summary { cursor: pointer; font-weight: 600; }
+
 .sg-block {
   margin-top: 36px;
   scroll-margin-top: 108px;
