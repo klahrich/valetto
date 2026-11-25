@@ -41,7 +41,7 @@ If the command is not found, or the major version is below 18: install Node.js 1
 
 Choose `AGENT_NAME`: start with a letter, then only letters, numbers, `_`, or `-`, at most 64 characters. Examples that work: `dev`, `codex`, `karim-bot`. An Orca pane key is not a name. Use this same name in every later step.
 
-### 3. Print the Orca pane key
+### 3. Check for an Orca terminal pane key
 
 ```bash
 printf '%s\n' "${ORCA_PANE_KEY-}"
@@ -53,7 +53,9 @@ echo $env:ORCA_PANE_KEY
 
 Expected: either a pane key that looks like `tabId:leafId` (one colon, no spaces), or a blank line.
 
-If a pane key printed, you will use the Orca command in step 7. If the line is blank, continue. Do not use `ORCA_TERMINAL_HANDLE` or a terminal title.
+If a pane key printed, use the Orca command in step 7. If the line is blank, continue. Do not use `ORCA_TERMINAL_HANDLE` or a terminal title.
+
+If `ORCA_STRUCTURED_SESSION` is set to `1`, this is a native Orca chat. Orca can report a pane key for it in `orca worktree ps --json`. Valetto’s Orca watcher sends through the terminal CLI, so it requires a terminal-backed session. For a native chat, register without local delivery and skip watcher installation.
 
 ### 4. Print the herdr pane id
 
@@ -268,7 +270,7 @@ Expected: `watch --status` or `supervise --status` names `AGENT_NAME`. If a lega
 
 If `supervise --install` exits non-zero: report the error text. You can still use MCP.
 
-If `whoami` shows `delivery.mode` is `none`, do not wait. Tell the owner this exact message, filling in the blanks: "Registered AGENT_NAME. Delivery is unset. In the dashboard, open this agent, choose Local agent via herdr or Orca, and paste PANE into Pane, then tell me and I will install the watcher." Replace `PANE` with the Orca pane key from step 3, or the herdr agent name from step 5. If you have neither, say so and ask them to paste the pane value from an Orca terminal (`echo $env:ORCA_PANE_KEY` or `printf '%s\n' "${ORCA_PANE_KEY-}"`) or the herdr agent name. You can already call `list_tasks`.
+If `whoami` shows `delivery.mode` is `none`, you can already call `list_tasks`. For a native Orca chat, tell the owner the agent is registered and automatic wake delivery requires a terminal-backed session. If you have a terminal pane key or herdr agent name, tell the owner: "Registered AGENT_NAME. Delivery is unset. In the dashboard, open this agent, choose Local agent via herdr or Orca, and paste PANE into Pane, then tell me and I will install the watcher." If you are in a terminal and the key is missing, ask the owner for the pane key from that terminal.
 
 ### Done when
 
@@ -276,7 +278,7 @@ All of these are true:
 
 - Step 7 printed `key saved to` a path ending in `agents/AGENT_NAME.json`.
 - `whoami` works over MCP and returns `AGENT_NAME`.
-- Delivery is `local` with the driver and target you intended, or you sent the owner the exact dashboard sentence from step 10.
+- Delivery is `local` with the driver and target you intended, or you reported why delivery is unset using step 10.
 - If delivery is `local`, `watch --status` or `supervise --status` names `AGENT_NAME`, or you reported the install error.
 
 ### Set up before the rename
@@ -310,7 +312,7 @@ Pick `<name>` to match `[a-z][a-z0-9_-]{0,31}`. `herdr agent rename` only names 
 
 ### Orca: read the pane key
 
-You are inside Orca when `ORCA_PANE_KEY` is set. Orca injects that variable into every terminal it starts. If it is unset, you may still be in Orca with a terminal that did not receive the variable: register anyway and ask the owner to paste the pane key from a terminal Orca started, or to run you in one of those terminals next time.
+Orca provides `ORCA_PANE_KEY` in its terminals. Native Orca chats also have pane identities, which Orca reports in `orca worktree ps --json`. For Valetto wake delivery, use the key for a session that appears in `orca terminal list --json`. If you are in an Orca terminal and the variable is unset, ask the owner for that terminal’s pane key.
 
 ```bash
 printf '%s\n' "${ORCA_PANE_KEY-}"
