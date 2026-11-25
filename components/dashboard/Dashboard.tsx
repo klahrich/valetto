@@ -2,10 +2,10 @@
 
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
+import { Bot, ClipboardList, Plus, Settings2, Share2 } from 'lucide-react';
 import { Agents } from './Agents';
 import { ConnectedApps } from './ConnectedApps';
 import { api, errorText, SIGNED_OUT_EVENT } from './api';
-import { LocalTime } from './LocalTime';
 import { EmailPrefs } from './EmailPrefs';
 import { JoinCodes, type DocPaths } from './JoinCodes';
 import { SetupChecklist } from './SetupChecklist';
@@ -16,7 +16,7 @@ import { WatcherKeys } from './WatcherKeys';
 import { WorkspaceName } from './WorkspaceName';
 import type { Agent, AgentKey, JoinCode } from './types';
 
-type Workspace = { id: string; name: string; handle: string | null; created_at: string };
+type Workspace = { name: string; handle: string | null };
 
 type Loaded = { agents: Agent[]; keys: Record<string, AgentKey[]>; codes: JoinCode[] };
 
@@ -33,14 +33,12 @@ async function fetchAll(): Promise<Loaded> {
 
 export function Dashboard({
   workspace,
-  email,
   marketingOptIn,
   origin,
   paths,
   guestLimit,
 }: {
   workspace: Workspace;
-  email: string;
   /** user.marketing_opt_in, the same value GET /api/v1/auth/me returns. */
   marketingOptIn: boolean;
   origin: string;
@@ -98,27 +96,18 @@ export function Dashboard({
     setTick((t) => t + 1);
   };
 
-  const live = agents.filter((a) => !a.revoked_at).length;
+  const activeAgents = agents.filter((agent) => !agent.revoked_at);
+  const localAgents = activeAgents.filter((agent) => agent.delivery.mode === 'local' || agent.delivery.mode === 'herdr');
+  const online = localAgents.filter((agent) => agent.watcher_online).length;
 
   return (
     <>
-      <section className="dash-hero" aria-labelledby="ws-h">
-        <p className="dash-muted">Workspace</p>
-        <WorkspaceName initialName={workspace.name} />
-        <p className="dash-muted">
-          Signed in as {email} · created <LocalTime iso={workspace.created_at} />
-          {loaded ? ` · ${live} active ${live === 1 ? 'agent' : 'agents'}` : ''}
-        </p>
-        <p className="dash-muted">
-          {handle ? (
-            <>
-              Handle <code translate="no">@{handle}</code> ·{' '}
-            </>
-          ) : null}
-          <a className="link" href="#sharing">
-            {handle ? 'Manage sharing' : 'Set a handle to share agents'}
-          </a>
-        </p>
+      <section className="dash-hero dash-workspace-hero" aria-labelledby="ws-h">
+        <div className="dash-workspace-identity">
+          <WorkspaceName initialName={workspace.name} />
+          {handle ? <a className="dash-workspace-handle" href="#sharing" title="Manage workspace sharing">@{handle}</a> : null}
+        </div>
+        <a className="dash-connect-button" href="#connect"><Plus size={17} aria-hidden="true" /> Connect agent</a>
       </section>
       {error ? (
         <p className="dash-err" role="alert">
@@ -133,25 +122,57 @@ export function Dashboard({
         tabs={[
           {
             id: 'workspace',
-            label: 'Workspace',
+            label: 'Agents',
+            icon: <Bot size={17} aria-hidden="true" />,
+            anchors: ['agents', 'connect', 'jc-h', 'jc-pending-h'],
             content: (
-              <>
-                {loaded && !error ? <SetupChecklist handle={handle} agents={agents} codes={codes} /> : null}
-                <JoinCodes codes={codes} agents={agents} origin={origin} paths={paths} onChange={refresh} />
-                {loaded ? <Agents agents={agents} keys={keys} onChange={refresh} handle={handle} /> : null}
-                <ConnectedApps />
-                <WatcherKeys />
-                <Tasks refreshKey={tick} />
-                <EmailPrefs initialOptIn={marketingOptIn} />
-              </>
+              <div className="dash-overview-grid">
+                <div className="dash-stack">
+                  {loaded ? <Agents agents={agents} keys={keys} onChange={refresh} handle={handle} /> : (
+                    <section className="dash-card" id="agents" aria-busy="true">
+                      <h2>Agents</h2><p className="dash-muted">Loading agents…</p>
+                    </section>
+                  )}
+                  <JoinCodes codes={codes} agents={agents} origin={origin} paths={paths} onChange={refresh} />
+                </div>
+                {loaded && !error ? (
+                  <aside className="dash-stack" aria-label="Workspace overview">
+                    <section className="dash-card dash-delivery-summary" aria-labelledby="delivery-summary-h">
+                      <h2 id="delivery-summary-h">Delivery overview</h2>
+                      <dl>
+                        <div><dt>Local watchers online</dt><dd>{online} / {localAgents.length}</dd></div>
+                        <div><dt>Webhook agents</dt><dd>{activeAgents.filter((agent) => agent.delivery.mode === 'webhook').length}</dd></div>
+                        <div><dt>Polling agents</dt><dd>{activeAgents.filter((agent) => agent.delivery.mode === 'none').length}</dd></div>
+                      </dl>
+                    </section>
+                    <SetupChecklist handle={handle} agents={agents} codes={codes} />
+                  </aside>
+                ) : null}
+              </div>
             ),
+          },
+          {
+            id: 'tasks',
+            label: 'Tasks',
+            icon: <ClipboardList size={17} aria-hidden="true" />,
+            anchors: ['tasks-h'],
+            content: <Tasks refreshKey={tick} />,
           },
           {
             id: 'sharing',
             label: 'Sharing',
+            icon: <Share2 size={17} aria-hidden="true" />,
+            anchors: ['share-how-h', 'share-handle-h', 'share-agents-h'],
             content: loaded ? (
               <Sharing agents={agents} handle={handle} onHandleSaved={setHandle} guestLimit={guestLimit} onChange={refresh} />
             ) : null,
+          },
+          {
+            id: 'settings',
+            label: 'Settings',
+            icon: <Settings2 size={17} aria-hidden="true" />,
+            anchors: ['connected-apps', 'watchers', 'emails-h'],
+            content: <><ConnectedApps /><WatcherKeys /><EmailPrefs initialOptIn={marketingOptIn} /></>,
           },
         ]}
       />

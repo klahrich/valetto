@@ -31,12 +31,9 @@ export default async function DashboardPage() {
   return (
     <Dashboard
       workspace={{
-        id: user.workspace.id,
         name: user.workspace.name,
         handle: user.workspace.handle,
-        created_at: user.workspace.createdAt.toISOString(),
       }}
-      email={user.email}
       marketingOptIn={user.marketingOptIn}
       origin={origin}
       paths={{ llms, skill, gettingStarted, api, mcp }}

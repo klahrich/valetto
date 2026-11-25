@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { Bot } from 'lucide-react';
 import { api, errorText } from './api';
 import { agentRuntime, deliveryLabel, initiallyExpandedAgentIds, runtimeTone, type AgentRuntime, type RuntimeTone } from './agent-runtime';
 import { LocalTime } from './LocalTime';
@@ -152,13 +153,17 @@ export function Agents({
         <div>
           <h2 id="ag-h">Agents</h2>
           <p className="dash-muted">
-            Each agent signs its calls with its own key. Keys are stored as hashes, so only the prefix is shown here.
+            Manage agent delivery, access keys and connections.
           </p>
         </div>
       </div>
 
       {sorted.length === 0 ? (
-        <p className="dash-empty">No agents yet. Create a join code above and give it to your first agent.</p>
+        <div className="dash-empty dash-agents-empty">
+          <Bot size={24} aria-hidden="true" />
+          <strong>No agents yet</strong>
+          <a className="link" href="#connect">Connect your first agent</a>
+        </div>
       ) : (
         <ul className="dash-agents">
           {sorted.map((a) => {
@@ -166,6 +171,7 @@ export function Agents({
             const revoked = !!a.revoked_at;
             const expanded = openIds.has(a.id);
             const runtime = agentRuntime(a.delivery);
+            const showWatcher = !revoked && (a.delivery.mode === 'local' || a.delivery.mode === 'herdr') && typeof a.watcher_online === 'boolean';
             const panelId = `agent-body-${a.id}`;
             const toggleId = `agent-toggle-${a.id}`;
             return (
@@ -180,9 +186,19 @@ export function Agents({
                     onClick={() => toggleOpen(a.id)}
                   >
                     <span className="dash-agent-toggle-main">
-                      <span className="dash-agent-name" translate="no">{a.name}</span>
-                      {revoked ? <span className="dash-pill dash-pill-failed">revoked</span> : null}
-                      <RuntimeBadge runtime={runtime} />
+                      <span className="dash-agent-icon"><Bot size={18} aria-hidden="true" /></span>
+                      <span className="dash-agent-labels">
+                        <span className="dash-agent-name" translate="no">{a.name}</span>
+                        <span className="dash-agent-badges">
+                          {revoked ? <span className="dash-pill dash-pill-failed">Revoked</span> : null}
+                          <RuntimeBadge runtime={runtime} />
+                          {showWatcher ? (
+                            <span className={`dash-watcher-state${a.watcher_online ? ' is-online' : ''}`}>
+                              {a.watcher_online ? 'Watcher online' : 'Watcher offline'}
+                            </span>
+                          ) : null}
+                        </span>
+                      </span>
                     </span>
                     <span className="dash-agent-chevron" aria-hidden="true" />
                   </button>

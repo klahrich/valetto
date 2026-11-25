@@ -50,7 +50,7 @@ const keys: Record<string, AgentKey[]> = {
 const root = document.getElementById('root');
 if (!root) throw new Error('missing #root');
 createRoot(root).render(
-  <div className="dash">
+  <div className="dash dash-workspace-shell">
     <main className="dash-main">
       <Agents agents={[agent]} keys={keys} onChange={() => {}} handle="acmeworkspace" />
     </main>
