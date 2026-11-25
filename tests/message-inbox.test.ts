@@ -267,6 +267,8 @@ describe('list_messages inbox', () => {
 
     const got = await mcpTool(toKey, 'get_task', { id: taskId });
     expect(got.payload.messages.map((message: { id: string }) => message.id)).toEqual([threadId]);
+    const threadLookup = await mcpTool(toKey, 'get_message', { id: threadId });
+    expect(threadLookup.payload).toMatchObject({ error: 'not_found' });
     expect(got.payload.task.result).toEqual({ ok: true });
     expect(got.payload.messages[0]).not.toHaveProperty('unread');
 

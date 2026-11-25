@@ -69,6 +69,20 @@ const sendArgs = (handle: string, retry?: string) => [
 ];
 
 describe('orca driver', () => {
+  it('sends an Orca chat wake to the session that started the watcher', async () => {
+    const { execFile, calls } = scripted([
+      () => ok(JSON.stringify({ ok: true, result: { messageId: 'msg_1' } })),
+    ]);
+    const driver = createOrcaDriver({ execFile, env: { ORCA_AGENT_SESSION_ID: 'codex_chat_a' } });
+
+    expect(await driver.nudge('orca_session_id:codex_chat_b', WAKE_NOTICE)).toMatchObject({ ok: false });
+    expect(await driver.nudge('orca_session_id:codex_chat_a', WAKE_NOTICE)).toEqual({ ok: true });
+    expect(calls.map((call) => call.args)).toEqual([[
+      'orchestration', 'send', '--to', 'orca_session_id:codex_chat_a',
+      '--subject', 'Valetto wake', '--body', WAKE_NOTICE, '--json',
+    ]]);
+  });
+
   it('sends the herdr notice once a pane key resolves and turn_started is delivered', async () => {
     const { execFile, calls } = scripted([
       () => running,

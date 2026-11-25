@@ -502,7 +502,7 @@ describe('release signatures', () => {
   it('pins the expected public key fingerprint', () => {
     expect(cliReleasePublicKeyFingerprint()).toBe(CLI_RELEASE_PUBLIC_KEY_FINGERPRINT);
     expect(cliReleasePublicKeyFingerprint(CLI_RELEASE_PUBLIC_KEY_PEM)).toBe(
-      'sha256:c53ce36602db71b41c10a2fbfe5752de322b9e1b7fb4c415121cbad5ec2ec016',
+      'sha256:f85d73645f98325d0b6fc20b9069f106c393322e148c400fcfa016d9bbc27ca5',
     );
   });
 

@@ -32,14 +32,14 @@ const taskIdOptional = {
   required: false,
   type: 'string (uuid)',
   description:
-    'Optional task thread. You must be a participant, and to must be the other participant. This does not hand the task to anyone else. Without task_id the message is standalone: the recipient reads it with list_messages. It is not returned by get_task.',
+    'Optional task thread. You must be a participant, and to must be the other participant. This does not hand the task to anyone else. Without task_id the message is standalone: the recipient can read it with get_message by ID or find it with list_messages. It is not returned by get_task.',
 } as const;
 const inReplyToOptional = {
   name: 'in_reply_to',
   required: false,
   type: 'string (uuid)',
   description:
-    'Optional id of a message you received (from list_messages or a get_task thread). The reply is linked to that message. If to is omitted, the recipient is the original sender. If both are set, to must be that sender.',
+    'Optional id of a message you received (from get_message, list_messages, or a get_task thread). The reply is linked to that message. If to is omitted, the recipient is the original sender. If both are set, to must be that sender.',
 } as const;
 
 export const TOOL_DOCS: ToolDoc[] = [
@@ -47,7 +47,7 @@ export const TOOL_DOCS: ToolDoc[] = [
     name: 'send_message',
     title: 'Send message',
     description:
-      'Send a plain message to one agent in your workspace. With task_id, the message is added to that task\'s thread, and the other participant reads it with get_task. Without task_id the message is standalone: the recipient reads it with list_messages (a completion notice is one of these). in_reply_to links the message to one you received; if to is omitted, the original sender is the recipient. A wake, when delivery sends one, names the new message_id (and task_id when it is on a thread) and does not include the body or start a turn. A message is finished when it is sent. Nobody owes a reply.',
+      'Send a plain message to one agent in your workspace. With task_id, the message is added to that task\'s thread, and the other participant reads it with get_task. Without task_id the message is standalone: the recipient can read it with get_message by ID or find it with list_messages (a completion notice is one of these). in_reply_to links the message to one you received; if to is omitted, the original sender is the recipient. A wake, when delivery sends one, names the new message_id (and task_id when it is on a thread) and does not include the body or start a turn. A message is finished when it is sent. Nobody owes a reply.',
     args: [sendTo, messageBody, taskIdOptional, inReplyToOptional],
   },
   {
@@ -190,6 +190,20 @@ export const TOOL_DOCS: ToolDoc[] = [
     ],
   },
   {
+    name: 'get_message',
+    title: 'Get message',
+    description:
+      'Fetch one standalone message addressed to you. Use this when a wake gives you a message_id without a task_id. Returns { message } with the same fields as list_messages. Leaves read status unchanged and creates no wake. Task-thread messages are available through get_task. An invite link cannot call this.',
+    args: [
+      {
+        name: 'id',
+        required: true,
+        type: 'string (uuid)',
+        description: 'Standalone message ID, for example message_id from a wake.',
+      },
+    ],
+  },
+  {
     name: 'list_messages',
     title: 'List messages',
     description:
@@ -220,13 +234,13 @@ export const TOOL_DOCS: ToolDoc[] = [
     name: 'mark_messages_read',
     title: 'Mark messages read',
     description:
-      'Mark standalone inbox messages read by id. Pass only ids list_messages returned. Unknown ids, messages you sent, another agent\'s messages, other workspaces, and task-thread messages are not marked, and if any id is not yours the call marks none of them. Repeating it for a message already read leaves read_at unchanged. There is no cursor argument: next_cursor and unread_cursor do not mark messages, so a page you have not listed is not marked. Does not wake anyone. Returns the marked messages and the new unread_cursor.',
+      'Mark standalone inbox messages read by id. Pass ids from get_message or list_messages. Unknown ids, messages you sent, another agent\'s messages, other workspaces, and task-thread messages are not marked, and if any id is not yours the call marks none of them. Repeating it for a message already read leaves read_at unchanged. Cursors do not mark messages. Does not wake anyone. Returns the marked messages and the new unread_cursor.',
     args: [
       {
         name: 'message_ids',
         required: true,
         type: 'string[] (uuid)',
-        description: 'Ids from list_messages, at most 100. Only these rows are marked.',
+        description: 'Ids from get_message or list_messages, at most 100. Only these rows are marked.',
       },
     ],
   },
@@ -425,6 +439,9 @@ export const toolInputs = {
       ),
     cursor: z.string().max(200).optional().describe('next_cursor from the previous call, to get the next page.'),
   }),
+  get_message: z.strictObject({
+    id: z.uuid().describe('Standalone message ID, for example message_id from a wake.'),
+  }),
   list_messages: z.strictObject({
     cursor: z
       .string()
@@ -442,7 +459,7 @@ export const toolInputs = {
       .array(z.uuid())
       .min(1)
       .max(100)
-      .describe('Ids from list_messages, at most 100. Only these rows are marked.'),
+      .describe('Ids from get_message or list_messages, at most 100. Only these rows are marked.'),
   }),
   list_agents: z.object({}),
   rename_agent: z.object({

@@ -30,7 +30,7 @@ describe('wakes', () => {
       expect(hit.body.message_id).toBe(messageId);
       expect(hit.body.task_id).toBeNull();
       expect(hit.body.notice).toBe(
-        `Another agent sent you a message on Valetto (message_id: ${messageId}). Read it with list_messages and reply with send_message in_reply_to.`,
+        `Another agent sent you a message on Valetto (message_id: ${messageId}). Read it with get_message using message_id as id. If get_message is unavailable, use list_messages and match the ID. To reply, use send_message with in_reply_to set to that ID.`,
       );
       const expected = createHmac('sha256', 'hook-secret').update(hit.raw).digest('hex');
       expect(hit.headers['x-valetto-signature']).toBe(`sha256=${expected}`);

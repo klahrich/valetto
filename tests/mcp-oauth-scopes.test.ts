@@ -81,6 +81,7 @@ describe('tool scopes', () => {
         'get_task',
         'list_agents',
         'list_messages',
+        'get_message',
         'list_tasks',
         'mark_messages_read',
         'rename_agent',
@@ -100,7 +101,7 @@ describe('tool scopes', () => {
     const rsk = (await mcpListTools(appKey)).map((tool) => tool.name);
     expect(rsk).toHaveLength(Object.keys(TOOL_SCOPES).length - 1);
     expect(rsk).not.toContain('redeem_invite');
-    expect((await mcpListTools(oauth)).map((tool) => tool.name)).toHaveLength(11);
+    expect((await mcpListTools(oauth)).map((tool) => tool.name)).toHaveLength(12);
   });
 
   it('toolAllowed is the shared predicate: rsk_ scopes allow everything, unknown names never pass', () => {
@@ -211,6 +212,10 @@ describe('tool scopes', () => {
     expect(listed.payload.messages.map((message: { body: string }) => message.body)).toEqual(['completion notice']);
     expect(listed.payload.messages[0].unread).toBe(true);
     const noticeId = listed.payload.messages[0].id as string;
+
+    const lookup = await mcpTool(oauth, 'get_message', { id: noticeId });
+    expect(lookup.isError, lookup.text).toBe(false);
+    expect(lookup.payload.message).toEqual(listed.payload.messages[0]);
 
     const mixed = await mcpTool(oauth, 'mark_messages_read', { message_ids: [noticeId, hiddenId] });
     expect(mixed.payload).toMatchObject({ error: 'not_found' });

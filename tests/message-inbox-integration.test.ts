@@ -165,6 +165,12 @@ describe('standalone inbox integration', () => {
     const noticeId = sent.payload.message.id as string;
     const notesId = second.payload.message.id as string;
 
+    const fetched = await mcpTool(bobKey, 'get_message', { id: notesId });
+    expect(fetched.isError, fetched.text).toBe(false);
+    expect(fetched.payload.message).toMatchObject({ id: notesId, body: 'and the notes', unread: true, read_at: null });
+    const missing = await mcpTool(bobKey, 'get_message', { id: crypto.randomUUID() });
+    expect(missing.payload).toMatchObject({ error: 'not_found' });
+
     const first = await mcpTool(bobKey, 'list_messages', { limit: 1 });
     expect(first.isError, first.text).toBe(false);
     expect(first.payload.messages).toEqual([
@@ -181,6 +187,7 @@ describe('standalone inbox integration', () => {
     );
     expect(httpNext.status).toBe(200);
     expect(httpNext.data.messages[0]).toMatchObject({ id: notesId, body: 'and the notes', unread: true });
+    expect(httpNext.data.messages[0]).toEqual(fetched.payload.message);
     expect(httpNext.data.unread_cursor).toBe(watermark);
     expect(httpNext.data.next_cursor).toBeNull();
 
@@ -208,6 +215,8 @@ describe('standalone inbox integration', () => {
     expect(repeated.payload.messages[0].read_at).toBe(done.payload.messages[0].read_at);
 
     for (const key of [aliceKey, carolKey, outsiderKey]) {
+      const lookup = await mcpTool(key, 'get_message', { id: noticeId });
+      expect(lookup.payload).toEqual(missing.payload);
       const hidden = await mcpTool(key, 'list_messages', {});
       expect(hidden.payload.messages ?? []).toEqual([]);
       const denied = await mcpTool(key, 'mark_messages_read', { message_ids: [noticeId] });
@@ -262,7 +271,11 @@ describe('standalone inbox integration', () => {
     });
     expect(redeemed.status).toBe(201);
     const guestKey = redeemed.data.api_key as string;
-    expect((await mcpListTools(guestKey)).map((tool) => tool.name)).not.toContain('list_messages');
+    const guestTools = (await mcpListTools(guestKey)).map((tool) => tool.name);
+    expect(guestTools).not.toContain('get_message');
+    expect(guestTools).not.toContain('list_messages');
+    const guestGet = await mcpTool(guestKey, 'get_message', { id: noticeId });
+    expect(guestGet.payload).toMatchObject({ error: 'insufficient_scope' });
     const guestList = await mcpTool(guestKey, 'list_messages', {});
     expect(guestList.payload).toMatchObject({ error: 'insufficient_scope' });
     expect(guestList.text).not.toContain('shipped the draft');

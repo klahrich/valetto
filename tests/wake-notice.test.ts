@@ -36,7 +36,6 @@ describe('wakePaneNotice', () => {
   it('names the kind of wake and its id, and never a body', () => {
     expect(wakePaneNotice({ reason: 'message', messageId: MESSAGE_ID })).toBe(messageWakeNotice(MESSAGE_ID));
     expect(messageWakeNotice(MESSAGE_ID)).toContain(MESSAGE_ID);
-    expect(messageWakeNotice(MESSAGE_ID)).toContain('list_messages');
     expect(messageWakeNotice(MESSAGE_ID)).toContain('in_reply_to');
     expect(wakePaneNotice({ reason: 'message', messageId: MESSAGE_ID, taskId: TASK_ID })).toBe(
       taskThreadMessageWakeNotice(MESSAGE_ID, TASK_ID),
@@ -80,6 +79,10 @@ describe('nudgeText ids and older CLIs', () => {
 
   it('types ids on a current CLI, and falls back when an older server omits message_id', () => {
     expect(nudgeText(messageWake)).toBe(messageWakeNotice(MESSAGE_ID));
+    expect(nudgeText(messageWake)).toContain(
+      'Read it with get_message using message_id as id. If get_message is unavailable, use list_messages and match the ID.',
+    );
+    expect(nudgeText({ ...messageWake, task_id: TASK_ID })).toBe(taskThreadMessageWakeNotice(MESSAGE_ID, TASK_ID));
     expect(nudgeText(taskWake)).toBe(taskWakeNotice(TASK_ID, 'task'));
     expect(nudgeText(guestWake)).toBe(guestTaskWakeNotice(TASK_ID));
     expect(nudgeText(reviewWake)).toBe(reviewNeededWakeNotice(TASK_ID));

@@ -16,6 +16,8 @@ export type AgentKeyFile = {
   created_at: string;
   /** When true, the supervised watcher will not auto-update the CLI on this machine. */
   no_auto_update?: boolean;
+  /** Orca identity of the native chat that enrolled this watcher. */
+  orca_session_id?: string;
 };
 
 /** Where `register` writes a new key file: `~/.valetto/agents/<name>.json`. */
@@ -116,8 +118,8 @@ export async function writeAgentKeyFile(
   return target;
 }
 
-/** Persist or clear `no_auto_update` on the existing key file. Mode 600 is kept. Errors never include the key. */
-export function persistAgentNoAutoUpdate(name: string, home: string | undefined, disabled: boolean): void {
+/** Persist watcher settings on the existing mode-600 key file. Errors never include the key. */
+export function persistAgentNoAutoUpdate(name: string, home: string | undefined, disabled: boolean, orcaSessionId?: string): void {
   const file = existingAgentKeyPath(name, home ?? homedir());
   if (!file) throw new Error(`No key file for agent ${name}. Register it first.`);
   let parsed: Record<string, unknown>;
@@ -128,11 +130,23 @@ export function persistAgentNoAutoUpdate(name: string, home: string | undefined,
   }
   if (disabled) parsed.no_auto_update = true;
   else delete parsed.no_auto_update;
+  if (orcaSessionId) parsed.orca_session_id = orcaSessionId;
   writeFileSync(file, `${JSON.stringify(parsed, null, 2)}\n`, { mode: 0o600 });
   try {
     chmodSync(file, 0o600);
   } catch {
     // Windows ignores Unix modes.
+  }
+}
+
+export function agentOrcaSessionId(name: string, home?: string): string | undefined {
+  const file = existingAgentKeyPath(name, home ?? homedir());
+  if (!file) return undefined;
+  try {
+    const { orca_session_id } = JSON.parse(readFileSync(file, 'utf8')) as Partial<AgentKeyFile>;
+    return typeof orca_session_id === 'string' && /^[\w.-]+$/.test(orca_session_id) ? orca_session_id : undefined;
+  } catch {
+    return undefined;
   }
 }
 

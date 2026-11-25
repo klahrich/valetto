@@ -4,15 +4,15 @@ import { createHash, createPublicKey, verify } from 'node:crypto';
 
 /**
  * Pinned ed25519 public key for Valetto CLI release signatures.
- * Fingerprint (SHA-256 of the raw 32-byte key): sha256:c53ce36602db71b41c10a2fbfe5752de322b9e1b7fb4c415121cbad5ec2ec016
+ * Fingerprint (SHA-256 of the raw 32-byte key): sha256:f85d73645f98325d0b6fc20b9069f106c393322e148c400fcfa016d9bbc27ca5
  */
 export const CLI_RELEASE_PUBLIC_KEY_PEM = `-----BEGIN PUBLIC KEY-----
-MCowBQYDK2VwAyEAyT/KED0i/yr2t2PdX8B7+8T4byojqfu1En8SA97u1Bs=
+MCowBQYDK2VwAyEAXNXJpFRHlCOivM2leVI09/VEwvXxgvxrT/s/No+8IZE=
 -----END PUBLIC KEY-----
 `;
 
 export const CLI_RELEASE_PUBLIC_KEY_FINGERPRINT =
-  'sha256:c53ce36602db71b41c10a2fbfe5752de322b9e1b7fb4c415121cbad5ec2ec016';
+  'sha256:f85d73645f98325d0b6fc20b9069f106c393322e148c400fcfa016d9bbc27ca5';
 
 export const CLI_VERSION_MARKER_RE = /^\/\/ valetto-cli-version: (\d+\.\d+\.\d+)\s*$/m;
 

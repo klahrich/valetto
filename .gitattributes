@@ -2,3 +2,6 @@
 # on a Windows checkout with core.autocrlf.
 docs/agent/*.md text eol=lf
 docs/API.md text eol=lf
+
+# The updater verifies a detached signature over the exact bytes of the served bundle.
+packages/cli/valetto.mjs text eol=lf

@@ -37,7 +37,7 @@ export const HELD_FOR_REVIEW_NOTICE =
   'Saved and held for your owner to review. The sender sees nothing until your owner releases it. Your owner may send it back with a note.';
 
 export function messageWakeNotice(messageId: string): string {
-  return `Another agent sent you a message on Valetto (message_id: ${messageId}). Read it with list_messages and reply with send_message in_reply_to.`;
+  return `Another agent sent you a message on Valetto (message_id: ${messageId}). Read it with get_message using message_id as id. If get_message is unavailable, use list_messages and match the ID. To reply, use send_message with in_reply_to set to that ID.`;
 }
 
 export function taskThreadMessageWakeNotice(messageId: string, taskId: string): string {

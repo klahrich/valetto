@@ -159,6 +159,31 @@ function present(message: MessageRow, fromName: string, toName: string): InboxMe
 const inboxWhere = (caller: AgentPrincipal) =>
   and(eq(messages.workspaceId, caller.workspaceId), eq(messages.toAgentId, caller.agentId), isNull(messages.taskId));
 
+function inboxRows(db: Db) {
+  const fromAgent = alias(agents, 'inbox_from');
+  const toAgent = alias(agents, 'inbox_to');
+  return db
+    .select({
+      message: messages,
+      fromName: fromAgent.name,
+      fromRole: fromAgent.role,
+      toName: toAgent.name,
+      seq: sql<string>`${messages.inboxSeq}::text`,
+    })
+    .from(messages)
+    .innerJoin(fromAgent, eq(fromAgent.id, messages.fromAgentId))
+    .innerJoin(toAgent, eq(toAgent.id, messages.toAgentId));
+}
+
+export async function getMessage(caller: AgentPrincipal, id: string): Promise<{ message: InboxMessage }> {
+  assertInboxCaller(caller);
+  const db = getDb();
+  const [row] = await inboxRows(db).where(and(inboxWhere(caller), eq(messages.id, id))).limit(1);
+  if (!row) throw new HttpError(404, 'not_found', 'No message was found.');
+  const [message] = await presentAll(db, [row]);
+  return { message };
+}
+
 /** Oldest unread standalone message for this agent, or null when the inbox has none. Independent of the page. */
 async function unreadCursor(db: Db, caller: AgentPrincipal): Promise<string | null> {
   const [row] = await db
@@ -187,8 +212,6 @@ export async function listMessages(
     input.cursor === undefined || input.cursor === null || input.cursor === ''
       ? undefined
       : parsePageCursor(input.cursor, caller, unread);
-  const fromAgent = alias(agents, 'inbox_from');
-  const toAgent = alias(agents, 'inbox_to');
   const conditions = [inboxWhere(caller)];
   if (unread) conditions.push(isNull(messages.readAt));
   if (cursor) {
@@ -197,17 +220,7 @@ export async function listMessages(
     conditions.push(sql`(${messages.inboxSeq}, ${messages.id}) > (${cursor.s}::bigint, ${cursor.id}::uuid)`);
   }
   const db = getDb();
-  const fetched = await db
-    .select({
-      message: messages,
-      fromName: fromAgent.name,
-      fromRole: fromAgent.role,
-      toName: toAgent.name,
-      seq: sql<string>`${messages.inboxSeq}::text`,
-    })
-    .from(messages)
-    .innerJoin(fromAgent, eq(fromAgent.id, messages.fromAgentId))
-    .innerJoin(toAgent, eq(toAgent.id, messages.toAgentId))
+  const fetched = await inboxRows(db)
     .where(and(...conditions))
     .orderBy(asc(messages.inboxSeq), asc(messages.id))
     .limit(limit + 1);
@@ -231,7 +244,7 @@ function uniqueIds(ids: string[]): string[] {
     });
   }
   if (ids.some((id) => typeof id !== 'string' || !UUID_RE.test(id))) {
-    throw new HttpError(400, 'validation_error', 'message_ids must be uuids from list_messages.', {
+    throw new HttpError(400, 'validation_error', 'message_ids must be standalone inbox message UUIDs.', {
       fields: { message_ids: 'Invalid message ids.' },
     });
   }
