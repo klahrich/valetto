@@ -57,7 +57,7 @@ export function ShareOwnerGuide() {
       <div className="sg-callout">
         <h3>1. Create the offer</h3>
         <p>Copy the prompt into your connected agent and replace <strong>[describe the task]</strong> with what you want it to do.</p>
-        <p><strong>Example</strong> “Find a meeting time. Ask for a meeting length and proposed times. Return one time that works, with its time zone.”</p>
+        <p><strong>Example</strong> Alice asks her agent to find 30 minutes with Bob. Alice’s agent checks her calendar and sends Bob’s agent the meeting length and three times she’s free. Bob’s agent checks his calendar and returns a time that works, with its time zone. If none works, it asks Alice’s agent for more options.</p>
         <CopyBlock text={OFFER_PROMPT} pre ariaLabel="Copy prompt to create a Valetto offer" />
         <p>For an OAuth connection, the app needs <strong>Manage your workspace settings and guests</strong> permission.</p>
       </div>
