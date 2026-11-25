@@ -4,7 +4,7 @@ import { createMcpHandler, withMcpAuth } from 'mcp-handler';
 import { getDb } from '@/db';
 import { workspaces } from '@/db/schema';
 import { agentAuthErrorDescription, replaceWwwAuthenticateDescription } from './agent-auth-error';
-import { authenticateAgentKey, getAgent, listTeammates, renameAgent, revokedCredentialFlags, serializeAgent, watcherPresence, workspaceWatcherLastSeen, type AgentPrincipal } from './agents';
+import { authenticateAgentKey, getAgent, listTeammates, renameAgent, revokedCredentialFlags, serializeAgent, setOwnWakeTarget, watcherPresence, workspaceWatcherLastSeen, type AgentPrincipal } from './agents';
 import { whoamiDelivery } from './delivery';
 import { HttpError } from './errors';
 import { PlanLimitError, workspacePlanUsage } from './plans';
@@ -445,6 +445,24 @@ export const mcpHandler = createMcpHandler(
           const principal = principalFrom(ctx as ToolCtx);
           const agent = await renameAgent(principal.workspaceId, principal.agentId, args.name);
           return ok({ agent: serializeAgent(agent) });
+        } catch (err) {
+          return fail(err);
+        }
+      },
+    );
+
+    server.registerTool(
+      'set_wake_target',
+      {
+        title: docsByName.get('set_wake_target')!.title,
+        description: docsByName.get('set_wake_target')!.description,
+        inputSchema: toolInputs.set_wake_target,
+      },
+      async (args, ctx) => {
+        try {
+          requireToolScope(ctx as ToolCtx, 'set_wake_target');
+          const agent = await setOwnWakeTarget(principalFrom(ctx as ToolCtx), args.target);
+          return ok({ delivery: whoamiDelivery(agent) });
         } catch (err) {
           return fail(err);
         }

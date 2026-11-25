@@ -686,6 +686,8 @@ Same bearer as poll. `200` `{ "acked": 1 }`. Only pending wakes in this workspac
 
 ## MCP
 
+`set_wake_target` takes `{ "target": "<new pane or session address>" }` and returns `{ "delivery" }`. It updates only the authenticated agent and retains its existing local driver. Requires an agent key or the MCP OAuth owner scope. The tool reports `local_delivery_required` if the agent has no local delivery and `validation_error` for an invalid target.
+
 ### POST, GET, DELETE `/api/mcp`
 
 Streamable HTTP. `Authorization: {{MCP_HEADER_PLACEHOLDER}}` is required; substitute the `api_key` from registration. Tools: {{TOOL_NAMES_LIST}}.

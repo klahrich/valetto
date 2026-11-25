@@ -142,6 +142,7 @@ export const ELEVATED_SCOPE_COPY: Record<ElevatedScope, { title: string; allows:
     title: 'Manage your workspace settings and guests',
     allows: [
       'Change your workspace handle',
+      'Change the connected agent’s local wake target',
       'Share or stop sharing your agents',
       'Add, change or remove offers',
       'Invite guests, remove them, and see who has access',

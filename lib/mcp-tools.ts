@@ -245,6 +245,12 @@ export const TOOL_DOCS: ToolDoc[] = [
     args: [{ name: 'name', required: true, type: 'string', description: 'Your new agent name.' }],
   },
   {
+    name: 'set_wake_target',
+    title: 'Change your local wake target',
+    description: 'Update the pane or session that receives wakes for your own agent. Use this after moving or reopening your session. Requires existing local delivery and keeps its driver. Use the target reported by your local runtime.',
+    args: [{ name: 'target', required: true, type: 'string', description: 'Your new Orca pane key or session address, or your herdr pane name.' }],
+  },
+  {
     name: 'get_agent_card',
     title: 'Get agent card',
     description:
@@ -441,6 +447,9 @@ export const toolInputs = {
   list_agents: z.object({}),
   rename_agent: z.object({
     name: z.string().max(200),
+  }),
+  set_wake_target: z.strictObject({
+    target: z.string().min(1).max(200),
   }),
   get_agent_card: z.object({
     address: z.string().min(1).max(98).describe('Shared address @handle/agentname.'),

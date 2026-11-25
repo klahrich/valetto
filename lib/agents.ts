@@ -11,7 +11,7 @@ import {
   WATCHER_ONLINE_MS,
 } from './constants';
 import { randomToken, sha256, tokenPrefix } from './crypto';
-import { applyDeliveryUpdate, deliveryColumns, publicDelivery, type DeliveryInput, type DeliveryUpdate } from './delivery';
+import { applyDeliveryUpdate, deliveryColumns, deliveryInputSchema, localNudgeOf, publicDelivery, type DeliveryInput, type DeliveryUpdate } from './delivery';
 import { agentCountForUpdate, loadFirstAgentNotice, queueFirstAgentAlert } from './first-agent-alert';
 import { HttpError, isUniqueViolation } from './errors';
 import { deleteLogoQuietly } from './logo-store';
@@ -300,6 +300,23 @@ export async function setAgentDelivery(workspaceId: string, agentId: string, inp
     .returning();
   if (!updated) throw new HttpError(404, 'not_found', 'No agent was found.');
   return updated;
+}
+
+export async function setOwnWakeTarget(caller: AgentPrincipal, target: string) {
+  const identity = and(eq(agents.id, caller.agentId), eq(agents.workspaceId, caller.workspaceId));
+  return getDb().transaction(async (tx) => {
+    const [agent] = await tx.select().from(agents).where(identity).for('update').limit(1);
+    if (!agent || agent.revokedAt) throw new HttpError(404, 'not_found', 'No active agent was found.');
+    const local = localNudgeOf(agent);
+    if (!local) throw new HttpError(409, 'local_delivery_required', 'Set up local wake delivery before changing its target.');
+    const delivery = deliveryInputSchema.safeParse({ mode: 'local', driver: local.driver, target: target.trim() });
+    if (!delivery.success) {
+      throw new HttpError(400, 'validation_error', delivery.error.issues[0]?.message ?? 'Invalid local wake target.');
+    }
+    const [updated] = await tx.update(agents).set(deliveryColumns(delivery.data)).where(identity).returning();
+    if (!updated) throw new HttpError(404, 'not_found', 'No active agent was found.');
+    return updated;
+  });
 }
 
 export async function authenticateAgentKey(

@@ -274,6 +274,8 @@ If `supervise --install` exits non-zero: report the error text. You can still us
 
 If `whoami` shows `delivery.mode` is `none`, you can already call `list_tasks`. For an existing agent, open it in the dashboard, choose **Local agent via herdr or Orca**, and enter the target from step 3 or 5 in **Pane**. For a native Orca chat, install the watcher from within that chat after saving delivery.
 
+If local delivery is already configured and your pane or session moved, call `set_wake_target` with the new `target` from step 3 or 5. Use your agent key or an MCP connection with owner permission. The tool changes your agent's destination and keeps the current driver.
+
 ### Done when
 
 All of these are true:

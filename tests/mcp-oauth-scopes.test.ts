@@ -7,13 +7,14 @@ import { GET as reviewModeRoute } from '@/app/api/v1/agents/[id]/review-mode/rou
 import { POST as redeemRoute } from '@/app/api/v1/invites/redeem/route';
 import { POST as answerRoute } from '@/app/api/v1/tasks/[id]/answer/route';
 import { getDb } from '@/db';
+import { setAgentDelivery } from '@/lib/agents';
 import { agents, messages, oauthClients, tasks, wakes, workspaces } from '@/db/schema';
 import { mcpAuthHandler } from '@/lib/mcp-server';
 import { setCimdFetcherForTests } from '@/lib/oauth/cimd';
 import { RSK_SCOPES } from '@/lib/oauth/config';
 import { TOOL_SCOPES, toolAllowed } from '@/lib/oauth/scopes';
 import nextConfig from '../next.config';
-import { call, createAgent, createKey, mcpListTools, mcpTool, signIn } from './helpers';
+import { call, createAgent, createKey, mcpListTools, mcpTool, parseRpc, signIn } from './helpers';
 import { stubCimd } from './oauth-fixtures';
 import { ISSUER, connect } from './oauth-flow';
 
@@ -61,12 +62,10 @@ async function snapshot(workspaceId: string) {
 }
 
 describe('tool scopes', () => {
-  it('every registered tool has a scope entry, and the 22 tools are all listed for rsk_', async () => {
+  it('every registered tool has a scope entry and is listed for rsk_', async () => {
     const { appKey } = await setup();
     const listed = (await mcpListTools(appKey)).map((tool) => tool.name).sort();
     expect(listed).toEqual(Object.keys(TOOL_SCOPES).sort());
-    expect(listed).toHaveLength(22);
-    expect(DENIED_TOOLS).toHaveLength(11);
   });
 
   it('tools/list for an rsoa_ token leaves out exactly the tools tools/call would refuse', async () => {
@@ -99,7 +98,7 @@ describe('tool scopes', () => {
     const { appKey, oauth } = await setup();
     vi.stubEnv('VALETTO_AGENT_GUESTS', '');
     const rsk = (await mcpListTools(appKey)).map((tool) => tool.name);
-    expect(rsk).toHaveLength(21);
+    expect(rsk).toHaveLength(Object.keys(TOOL_SCOPES).length - 1);
     expect(rsk).not.toContain('redeem_invite');
     expect((await mcpListTools(oauth)).map((tool) => tool.name)).toHaveLength(11);
   });
@@ -115,7 +114,7 @@ describe('tool scopes', () => {
     expect(toolAllowed('__proto__', [...RSK_SCOPES])).toBe(false);
   });
 
-  it('an rsoa_ token gets insufficient_scope on the 11 respond/owner tools and changes nothing', async () => {
+  it('an rsoa_ token gets insufficient_scope on respond and owner tools and changes nothing', async () => {
     const { owner, oauth, bKey } = await setup();
     const received = await mcpTool(bKey, 'create_task', task('chatgpt'));
     const id = received.payload.task.id as string;
@@ -123,6 +122,7 @@ describe('tool scopes', () => {
       complete_task: { id, result: { ok: true } },
       fail_task: { id, reason: 'no' },
       ask: { id, question: 'why?' },
+      set_wake_target: { target: 'tab:leaf' },
       set_workspace_handle: { handle: 'takeover' },
       set_agent_sharing: { agent: 'bee', shared: true },
       upsert_offer: { agent: 'bee', name: 'x', description: 'x', result_schema: RESULT_SCHEMA },
@@ -141,6 +141,30 @@ describe('tool scopes', () => {
       expect(res.payload.message).toMatch(/Connected apps can't use this tool/);
     }
     expect(await snapshot(owner.workspace.id)).toBe(before);
+  });
+
+  it('lets an agent replace only its own existing local wake target', async () => {
+    const { owner, appKey, bKey, appAgentId } = await setup();
+    const before = { mode: 'local', driver: 'orca', target: 'old:leaf' } as const;
+    const after = { ...before, target: 'new:leaf' };
+    await setAgentDelivery(owner.workspace.id, appAgentId, before);
+
+    const refused = await mcpTool(bKey, 'set_wake_target', { target: after.target });
+    expect(refused.payload).toMatchObject({ error: 'local_delivery_required' });
+    expect((await mcpTool(appKey, 'set_wake_target', { target: 'terminal-handle' })).payload)
+      .toMatchObject({ error: 'validation_error' });
+    const otherAgent = await call(mcpAuthHandler, 'http://localhost/api/mcp', {
+      bearer: appKey,
+      headers: { accept: 'application/json, text/event-stream' },
+      body: { jsonrpc: '2.0', id: 1, method: 'tools/call', params: {
+        name: 'set_wake_target', arguments: { target: after.target, agent: 'bee' },
+      } },
+    });
+    expect(parseRpc(otherAgent.text).result.isError).toBe(true);
+    expect((await mcpTool(appKey, 'whoami')).payload.delivery).toEqual(before);
+    expect((await mcpTool(appKey, 'set_wake_target', { target: after.target })).payload).toEqual({ delivery: after });
+    expect((await mcpTool(appKey, 'whoami')).payload.delivery).toEqual(after);
+    expect((await mcpTool(bKey, 'whoami')).payload.delivery).toEqual({ mode: 'none' });
   });
 
   it('sends nothing back on received tasks; follows up on its own', async () => {
