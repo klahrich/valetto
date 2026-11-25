@@ -880,11 +880,13 @@ describe('supervision install and tick', () => {
     expect(readFileSync(path.join(logHome, '.valetto', 'supervise', 'supervise.log'), 'utf8')).not.toContain(KEY);
 
     const env = supervisedEnv(
-      { nodePath: '/usr/bin/node', scriptPath: '/s', name: 'Bot', home: '/home/ada', pathEnv: '/usr/bin', orcaBin: '/opt/orca' },
+      { nodePath: '/usr/bin/node', scriptPath: '/s', name: 'Bot', home: '/home/ada', pathEnv: '/usr/bin', orcaBin: '/opt/orca', orcaSessionId: 'codex_chat' },
       {
         REPLYSLIP_WATCHER_KEY: KEY,
         PATH: '/evil',
         LANG: 'C',
+        ORCA_AGENT_SESSION_ID: 'another_chat',
+        ORCA_AGENT_SESSION_SPAWN_TOKEN: 'spawn-token',
         APPDATA: 'C:\\Users\\Ada\\AppData\\Roaming',
         LOCALAPPDATA: 'C:\\Users\\Ada\\AppData\\Local',
       },
@@ -893,6 +895,8 @@ describe('supervision install and tick', () => {
     expect(env.VALETTO_WATCHER_KEY).toBeUndefined();
     expect(env.PATH).toBe('/usr/bin');
     expect(env.VALETTO_ORCA_BIN).toBe('/opt/orca');
+    expect(env.ORCA_AGENT_SESSION_ID).toBe('codex_chat');
+    expect(env.ORCA_AGENT_SESSION_SPAWN_TOKEN).toBeUndefined();
     expect(env.APPDATA).toBe('C:\\Users\\Ada\\AppData\\Roaming');
     expect(env.LOCALAPPDATA).toBe('C:\\Users\\Ada\\AppData\\Local');
     expect(JSON.stringify(env)).not.toContain(KEY);

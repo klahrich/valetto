@@ -5,7 +5,7 @@ import { createHash } from 'node:crypto';
 import { accessSync, appendFileSync, chmodSync, closeSync, mkdirSync, openSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { AGENT_NAME_PATTERN } from '../../../lib/constants.ts';
-import { agentKeyPath, persistAgentNoAutoUpdate, readAgentCredentials } from './register.ts';
+import { agentKeyPath, agentOrcaSessionId, persistAgentNoAutoUpdate, readAgentCredentials } from './register.ts';
 import { envValue } from './home.ts';
 import { autoUpdateDisabled, maybeUpdateCli, originsMatch, type AutoUpdateResult } from './self-update.ts';
 import { redactSecrets } from './redact.ts';
@@ -45,6 +45,7 @@ export type SpawnRequest = {
   home: string;
   pathEnv: string;
   orcaBin?: string;
+  orcaSessionId?: string;
   /** Exact lock identity proved foreign. The child replaces that lock only if it is still the same at rename. */
   reclaim?: { pid: number; token: string; startedAt: string };
 };
@@ -127,6 +128,7 @@ export function supervisedEnv(request: SpawnRequest, base: NodeJS.ProcessEnv = {
     VALETTO_SUPERVISED: '1',
   };
   if (request.orcaBin) env.VALETTO_ORCA_BIN = request.orcaBin;
+  if (request.orcaSessionId) env.ORCA_AGENT_SESSION_ID = request.orcaSessionId;
   // Orca on Windows resolves its runtime metadata from APPDATA. Dropping it makes
   // `orca status --json` return runtime_unavailable while Orca is running.
   for (const key of ['SystemRoot', 'WINDIR', 'COMSPEC', 'TEMP', 'TMP', 'APPDATA', 'LOCALAPPDATA', 'LANG', 'TMPDIR'] as const) {
@@ -184,9 +186,11 @@ export async function installSupervision(name: string, io: SuperviseIo = {}): Pr
       message: `No key file at ${agentKeyPath(name, home)}. Register this agent first. The key was not read.`,
     };
   }
-  const noAutoUpdate = autoUpdateDisabled(io.env ?? process.env, io.argv ?? []);
+  const env = io.env ?? process.env;
+  const noAutoUpdate = autoUpdateDisabled(env, io.argv ?? []);
   try {
-    persistAgentNoAutoUpdate(name, home, noAutoUpdate);
+    const orcaSessionId = env.ORCA_STRUCTURED_SESSION === '1' ? env.ORCA_AGENT_SESSION_ID?.trim() : undefined;
+    persistAgentNoAutoUpdate(name, home, noAutoUpdate, orcaSessionId);
   } catch (err) {
     return { ok: false, message: err instanceof Error ? err.message : 'Could not save the auto-update setting.' };
   }
@@ -619,6 +623,7 @@ async function startWatcher(
   if (isStopped(io.home, name) || readSuperviseState(io.home, name).epoch !== state.epoch) {
     return { ok: false, message: 'stopped' };
   }
+  const orcaSessionId = agentOrcaSessionId(name, io.home);
   const request: SpawnRequest = {
     nodePath,
     scriptPath,
@@ -626,6 +631,7 @@ async function startWatcher(
     home: io.home ?? '',
     pathEnv: io.env?.PATH ?? process.env.PATH ?? '',
     ...(orcaBinFrom(io.env) ? { orcaBin: orcaBinFrom(io.env) } : {}),
+    ...(orcaSessionId ? { orcaSessionId } : {}),
     ...(reclaim ? { reclaim } : {}),
   };
   try {

@@ -104,7 +104,8 @@ export function createOrcaDriver(options?: {
   log?: (message: string) => void;
 }) {
   const execFile = options?.execFile ?? execFileOrca;
-  const bin = orcaBinary(options?.env);
+  const env = options?.env ?? process.env;
+  const bin = orcaBinary(env);
   const log = options?.log ?? console.error;
 
   async function run(args: readonly string[], timeoutMs: number): Promise<OrcaExecResult> {
@@ -226,6 +227,27 @@ export function createOrcaDriver(options?: {
     return submit(matches[0].handle, target, notice, false, waitSubmit);
   }
 
+  async function nudgeChat(target: string, notice: string): Promise<NudgeResult> {
+    const sessionId = env.ORCA_AGENT_SESSION_ID?.trim();
+    if (!sessionId || target !== `orca_session_id:${sessionId}`) {
+      return { ok: false, error: 'Start the watcher from the Orca chat selected for wake delivery.' };
+    }
+    const result = await run([
+      'orchestration', 'send', '--to', target,
+      '--subject', 'Valetto wake', '--body', notice, '--json',
+    ], SEND_TIMEOUT_MS);
+    const response = record(parseJson(result.stdout));
+    const messageId = record(response?.result)?.messageId;
+    if (result.code === 0 && response?.ok === true && typeof messageId === 'string' && messageId) return { ok: true };
+    if (isDown(result)) return { ok: false, error: ORCA_NOT_RUNNING };
+    if (result.timedOut) {
+      log('Orca chat wake timed out after submission. Delivery is unproven.');
+      return { ok: true };
+    }
+    const error = record(response?.error)?.code;
+    return { ok: false, error: typeof error === 'string' ? `Orca chat delivery failed: ${error}` : 'Orca chat delivery returned no message ID.' };
+  }
+
   return {
     id: 'orca',
     async check() {
@@ -246,6 +268,7 @@ export function createOrcaDriver(options?: {
       return { ok: true, version };
     },
     async nudge(target: string, notice: string): Promise<NudgeResult> {
+      if (target.startsWith('orca_session_id:')) return nudgeChat(target, notice);
       const listed = await listTerminals();
       if (!listed.ok) return { ok: false, error: listed.error };
       const matches = matchPane(listed.terminals, target);

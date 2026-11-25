@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Copyright (c) 2026 ClaireVue. All rights reserved.
-// valetto-cli-version: 0.1.8
+// valetto-cli-version: 0.1.9
 
 // packages/cli/src/cli.ts
 import { homedir as homedir5 } from "node:os";
@@ -160,7 +160,7 @@ async function writeAgentKeyFile(file, options) {
   await chmod(target, 384);
   return target;
 }
-function persistAgentNoAutoUpdate(name, home, disabled) {
+function persistAgentNoAutoUpdate(name, home, disabled, orcaSessionId) {
   const file = existingAgentKeyPath(name, home ?? homedir2());
   if (!file) throw new Error(`No key file for agent ${name}. Register it first.`);
   let parsed;
@@ -171,11 +171,22 @@ function persistAgentNoAutoUpdate(name, home, disabled) {
   }
   if (disabled) parsed.no_auto_update = true;
   else delete parsed.no_auto_update;
+  if (orcaSessionId) parsed.orca_session_id = orcaSessionId;
   writeFileSync(file, `${JSON.stringify(parsed, null, 2)}
 `, { mode: 384 });
   try {
     chmodSync(file, 384);
   } catch {
+  }
+}
+function agentOrcaSessionId(name, home) {
+  const file = existingAgentKeyPath(name, home ?? homedir2());
+  if (!file) return void 0;
+  try {
+    const { orca_session_id } = JSON.parse(readFileSync(file, "utf8"));
+    return typeof orca_session_id === "string" && /^[\w.-]+$/.test(orca_session_id) ? orca_session_id : void 0;
+  } catch {
+    return void 0;
   }
 }
 function agentNoAutoUpdateEnabled(name, home) {
@@ -2497,6 +2508,7 @@ function supervisedEnv(request, base = {}) {
     VALETTO_SUPERVISED: "1"
   };
   if (request.orcaBin) env.VALETTO_ORCA_BIN = request.orcaBin;
+  if (request.orcaSessionId) env.ORCA_AGENT_SESSION_ID = request.orcaSessionId;
   for (const key of ["SystemRoot", "WINDIR", "COMSPEC", "TEMP", "TMP", "APPDATA", "LOCALAPPDATA", "LANG", "TMPDIR"]) {
     const value = base[key];
     if (value) env[key] = value;
@@ -2549,9 +2561,11 @@ async function installSupervision(name, io = {}) {
       message: `No key file at ${agentKeyPath(name, home)}. Register this agent first. The key was not read.`
     };
   }
-  const noAutoUpdate = autoUpdateDisabled(io.env ?? process.env, io.argv ?? []);
+  const env = io.env ?? process.env;
+  const noAutoUpdate = autoUpdateDisabled(env, io.argv ?? []);
   try {
-    persistAgentNoAutoUpdate(name, home, noAutoUpdate);
+    const orcaSessionId = env.ORCA_STRUCTURED_SESSION === "1" ? env.ORCA_AGENT_SESSION_ID?.trim() : void 0;
+    persistAgentNoAutoUpdate(name, home, noAutoUpdate, orcaSessionId);
   } catch (err) {
     return { ok: false, message: err instanceof Error ? err.message : "Could not save the auto-update setting." };
   }
@@ -2939,6 +2953,7 @@ async function startWatcher(name, io, state, reclaim) {
   if (isStopped(io.home, name) || readSuperviseState(io.home, name).epoch !== state.epoch) {
     return { ok: false, message: "stopped" };
   }
+  const orcaSessionId = agentOrcaSessionId(name, io.home);
   const request = {
     nodePath,
     scriptPath,
@@ -2946,6 +2961,7 @@ async function startWatcher(name, io, state, reclaim) {
     home: io.home ?? "",
     pathEnv: io.env?.PATH ?? process.env.PATH ?? "",
     ...orcaBinFrom(io.env) ? { orcaBin: orcaBinFrom(io.env) } : {},
+    ...orcaSessionId ? { orcaSessionId } : {},
     ...reclaim ? { reclaim } : {}
   };
   try {
@@ -3429,7 +3445,8 @@ function execFileOrca(file, args, timeoutMs) {
 }
 function createOrcaDriver(options) {
   const execFile2 = options?.execFile ?? execFileOrca;
-  const bin = orcaBinary(options?.env);
+  const env = options?.env ?? process.env;
+  const bin = orcaBinary(env);
   const log = options?.log ?? console.error;
   async function run(args, timeoutMs) {
     return execFile2(bin, args, timeoutMs);
@@ -3524,6 +3541,33 @@ function createOrcaDriver(options) {
     }
     return submit(matches[0].handle, target, notice, false, waitSubmit);
   }
+  async function nudgeChat(target, notice) {
+    const sessionId = env.ORCA_AGENT_SESSION_ID?.trim();
+    if (!sessionId || target !== `orca_session_id:${sessionId}`) {
+      return { ok: false, error: "Start the watcher from the Orca chat selected for wake delivery." };
+    }
+    const result = await run([
+      "orchestration",
+      "send",
+      "--to",
+      target,
+      "--subject",
+      "Valetto wake",
+      "--body",
+      notice,
+      "--json"
+    ], SEND_TIMEOUT_MS);
+    const response = record(parseJson(result.stdout));
+    const messageId = record(response?.result)?.messageId;
+    if (result.code === 0 && response?.ok === true && typeof messageId === "string" && messageId) return { ok: true };
+    if (isDown(result)) return { ok: false, error: ORCA_NOT_RUNNING };
+    if (result.timedOut) {
+      log("Orca chat wake timed out after submission. Delivery is unproven.");
+      return { ok: true };
+    }
+    const error = record(response?.error)?.code;
+    return { ok: false, error: typeof error === "string" ? `Orca chat delivery failed: ${error}` : "Orca chat delivery returned no message ID." };
+  }
   return {
     id: "orca",
     async check() {
@@ -3544,6 +3588,7 @@ function createOrcaDriver(options) {
       return { ok: true, version };
     },
     async nudge(target, notice) {
+      if (target.startsWith("orca_session_id:")) return nudgeChat(target, notice);
       const listed = await listTerminals();
       if (!listed.ok) return { ok: false, error: listed.error };
       const matches = matchPane(listed.terminals, target);
@@ -4074,7 +4119,7 @@ async function watch(options) {
 }
 
 // packages/cli/src/cli.ts
-var VALETTO_VERSION = true ? "0.1.8" : "dev";
+var VALETTO_VERSION = true ? "0.1.9" : "dev";
 var HELP = `valetto ${VALETTO_VERSION}: watcher and register CLI for Valetto (https://valetto.tech)
 
 Usage:

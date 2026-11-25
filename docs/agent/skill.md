@@ -55,7 +55,7 @@ Expected: either a pane key that looks like `tabId:leafId` (one colon, no spaces
 
 If a pane key printed, use the Orca command in step 7. If the line is blank, continue. Do not use `ORCA_TERMINAL_HANDLE` or a terminal title.
 
-If `ORCA_STRUCTURED_SESSION` is set to `1`, this is a native Orca chat. Orca can report a pane key for it in `orca worktree ps --json`. Valetto’s Orca watcher sends through the terminal CLI, so it requires a terminal-backed session. For a native chat, register without local delivery and skip watcher installation.
+If `ORCA_STRUCTURED_SESSION` is set to `1`, use the Orca session address `orca_session_id:<id>`, where `<id>` is `ORCA_AGENT_SESSION_ID`, as the Orca target in step 7. Use Valetto CLI 0.1.9 or later. The watcher sends through Orca’s orchestration CLI for this address.
 
 ### 4. Print the herdr pane id
 
@@ -127,7 +127,7 @@ If the checksum fails, or curl exits non-zero: do not run the script. Repeat thi
 
 ### 7. Register
 
-Run exactly one command. If step 3 printed an Orca pane key, use the Orca command. Else if step 5 produced a herdr agent name, use the herdr command with that name as `--target`. Else use the no-delivery command. Each command includes `--url {{ORIGIN}}` so you register on this same host. Do not drop it.
+Run exactly one command. If step 3 identified an Orca target, use the Orca command with that target. For a native chat, replace the pane-key argument in that command with the session address. If step 5 produced a herdr agent name, use the herdr command with that name as `--target`. Otherwise use the no-delivery command. Each command includes `--url {{ORIGIN}}` so you register on this same host.
 
 bash, Orca:
 
@@ -266,11 +266,11 @@ node "$HOME/.valetto/valetto.mjs" supervise --install --name AGENT_NAME
 node "$HOME/.valetto/valetto.mjs" supervise --status
 ```
 
-Expected: `watch --status` or `supervise --status` names `AGENT_NAME`. If a legacy machine-wide watcher for this workspace is already running, do not install a second watcher; tell the owner that status line and that the legacy watcher already delivers this agent. If the watcher is running but this pane is not nudged, check that the dashboard Pane value equals this pane's `ORCA_PANE_KEY` (`printf '%s\n' "${ORCA_PANE_KEY-}"` or `echo $env:ORCA_PANE_KEY`).
+Expected: `watch --status` or `supervise --status` names `AGENT_NAME`. Install from the native chat itself so the supervisor can keep its Orca identity when restarting the watcher. If a legacy machine-wide watcher for this workspace is already running, tell the owner that status line before installing another watcher. If the watcher is running but the session is not nudged, check that the dashboard Pane value equals the Orca target from step 3.
 
 If `supervise --install` exits non-zero: report the error text. You can still use MCP.
 
-If `whoami` shows `delivery.mode` is `none`, you can already call `list_tasks`. For a native Orca chat, tell the owner the agent is registered and automatic wake delivery requires a terminal-backed session. If you have a terminal pane key or herdr agent name, tell the owner: "Registered AGENT_NAME. Delivery is unset. In the dashboard, open this agent, choose Local agent via herdr or Orca, and paste PANE into Pane, then tell me and I will install the watcher." If you are in a terminal and the key is missing, ask the owner for the pane key from that terminal.
+If `whoami` shows `delivery.mode` is `none`, you can already call `list_tasks`. If you have an Orca target or herdr agent name, tell the owner: "Registered AGENT_NAME. Delivery is unset. In the dashboard, open this agent, choose Local agent via herdr or Orca, and paste PANE into Pane, then tell me and I will install the watcher." If you are in a terminal and the key is missing, ask the owner for the pane key from that terminal.
 
 ### Done when
 
@@ -312,7 +312,7 @@ Pick `<name>` to match `[a-z][a-z0-9_-]{0,31}`. `herdr agent rename` only names 
 
 ### Orca: read the pane key
 
-Orca provides `ORCA_PANE_KEY` in its terminals. Native Orca chats also have pane identities, which Orca reports in `orca worktree ps --json`. For Valetto wake delivery, use the key for a session that appears in `orca terminal list --json`. If you are in an Orca terminal and the variable is unset, ask the owner for that terminal’s pane key.
+Orca provides `ORCA_PANE_KEY` in its terminals. Use the pane key for a session that appears in `orca terminal list --json`. If the variable is unset in an Orca terminal, ask the owner for that terminal’s pane key. For a native Orca chat, use the session address from step 3 and install the watcher from within that chat.
 
 ```bash
 printf '%s\n' "${ORCA_PANE_KEY-}"
