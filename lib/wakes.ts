@@ -1,12 +1,13 @@
 import { and, eq, inArray, sql } from 'drizzle-orm';
 import { getDb, type Db } from '@/db';
 import { agents, tasks, wakes, type AgentRow } from '@/db/schema';
-import { WAKE_MAX_ATTEMPTS, WEBHOOK_TIMEOUT_MS } from './constants';
+import { RATE_LIMITS, WAKE_MAX_ATTEMPTS, WEBHOOK_TIMEOUT_MS } from './constants';
 import { HttpError, isUndefinedTable } from './errors';
 import { safeEqualString } from './crypto';
 import { buildWebhookCall, localNudgeOf } from './delivery';
 import { assertPublicWebhookUrl } from './webhook-url';
 import { absoluteUrl, canonicalOrigin } from './origin';
+import { consumeKeyedRateLimit } from './rate-limit';
 import { LEGACY_GUEST_WAKE_NOTICE, LEGACY_REVIEW_NEEDED_NOTICE, WAKE_NOTICE, reviewPath, wakePaneNotice } from './wake-notice';
 
 export type WakeReason =
@@ -300,6 +301,15 @@ export type WakeScope = { agentId?: string };
 export async function leaseHerdrWakes(workspaceId: string, scope: WakeScope = {}, limit = 20) {
   const db = getDb();
   return db.transaction(async (tx) => {
+    if (scope.agentId) {
+      // Record actual delivery polls, including empty queues. Limit writes for fast pollers.
+      await tx.execute(sql`
+        update agents set watcher_last_seen_at = now()
+        where id = ${scope.agentId} and workspace_id = ${workspaceId}
+          and revoked_at is null and delivery_mode in ('local', 'herdr')
+          and (watcher_last_seen_at is null or watcher_last_seen_at <= now() - interval '5 seconds')
+      `);
+    }
     const due = await tx.execute<{ id: string }>(sql`
       select w.id
       from wakes w
@@ -411,8 +421,11 @@ export async function ackWakes(workspaceId: string, wakeIds: string[], scope: Wa
   return updated.length;
 }
 
-export async function createTestWake(agent: AgentRow): Promise<string> {
+function validateTestWake(agent: AgentRow, localOnly: boolean): void {
   if (agent.revokedAt) throw new HttpError(409, 'agent_revoked', 'This agent has been revoked.');
+  if (localOnly && !localNudgeOf(agent)) {
+    throw new HttpError(409, 'local_delivery_required', 'Set up local wake delivery before sending a self-test.');
+  }
   if (agent.deliveryMode === 'none') {
     throw new HttpError(
       400,
@@ -426,19 +439,32 @@ export async function createTestWake(agent: AgentRow): Promise<string> {
   if ((agent.deliveryMode === 'local' || agent.deliveryMode === 'herdr') && !localNudgeOf(agent)) {
     throw new HttpError(400, 'invalid_delivery', 'This agent has no local driver and target.');
   }
-  const [wake] = await getDb()
-    .insert(wakes)
-    .values({
-      workspaceId: agent.workspaceId,
-      agentId: agent.id,
-      reason: 'test',
-      taskId: null,
-      messageId: null,
-    })
-    .returning();
-  if (!wake) throw new HttpError(500, 'internal_error', 'Something went wrong.');
-  return wake.id;
 }
+
+export async function createTestWake(workspaceId: string, agentId: string, localOnly = false) {
+  return getDb().transaction(async (tx) => {
+    const [agent] = await tx.select().from(agents)
+      .where(and(eq(agents.id, agentId), eq(agents.workspaceId, workspaceId), eq(agents.role, 'agent')))
+      .for('update').limit(1);
+    if (!agent) throw new HttpError(404, 'not_found', 'No agent was found.');
+    validateTestWake(agent, localOnly);
+
+    // The agent lock serializes both MCP and dashboard requests against the same quota.
+    const rule = RATE_LIMITS.testWake;
+    const rate = await consumeKeyedRateLimit(tx, {
+      kind: 'testWake', key: agentId, limit: rule.agent, windowMs: rule.windowMs,
+    });
+    if (rate.limited) return { limited: true as const, retryAfterSeconds: rate.retryAfterSeconds };
+
+    const [wake] = await tx.insert(wakes)
+      .values({ workspaceId, agentId, reason: 'test' })
+      .returning({ id: wakes.id });
+    if (!wake) throw new HttpError(500, 'internal_error', 'Something went wrong.');
+    return { limited: false as const, wakeId: wake.id, webhook: agent.deliveryMode === 'webhook' };
+  });
+}
+
+export const TEST_WAKE_RATE_LIMIT_MESSAGE = 'Too many test wakes for this agent. Try again later.';
 
 export async function getAgentWake(workspaceId: string, agentId: string, wakeId: string) {
   const [wake] = await getDb()

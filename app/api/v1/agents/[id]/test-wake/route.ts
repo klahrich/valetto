@@ -1,52 +1,31 @@
-import { getAgent } from '@/lib/agents';
 import { requireUser } from '@/lib/auth';
 import { handle, json, requireUuid } from '@/lib/http';
-import { clientIp } from '@/lib/origin';
-import { consumeRateLimit } from '@/lib/rate-limit';
-import { createTestWake, deliverWebhookWake } from '@/lib/wakes';
+import { createTestWake, deliverWebhookWake, TEST_WAKE_RATE_LIMIT_MESSAGE } from '@/lib/wakes';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
-
-const RATE_LIMIT_MESSAGE = 'Too many test wakes for this agent. Try again later.';
 
 export function POST(req: Request, context: { params: Promise<{ id: string }> }) {
   return handle(async () => {
     const user = await requireUser(req);
     const { id } = await context.params;
-    const agent = await getAgent(user.workspace.id, requireUuid(id, 'agent'));
-    if (agent.revokedAt) {
-      return json({ error: { code: 'agent_revoked', message: 'This agent has been revoked.' } }, 409);
-    }
-    if (agent.deliveryMode === 'none') {
-      return json(
-        {
-          error: {
-            code: 'delivery_none',
-            message: 'This agent has delivery mode none, so there is nothing to wake. Set webhook or local delivery first.',
-          },
-        },
-        400,
-      );
-    }
-
-    const limit = await consumeRateLimit({ kind: 'testWake', agentId: agent.id, ip: clientIp(req) });
-    if (limit.limited) {
+    const test = await createTestWake(user.workspace.id, requireUuid(id, 'agent'));
+    if (test.limited) {
       return json(
         {
           error: {
             code: 'rate_limited',
-            message: RATE_LIMIT_MESSAGE,
-            retry_after_seconds: limit.retryAfterSeconds,
+            message: TEST_WAKE_RATE_LIMIT_MESSAGE,
+            retry_after_seconds: test.retryAfterSeconds,
           },
         },
         429,
-        { 'retry-after': String(limit.retryAfterSeconds) },
+        { 'retry-after': String(test.retryAfterSeconds) },
       );
     }
 
-    const wakeId = await createTestWake(agent);
-    if (agent.deliveryMode === 'webhook') {
+    const { wakeId } = test;
+    if (test.webhook) {
       const attempt = await deliverWebhookWake(wakeId);
       const ok = attempt.outcome === 'delivered';
       return json({

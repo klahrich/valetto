@@ -114,8 +114,9 @@ describe('watcher last_seen', () => {
       .where(eq(watcherKeys.id, keyId));
     const stale = await call(listAgents, 'http://localhost/api/v1/agents', { cookie: session.cookie });
     const stalePane = stale.data.agents.find((agent: { name: string }) => agent.name === 'PaneBot');
-    expect(stalePane.watcher_online).toBe(false);
+    expect(stalePane.watcher_online).toBe(true);
     expect(stalePane.watcher_last_seen_at).toEqual(expect.any(String));
+    expect(stale.data.agents.find((agent: { name: string }) => agent.name === 'OtherPane').watcher_online).toBe(false);
 
     const revoked = await call(revokeWatcher, `http://localhost/api/v1/watcher-keys/${keyId}/revoke`, {
       method: 'POST',
@@ -127,8 +128,9 @@ describe('watcher last_seen', () => {
     await getDb().update(watcherKeys).set({ lastSeenAt: new Date() }).where(eq(watcherKeys.id, keyId));
     const hidden = await call(listAgents, 'http://localhost/api/v1/agents', { cookie: session.cookie });
     const hiddenPane = hidden.data.agents.find((agent: { name: string }) => agent.name === 'PaneBot');
-    expect(hiddenPane.watcher_last_seen_at).toBeNull();
-    expect(hiddenPane.watcher_online).toBe(false);
+    expect(hiddenPane.watcher_last_seen_at).toBe(stalePane.watcher_last_seen_at);
+    expect(hiddenPane.watcher_online).toBe(true);
+    expect(hidden.data.agents.find((agent: { name: string }) => agent.name === 'OtherPane').watcher_last_seen_at).toBeNull();
 
     const quiet = await mcpTool(await createKey(session.cookie, hook.id), 'whoami', {});
     expect(quiet.payload.delivery.mode).toBe('webhook');

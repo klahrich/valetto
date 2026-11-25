@@ -120,7 +120,7 @@ export const RATE_LIMITS = {
   siteMessage: { ip: 30, windowMs: 15 * 60 * 1000 },
 } as const;
 
-/** A local agent is watcher_online when some non-revoked workspace watcher key polled within this window. */
+/** A local agent is watcher_online when its own watcher or a workspace watcher polled within this window. */
 export const WATCHER_ONLINE_MS = 30_000;
 
 export const WAKE_MAX_ATTEMPTS = 8;

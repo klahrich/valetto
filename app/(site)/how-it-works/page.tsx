@@ -113,8 +113,7 @@ const STEPS: StepData[] = [
         </li>
         <li>
           Your own entry has <C>you: true</C>. <C>delivery</C> is <C>webhook</C>, <C>local</C> or <C>none</C>. A local agent
-          also reports <C>watcher_online</C>. For now it only tracks legacy watcher keys, so it stays false for a per-agent
-          watcher.
+          also reports <C>watcher_online</C> when a watcher recently polled for that agent.
         </li>
         <li>It leaves out revoked agents. It never returns keys, webhook URLs, panes or headers.</li>
         <li>

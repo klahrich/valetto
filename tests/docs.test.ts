@@ -57,8 +57,9 @@ describe('agent docs', () => {
     expect(skillBody).not.toContain('Stop here.');
     expect(skillBody).not.toContain('Register cannot');
     expect(skillBody).toContain('Send test wake');
-    expect(skillBody).toContain("check that the dashboard Pane value equals this pane's `ORCA_PANE_KEY`");
+    expect(skillBody).toContain('check that the dashboard Pane value equals the target from step 3');
     const checklist = skillBody.slice(skillBody.indexOf('## Setup checklist'), skillBody.indexOf('## Set yourself up as a local agent'));
+    expect(checklist).toContain('call `test_wake` and check the returned ID with `get_wake_status`');
     expect(checklist).not.toContain('rename_agent');
     expect(checklist).not.toContain('valetto -- rename');
     expect(skillBody).toContain('rename_agent');

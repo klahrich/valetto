@@ -282,6 +282,8 @@ node "$HOME/.valetto/valetto.mjs" supervise --status
 
 Expected: `watch --status` or `supervise --status` names `AGENT_NAME`. Run the install command from the native Orca chat itself so the supervisor can preserve its session identity when restarting the watcher. If a legacy machine-wide watcher is running for this workspace, tell the owner before installing another watcher. If delivery fails, check that the dashboard Pane value equals the target from step 3.
 
+After the watcher starts, call `test_wake` and check the returned ID with `get_wake_status`. Confirm the notice appeared in your session.
+
 If `supervise --install` exits non-zero: report the error text. You can still use MCP.
 
 If `whoami` shows `delivery.mode` is `none`, you can already call `list_tasks`. For an existing agent, open it in the dashboard, choose **Local agent via herdr or Orca**, and enter the target from step 3 or 5 in **Pane**. For a native Orca chat, install the watcher from within that chat after saving delivery.
@@ -450,13 +452,13 @@ The watcher polls every 3 seconds. Each phase (poll, nudge, ack, or the backoff 
 
 `watch` still creates `~/.valetto/watcher-<scope>.lock` for this agent. `scope` is the first 16 hex characters of the sha256 of `agent`, a newline, and your agent id. The file holds the pid, start time, hostname, boot id, origin, workspace id, agent id, and agent name. Your key is not in the file name or the file. A second watcher prints the existing pid and exits 0. A legacy machine-wide watcher on this machine makes it exit without leasing a wake. `--force` does not bypass that.
 
-Check it: `node "$HOME/.valetto/valetto.mjs" supervise --status` and `watch --status` must name your agent. Do not read the key file into the chat. `whoami` `watcher_online` reflects legacy watcher keys only; a per-agent watcher does not set it, so do not wait for it. Do not ask the human to restart the watcher by prompting this pane. The timer does that.
+Check it with `node "$HOME/.valetto/valetto.mjs" supervise --status` and `watch --status`. Both should name your agent. Use `get_wake_status` to check whether a watcher has polled for you recently.
 
 The watcher updates itself. The supervise timer checks this server for a newer CLI when it starts and about every 6 hours (never more than once an hour), only over https on the origin this agent registered with (http is allowed only on localhost). A newer script is written to a temp file beside the running one, checked against the published sha256 and a pinned ed25519 release signature, then swapped in place. The downloaded file is never executed to verify it. On Windows the running file is renamed aside first. A copy still named `replyslip.mjs` is updated in place too. Any failure keeps the old script and is logged. To opt out: `VALETTO_NO_AUTO_UPDATE=1` (or `REPLYSLIP_NO_AUTO_UPDATE=1`) or `--no-auto-update`. Passing that flag (or env) to `supervise --install` stores it on the agent key file and in the OS timer so later ticks stay opted out. If you are on CLI 0.1.9 or older, repeat the checksummed download and run `supervise --install --name <name>` once to switch to the new signing key. If auto-update is off, use those steps for later releases as well.
 
-### 7. Ask for a test wake
+### 7. Send a test wake to yourself
 
-Tell the human your Valetto name, the pane from above, and that your watcher is running. Ask them to press **Send test wake** on the dashboard. When it arrives, the driver types a fixed notice into your pane. herdr runs `herdr agent prompt`. Orca matches `tabId` and `leafId` from `orca terminal list --json` and runs `orca terminal send`. The notice says another agent sent you something. Call `list_tasks` and `get_task` with your agent key. The notice is not the task. If the watcher is running but this pane is not nudged, check that the dashboard Pane value equals this pane's `ORCA_PANE_KEY`.
+Call `test_wake` with `{}` to queue a test for your own local watcher. Pass the returned `wake_id` to `get_wake_status` to see whether the watcher acknowledged it. Confirm the fixed notice appeared in your session. A test carries no task or message. If the watcher is polling and the notice never appears, check the local driver and wake target shown by `get_wake_status`. The owner can also use **Send test wake** in the dashboard.
 
 ### Legacy machine-wide watcher
 

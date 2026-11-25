@@ -42,6 +42,7 @@ import { OAUTH_SCOPE, RSK_SCOPES, SCOPE_RESPOND, oauthEnabled, oauthIssuer, oaut
 import { PROTECTED_RESOURCE_METADATA_PATH } from './oauth/metadata';
 import { INSUFFICIENT_SCOPE_MESSAGE, hasScope, toolAllowed, type ToolName } from './oauth/scopes';
 import { authenticateOAuthAccessToken } from './oauth/verify';
+import { createTestWake, getAgentWake, TEST_WAKE_RATE_LIMIT_MESSAGE } from './wakes';
 
 type ToolCtx = {
   http?: {
@@ -462,6 +463,51 @@ export const mcpHandler = createMcpHandler(
           const principal = principalFrom(ctx as ToolCtx);
           const agent = await renameAgent(principal.workspaceId, principal.agentId, args.name);
           return ok({ agent: serializeAgent(agent) });
+        } catch (err) {
+          return fail(err);
+        }
+      },
+    );
+
+    server.registerTool(
+      'test_wake',
+      {
+        title: docsByName.get('test_wake')!.title,
+        description: docsByName.get('test_wake')!.description,
+        inputSchema: toolInputs.test_wake,
+      },
+      async (_args, ctx) => {
+        try {
+          requireToolScope(ctx as ToolCtx, 'test_wake');
+          const { workspaceId, agentId } = principalFrom(ctx as ToolCtx);
+          const test = await createTestWake(workspaceId, agentId, true);
+          if (test.limited) {
+            throw new HttpError(429, 'rate_limited', TEST_WAKE_RATE_LIMIT_MESSAGE, {
+              retry_after_seconds: test.retryAfterSeconds,
+            });
+          }
+          return ok({ wake_id: test.wakeId, status: 'pending' });
+        } catch (err) {
+          return fail(err);
+        }
+      },
+    );
+
+    server.registerTool(
+      'get_wake_status',
+      {
+        title: docsByName.get('get_wake_status')!.title,
+        description: docsByName.get('get_wake_status')!.description,
+        inputSchema: toolInputs.get_wake_status,
+      },
+      async (args, ctx) => {
+        try {
+          requireToolScope(ctx as ToolCtx, 'get_wake_status');
+          const { workspaceId, agentId } = principalFrom(ctx as ToolCtx);
+          const agent = await getAgent(workspaceId, agentId);
+          const seen = await workspaceWatcherLastSeen(workspaceId);
+          const wake = args.wake_id ? await getAgentWake(workspaceId, agentId, args.wake_id) : undefined;
+          return ok({ delivery: whoamiDelivery(agent), ...watcherPresence(agent, seen), ...(wake ? { wake } : {}) });
         } catch (err) {
           return fail(err);
         }

@@ -126,6 +126,7 @@ export async function listTeammates(principal: AgentPrincipal): Promise<Teammate
       name: agents.name,
       description: agents.description,
       deliveryMode: agents.deliveryMode,
+      watcherLastSeenAt: agents.watcherLastSeenAt,
       shared: agents.shared,
       createdAt: agents.createdAt,
     })
@@ -618,11 +619,14 @@ export type WatcherPresence = {
   watcher_online: boolean;
 };
 
-/**
- * One workspace watcher delivers every local agent, so they share the newest poll.
- * Webhook and none agents are not delivered that way.
- */
-export function watcherPresence(agent: { deliveryMode: string }, lastSeen: Date | null, now = Date.now()): WatcherPresence {
+/** A legacy workspace poll covers all local agents. An agent-key poll only covers that agent. */
+export function watcherPresence(
+  agent: { deliveryMode: string; watcherLastSeenAt?: Date | null },
+  workspaceLastSeen: Date | null,
+  now = Date.now(),
+): WatcherPresence {
+  const ownLastSeen = agent.watcherLastSeenAt ?? null;
+  const lastSeen = ownLastSeen && (!workspaceLastSeen || ownLastSeen > workspaceLastSeen) ? ownLastSeen : workspaceLastSeen;
   if (!isLocalDelivery(agent) || !lastSeen) {
     return { watcher_last_seen_at: null, watcher_online: false };
   }

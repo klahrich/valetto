@@ -6,8 +6,9 @@ import { POST as ack } from '@/app/api/v1/watcher/ack/route';
 import { POST as poll } from '@/app/api/v1/watcher/poll/route';
 import { POST as createWatcher } from '@/app/api/v1/watcher-keys/route';
 import { getDb } from '@/db';
-import { wakes } from '@/db/schema';
-import { call, createAgent, createKey, setHerdr, signIn } from './helpers';
+import { agents, wakes } from '@/db/schema';
+import { RATE_LIMITS, WATCHER_ONLINE_MS } from '@/lib/constants';
+import { call, createAgent, createKey, mcpTool, setHerdr, signIn } from './helpers';
 
 const POLL = 'http://localhost/api/v1/watcher/poll';
 const ACK = 'http://localhost/api/v1/watcher/ack';
@@ -39,6 +40,55 @@ function ids(res: { data: { wakes: { id: string }[] } }): string[] {
 }
 
 describe('per-agent watcher: an agent key polls and acks only its own wakes', () => {
+  it('queues a self-test and checks only its own wake and watcher activity', async () => {
+    const session = await signIn();
+    const a = await localAgent(session.cookie, 'SelfTest', 'self-test');
+    const b = await localAgent(session.cookie, 'Sibling', 'sibling');
+
+    const test = await mcpTool(a.key, 'test_wake');
+    expect(test.isError, test.text).toBe(false);
+    expect(test.payload).toMatchObject({ status: 'pending', wake_id: expect.any(String) });
+    const wakeId = test.payload.wake_id as string;
+    const readStatus = () => mcpTool(a.key, 'get_wake_status', { wake_id: wakeId });
+
+    await call(poll, POLL, { bearer: a.key, body: { lease: false } });
+    expect((await readStatus()).payload).toMatchObject({
+      watcher_online: false,
+      watcher_last_seen_at: null,
+      wake: { status: 'pending', reason: 'test', task_id: null, message_id: null, attempts: 0 },
+    });
+    expect((await mcpTool(b.key, 'get_wake_status', { wake_id: wakeId })).payload.error).toBe('not_found');
+
+    expect(ids(await call(poll, POLL, { bearer: a.key }))).toEqual([wakeId]);
+    const leased = (await readStatus()).payload;
+    expect(leased).toMatchObject({ watcher_online: true, watcher_last_seen_at: expect.any(String), wake: { status: 'pending', attempts: 1 } });
+    expect((await mcpTool(b.key, 'get_wake_status')).payload.watcher_online).toBe(false);
+    expect((await mcpTool(a.key, 'whoami')).payload.watcher_online).toBe(true);
+
+    await call(ack, ACK, { bearer: a.key, body: { wake_ids: [wakeId] } });
+    expect((await readStatus()).payload.wake).toMatchObject({ status: 'delivered', delivered_at: expect.any(String) });
+    await getDb().update(agents).set({ watcherLastSeenAt: new Date(Date.now() - WATCHER_ONLINE_MS - 1_000) }).where(eq(agents.id, a.id));
+    expect((await readStatus()).payload.watcher_online).toBe(false);
+    expect(ids(await call(poll, POLL, { bearer: a.key }))).toEqual([]);
+    expect((await readStatus()).payload.watcher_online).toBe(true);
+  });
+
+  it('requires local delivery and shares the dashboard test wake limit', async () => {
+    const session = await signIn();
+    const a = await localAgent(session.cookie, 'Local', 'self-test');
+    const quiet = await createAgent(session.cookie, 'Quiet');
+    const quietKey = await createKey(session.cookie, quiet.id);
+    expect((await mcpTool(quietKey, 'test_wake')).payload.error).toBe('local_delivery_required');
+
+    for (let i = 0; i < RATE_LIMITS.testWake.agent - 1; i++) {
+      expect((await mcpTool(a.key, 'test_wake')).isError).toBe(false);
+    }
+    await sendTestWake(session.cookie, a.id);
+    expect((await mcpTool(a.key, 'test_wake')).payload).toMatchObject({
+      error: 'rate_limited', details: { retry_after_seconds: expect.any(Number) },
+    });
+  });
+
   it("never leases, returns, or acks another agent's wake in the same workspace", async () => {
     const session = await signIn();
     const a = await localAgent(session.cookie, 'AgentA', 'agent-a');

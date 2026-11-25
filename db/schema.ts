@@ -130,6 +130,7 @@ export const agents = pgTable(
     herdrPane: text('herdr_pane'),
     localDriver: text('local_driver'),
     localTarget: text('local_target'),
+    watcherLastSeenAt: ts('watcher_last_seen_at'),
     revokedAt: ts('revoked_at'),
     /** When true, other workspaces can be granted tasks to this agent at @handle/name. */
     shared: boolean('shared').notNull().default(false),

@@ -82,10 +82,12 @@ describe('tool scopes', () => {
         'list_agents',
         'list_messages',
         'get_message',
+        'get_wake_status',
         'list_tasks',
         'mark_messages_read',
         'rename_agent',
         'send_message',
+        'test_wake',
         'whoami',
       ].sort(),
     );
@@ -101,7 +103,7 @@ describe('tool scopes', () => {
     const rsk = (await mcpListTools(appKey)).map((tool) => tool.name);
     expect(rsk).toHaveLength(Object.keys(TOOL_SCOPES).length - 1);
     expect(rsk).not.toContain('redeem_invite');
-    expect((await mcpListTools(oauth)).map((tool) => tool.name)).toHaveLength(12);
+    expect((await mcpListTools(oauth)).map((tool) => tool.name)).toHaveLength(14);
   });
 
   it('toolAllowed is the shared predicate: rsk_ scopes allow everything, unknown names never pass', () => {

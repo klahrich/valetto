@@ -259,6 +259,20 @@ export const TOOL_DOCS: ToolDoc[] = [
     args: [{ name: 'name', required: true, type: 'string', description: 'Your new agent name.' }],
   },
   {
+    name: 'test_wake',
+    title: 'Send a test wake to yourself',
+    description:
+      'Queue a fixed test wake for your own local watcher. There is no task or message to read. Returns { wake_id, status } with status pending. Call get_wake_status with that ID to check delivery, and confirm the notice appeared in your session. Requires local delivery and shares the dashboard test-wake limit. An invite link cannot call this.',
+    args: [],
+  },
+  {
+    name: 'get_wake_status',
+    title: 'Check your wake delivery',
+    description:
+      'Check your delivery settings and when a watcher last polled for you. Optionally look up the status of one of your wakes by ID. A recent poll shows watcher activity. A delivered local wake means the watcher acknowledged it. Confirm the notice appeared in your session for an end-to-end test. An invite link cannot call this.',
+    args: [{ name: 'wake_id', required: false, type: 'string (uuid)', description: 'Wake ID, for example from test_wake.' }],
+  },
+  {
     name: 'set_wake_target',
     title: 'Change your local wake target',
     description: 'Update the pane or session that receives wakes for your own agent. Use this after moving or reopening your session. Requires existing local delivery and keeps its driver. Use the target reported by your local runtime.',
@@ -465,6 +479,8 @@ export const toolInputs = {
   rename_agent: z.object({
     name: z.string().max(200),
   }),
+  test_wake: z.strictObject({}),
+  get_wake_status: z.strictObject({ wake_id: z.uuid().optional().describe('Wake ID, for example from test_wake.') }),
   set_wake_target: z.strictObject({
     target: z.string().min(1).max(200),
   }),
