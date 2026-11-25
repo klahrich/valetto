@@ -1,30 +1,20 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { SignInLink } from '@/components/site/SignInLink';
 import { agentDocs } from '@/lib/agent-docs';
-import { Mark, SimpleFooter } from '@/components/site/Mark';
-import { OG_IMAGE, OG_IMAGE_ALT, SITE_URL, openGraph } from '@/components/site/seo';
+import { VALETTO_URL, valettoMeta } from '@/components/site/valetto/seo';
+import { DOCS_OFFERS, DOCS_SHARE, DocsPage } from '../../docs/DocsPage';
 import { DEFAULT_SHARE_DAILY_CAP, FORM_NOTES_MAX, TASK_DESCRIPTION_MAX, TASK_TITLE_MAX } from '@/lib/constants';
 import { GUEST_WAKE_EXAMPLE } from './content';
-import '@/components/site/site-width.css';
 import '../sharing.css';
 import './offers.css';
 
-const PATH = '/sharing/offers';
-const URL = `${SITE_URL}${PATH}`;
+const URL = `${VALETTO_URL}${DOCS_OFFERS}`;
 const TITLE = 'Offers and Access: What a Shared Agent Accepts | Valetto';
 const DESCRIPTION =
   'How Valetto limits a guest to the offers you grant, what your agent receives when a guest task arrives, and when to use a form offer instead of free text.';
 const PUBLISHED = '2026-11-14';
 
-export const metadata: Metadata = {
-  title: { absolute: TITLE },
-  description: DESCRIPTION,
-  robots: { index: true, follow: true },
-  alternates: { canonical: PATH },
-  openGraph: { ...openGraph, title: TITLE, description: DESCRIPTION, url: PATH },
-  twitter: { card: 'summary_large_image', title: TITLE, description: DESCRIPTION, images: [{ url: `${SITE_URL}${OG_IMAGE}`, alt: OG_IMAGE_ALT }] },
-};
+export const metadata: Metadata = valettoMeta(DOCS_OFFERS, TITLE, DESCRIPTION);
 
 const jsonLd = [
   {
@@ -35,7 +25,7 @@ const jsonLd = [
     url: URL,
     description: DESCRIPTION,
     inLanguage: 'en',
-    isPartOf: { '@type': 'WebSite', name: 'Valetto', url: `${SITE_URL}/` },
+    isPartOf: { '@type': 'WebSite', name: 'Valetto', url: `${VALETTO_URL}/` },
     datePublished: PUBLISHED,
     dateModified: PUBLISHED,
   },
@@ -43,8 +33,8 @@ const jsonLd = [
     '@context': 'https://schema.org',
     '@type': 'BreadcrumbList',
     itemListElement: [
-      { '@type': 'ListItem', position: 1, name: 'Home', item: `${SITE_URL}/` },
-      { '@type': 'ListItem', position: 2, name: 'Agent sharing', item: `${SITE_URL}/sharing` },
+      { '@type': 'ListItem', position: 1, name: 'Docs', item: `${VALETTO_URL}/docs` },
+      { '@type': 'ListItem', position: 2, name: 'Agent sharing', item: `${VALETTO_URL}${DOCS_SHARE}` },
       { '@type': 'ListItem', position: 3, name: 'Offers and access', item: URL },
     ],
   },
@@ -101,25 +91,18 @@ function Pre({ children }: { children: string }) {
 
 export default function OffersPage() {
   return (
-    <div className="sh of site-w">
-      {jsonLd.map((d) => (
-        <script
-          key={d['@type']}
-          type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(d).replace(/</g, '\\u003c') }}
-        />
-      ))}
-      <a className="skip" href="#main">
-        Skip to content
-      </a>
-      <header className="top">
-        <Mark />
-        <SignInLink className="top-link">Sign in</SignInLink>
-      </header>
-      <main id="main">
+    <DocsPage path={DOCS_OFFERS}>
+      <div className="sh of docs-existing-guide">
+        {jsonLd.map((d) => (
+          <script
+            key={d['@type']}
+            type="application/ld+json"
+            dangerouslySetInnerHTML={{ __html: JSON.stringify(d).replace(/</g, '\\u003c') }}
+          />
+        ))}
         <div className="sh-hero">
           <p className="sh-crumb">
-            <Link className="link" href="/sharing">
+            <Link className="link" href={DOCS_SHARE}>
               Agent sharing
             </Link>{' '}
             / Offers and access
@@ -366,10 +349,10 @@ export default function OffersPage() {
             <li>A revoked customer cannot come back through any link. Only you can restore them.</li>
           </ul>
           <p className="sh-links">
-            <Link className="link" href="/sharing">
+            <Link className="link" href={DOCS_SHARE}>
               Agent sharing
             </Link>
-            <Link className="link" href="/how-it-works#invite-links">
+            <Link className="link" href="/share#got-a-link">
               How invite links work
             </Link>
             <a className="link" href={agentDocs.paths.api}>
@@ -377,8 +360,7 @@ export default function OffersPage() {
             </a>
           </p>
         </section>
-      </main>
-      <SimpleFooter />
-    </div>
+      </div>
+    </DocsPage>
   );
 }

@@ -2,20 +2,18 @@ import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { MCP_URL, MUSE_CLIENT_ID } from '@/components/site/valetto/agentConstants';
-import { CONNECT, FIRST_TASK, ValettoFoot, ValettoTop } from '@/components/site/valetto/ValettoChrome';
+import { DocsPage, DOCS_FIRST_TASK, DOCS_MUSE } from '../docs/DocsPage';
 import { valettoMeta } from '@/components/site/valetto/seo';
-import { GlowBg } from '../GlowBg';
 import { Mini } from '../connect/GuideParts';
 import { CopyBlock } from '../how-it-works/CopyBlock';
 import '@/components/site/landing.css';
 import '../landing-width.css';
-import '../landing-bg.css';
 import '@/components/site/valetto/valetto.css';
 import '../how-it-works/sharing.css';
 import '../connect/connect.css';
 
 export const metadata: Metadata = valettoMeta(
-  FIRST_TASK,
+  DOCS_FIRST_TASK,
   'Your first task on Valetto',
   'Connect Grok Bot and Meta Muse to Valetto, send Muse a task from Grok, and read the result.',
 );
@@ -74,11 +72,11 @@ const STEPS: { id: string; title: string; body: ReactNode; example: ReactNode }[
           <>Start the connection. Muse opens Valetto’s <strong>Allow access?</strong> page. Sign in with the same email you used for your workspace.</>,
           <>Under <strong>Extra permissions (optional)</strong>, check <strong>Work on tasks sent to it</strong>. That lets Muse finish tasks from Grok or ask a follow-up question.</>,
           <>Under <strong>Connect as</strong>, choose <strong>A new agent</strong>, enter <code>meta-muse</code>, then press <strong>Allow</strong>. This names your existing Muse bot in Valetto. If you’re reconnecting, select its existing agent instead.</>,
-          <>In the Valetto dashboard, open the Muse agent and click <strong>Create wake link</strong>. Give Muse the private link and the note from the <Link className="link" href="/connect/meta-muse#wake">Meta Muse guide</Link> so it can pick up tasks.</>,
+          <>In the Valetto dashboard, open the Muse agent and click <strong>Create wake link</strong>. Give Muse the private link and the note from the <Link className="link" href={`${DOCS_MUSE}#wake`}>Meta Muse guide</Link> so it can pick up tasks.</>,
         ]} />
         <p className="cx-fine">
           If Muse asks for scopes or a redirect URI, copy them from the{' '}
-          <Link className="link" href="/connect/meta-muse">full setup guide</Link>.
+          <Link className="link" href={DOCS_MUSE}>full setup guide</Link>.
         </p>
       </>
     ),
@@ -129,16 +127,8 @@ const STEPS: { id: string; title: string; body: ReactNode; example: ReactNode }[
 
 export default function FirstTaskPage() {
   return (
-    <div className="lp vt vt-sub-page cx">
-      <GlowBg />
-      <a className="skip" href="#main">Skip to content</a>
-      <ValettoTop>
-        <ul>
-          <li><Link href={CONNECT}>Connect an AI app</Link></li>
-          <li><Link href="/sign-in">Sign in</Link></li>
-        </ul>
-      </ValettoTop>
-      <main id="main">
+    <DocsPage path={DOCS_FIRST_TASK}>
+      <div className="cx docs-existing-guide">
         <header className="cx-hero">
           <h1>Your first task on Valetto</h1>
           <p className="cx-lead">
@@ -169,8 +159,7 @@ export default function FirstTaskPage() {
             Confirm Muse has task permission and the current wake link. The first attempt can take a few minutes.
           </p>
         </aside>
-      </main>
-      <ValettoFoot />
-    </div>
+      </div>
+    </DocsPage>
   );
 }

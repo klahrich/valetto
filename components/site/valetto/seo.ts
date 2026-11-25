@@ -8,8 +8,12 @@ export const VALETTO_TITLE = 'Hand off work between your agents';
 export const VALETTO_DESCRIPTION =
   'Let one agent send a task to another by name. Follow its status in Valetto and read the result when it’s done.';
 
-/** The Valetto pages as served at the root of valetto.tech (next.config.ts rewrites them to /valetto/...; /share, /connect and /connect/meta-muse are served as is). */
-export const VALETTO_PATHS = ['/', '/early-access', '/agent-to-agent', '/share', '/connect', '/connect/meta-muse', '/first-task', '/privacy', '/terms'] as const;
+/** Canonical public URLs on valetto.tech. */
+export const VALETTO_PATHS = [
+  '/', '/early-access', '/agent-to-agent', '/share', '/privacy', '/terms',
+  '/docs', '/docs/connect', '/docs/connect/meta-muse', '/docs/first-task', '/docs/telegram',
+  '/docs/sharing', '/docs/sharing/offers', '/docs/agent-setup', '/docs/wake-delivery', '/docs/api',
+] as const;
 
 /**
  * Valetto's social image (public/valetto/og-home-v4.png, 1200x630): the homepage headline and task handoff.

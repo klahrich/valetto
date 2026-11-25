@@ -1,27 +1,24 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import type { ReactNode } from 'react';
+import { DocsPage, DOCS_CONNECT, DOCS_MUSE } from '../docs/DocsPage';
 import { valettoMeta } from '@/components/site/valetto/seo';
-import { ValettoFoot, ValettoTop } from '@/components/site/valetto/ValettoChrome';
 import { PLAN_LIMITS } from '@/lib/plans';
-import { GlowBg } from '../GlowBg';
 import { CopyBlock } from '../how-it-works/CopyBlock';
 import { AppTabs, type AppTab } from './AppTabs';
 import { MCP_URL } from '@/components/site/valetto/agentConstants';
 import { ConnectedAppsShot, Dot, Mini, Shot } from './GuideParts';
 import '@/components/site/landing.css';
 import '../landing-width.css';
-import '../landing-bg.css';
 import '@/components/site/valetto/valetto.css';
 import '../how-it-works/sharing.css';
 import './connect.css';
 
-const PATH = '/connect';
-const MUSE = '/connect/meta-muse';
+const MUSE = DOCS_MUSE;
 const AGENT_LIMIT = PLAN_LIMITS.free.agents;
 
 export const metadata: Metadata = valettoMeta(
-  PATH,
+  DOCS_CONNECT,
   'Connect ChatGPT, Claude or Cursor to Valetto over MCP',
   'Connect ChatGPT, Claude, Cursor or another AI app to Valetto in a few steps. Paste one link, sign in and press Allow. No key needed.',
 );
@@ -379,22 +376,8 @@ const TROUBLE: { q: string; a: ReactNode; pic?: ReactNode }[] = [
 
 export default function ConnectPage() {
   return (
-    <div className="lp vt vt-sub-page cx">
-      <GlowBg />
-      <a className="skip" href="#main">
-        Skip to content
-      </a>
-      <ValettoTop>
-        <ul>
-          <li>
-            <Link href="/sign-in">Sign in</Link>
-          </li>
-          <li>
-            <Link href="/">Back to Valetto</Link>
-          </li>
-        </ul>
-      </ValettoTop>
-      <main id="main">
+    <DocsPage path={DOCS_CONNECT}>
+      <div className="cx docs-existing-guide">
         <header className="cx-hero">
           <p className="cx-kicker">Connect an AI app</p>
           <h1>Connect your AI app to Valetto</h1>
@@ -461,8 +444,7 @@ export default function ConnectPage() {
             .
           </p>
         </aside>
-      </main>
-      <ValettoFoot />
-    </div>
+      </div>
+    </DocsPage>
   );
 }

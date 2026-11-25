@@ -1,9 +1,8 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import type { ReactNode } from 'react';
+import { DocsPage, DOCS_CONNECT, DOCS_MUSE } from '../../docs/DocsPage';
 import { valettoMeta } from '@/components/site/valetto/seo';
-import { ValettoFoot, ValettoTop } from '@/components/site/valetto/ValettoChrome';
-import { GlowBg } from '../../GlowBg';
 import { CopyBlock } from '../../how-it-works/CopyBlock';
 import {
   MCP_URL,
@@ -15,15 +14,12 @@ import {
 import { ConnectedAppsShot, Mini, Shot } from '../GuideParts';
 import '@/components/site/landing.css';
 import '../../landing-width.css';
-import '../../landing-bg.css';
 import '@/components/site/valetto/valetto.css';
 import '../../how-it-works/sharing.css';
 import '../connect.css';
 
-const PATH = '/connect/meta-muse';
-
 export const metadata: Metadata = valettoMeta(
-  PATH,
+  DOCS_MUSE,
   'Connect Meta Muse to Valetto over MCP',
   'Connect Meta Muse to Valetto in about five minutes. Copy the link and client ID, press Allow, then give Muse a wake link so it hears about new tasks.',
 );
@@ -191,22 +187,8 @@ const STEPS: Step[] = [
 
 export default function ConnectMusePage() {
   return (
-    <div className="lp vt vt-sub-page cx">
-      <GlowBg />
-      <a className="skip" href="#main">
-        Skip to content
-      </a>
-      <ValettoTop>
-        <ul>
-          <li>
-            <Link href="/sign-in">Sign in</Link>
-          </li>
-          <li>
-            <Link href="/connect">All apps</Link>
-          </li>
-        </ul>
-      </ValettoTop>
-      <main id="main">
+    <DocsPage path={DOCS_MUSE}>
+      <div className="cx docs-existing-guide">
         <header className="cx-hero">
           <p className="cx-kicker">Connect Meta Muse</p>
           <h1>Connect Meta Muse to Valetto</h1>
@@ -242,7 +224,7 @@ export default function ConnectMusePage() {
           <h2 id="how-h">Using a different app?</h2>
           <p>
             ChatGPT, Claude, Cursor and most other apps don’t need a client ID.{' '}
-            <Link className="link" href="/connect">
+            <Link className="link" href={DOCS_CONNECT}>
               See the main guide
             </Link>
             . Setting this up for a developer? The full technical details are in the{' '}
@@ -252,8 +234,7 @@ export default function ConnectMusePage() {
             .
           </p>
         </aside>
-      </main>
-      <ValettoFoot />
-    </div>
+      </div>
+    </DocsPage>
   );
 }

@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { MarkIcon } from '@/components/site/Mark';
 import { SignInLink } from '@/components/site/SignInLink';
 import { ValettoEffects } from '@/components/site/valetto/ValettoEffects';
-import { AGENT_TO_AGENT, CONNECT, FIRST_TASK, ValettoFoot } from '@/components/site/valetto/ValettoChrome';
+import { AGENT_TO_AGENT, CONNECT, DOCS, FIRST_TASK, ValettoFoot } from '@/components/site/valetto/ValettoChrome';
 import { PLAN_LIMITS } from '@/lib/plans';
 import { CopyBlock } from '../how-it-works/CopyBlock';
 import { HeroFlow } from '../HeroFlow';
@@ -53,6 +53,9 @@ export default function ValettoPage() {
             </li>
             <li className="vt-nav-agents">
               <Link href={AGENT_TO_AGENT}>Developers</Link>
+            </li>
+            <li>
+              <Link href={DOCS}>Docs</Link>
             </li>
             <li className="vt-nav-in">
               <SignInLink>Sign in</SignInLink>
@@ -132,6 +135,9 @@ export default function ValettoPage() {
             </Link>
             <Link className="link" href={CONNECT}>
               Connect an AI app
+            </Link>
+            <Link className="link" href={DOCS}>
+              Browse the docs
             </Link>
           </p>
         </section>

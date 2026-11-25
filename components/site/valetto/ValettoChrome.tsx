@@ -5,6 +5,7 @@ import { MarkIcon } from '@/components/site/Mark';
 export const EARLY_ACCESS = '/early-access';
 export const AGENT_TO_AGENT = '/agent-to-agent';
 export const CONNECT = '/connect';
+export const DOCS = '/docs';
 export const FIRST_TASK = '/first-task';
 export const SHARE = '/share';
 
@@ -33,6 +34,9 @@ export function ValettoFoot() {
         , Montréal
       </p>
       <p className="foot-legal">
+        <Link className="link" href={DOCS}>
+          Docs
+        </Link>
         <Link className="link" href={AGENT_TO_AGENT}>
           Agent-to-agent messages
         </Link>

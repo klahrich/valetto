@@ -7,7 +7,7 @@ import { VALETTO_PATHS } from '@/components/site/valetto/seo';
 const ROOT = join(__dirname, '..');
 const read = (path: string) => readFileSync(join(ROOT, path), 'utf8');
 
-const guide = read('app/(site)/share/page.tsx');
+const guide = read('app/(site)/share/page.tsx') + read('app/(site)/share/ShareOwnerGuide.tsx');
 const invites = read('components/dashboard/InviteLinks.tsx');
 const sharing = read('components/dashboard/Sharing.tsx');
 const toggle = read('components/dashboard/SharingToggle.tsx');
