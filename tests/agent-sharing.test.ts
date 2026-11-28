@@ -79,6 +79,51 @@ afterEach(() => {
 });
 
 describe('agent sharing', () => {
+  it('pauses new shared requests while keeping grants, existing tasks, and private work', async () => {
+    const owner = await signIn();
+    const guest = await signIn();
+    const ownerHandle = handleName('o');
+    const guestHandle = handleName('g');
+    await setHandle(owner.cookie, ownerHandle);
+    await setHandle(guest.cookie, guestHandle);
+    const planner = await createAgent(owner.cookie, 'Planner');
+    const teammate = await createAgent(owner.cookie, 'Teammate');
+    const guestAgent = await createAgent(guest.cookie, 'Guest');
+    const plannerKey = await createKey(owner.cookie, planner.id);
+    const teammateKey = await createKey(owner.cookie, teammate.id);
+    const guestKey = await createKey(guest.cookie, guestAgent.id);
+    await addOffer(owner.cookie, planner.id);
+    const sharing = await call(putSharing, `http://localhost/api/v1/agents/${planner.id}/sharing`, {
+      method: 'PUT', cookie: owner.cookie, params: { id: planner.id }, body: { shared: true },
+    });
+    expect(sharing.data.agent).toMatchObject({ shared: true, accepting_shared_requests: true });
+    await grant(owner.cookie, planner.id, guestHandle, 'draft', 2);
+    const to = `@${ownerHandle}/Planner`;
+    const submit = (offer = 'draft') => mcpTool(guestKey, 'create_task', { to, offer, title: 'Draft', description: 'A page.' });
+    const first = await submit();
+    expect(first.isError, first.text).toBe(false);
+
+    expect((await mcpTool(plannerKey, 'set_availability', { accepting_shared_requests: false })).payload)
+      .toEqual({ accepting_shared_requests: false });
+    expect((await mcpTool(plannerKey, 'whoami')).payload).toMatchObject({ shared: true, accepting_shared_requests: false });
+    expect((await mcpTool(guestKey, 'get_agent_card', { address: to })).payload.card)
+      .toMatchObject({ accepting_shared_requests: false, offers: [expect.objectContaining({ name: 'draft' })] });
+    expect((await submit('unknown')).payload.error).toBe('offer_not_found');
+    expect((await submit()).payload.error).toBe('agent_unavailable');
+    expect((await mcpTool(teammateKey, 'create_task', {
+      to: 'Planner', title: 'Internal task', description: 'A page.', result_schema: offerSchema,
+    })).isError).toBe(false);
+
+    expect((await mcpTool(plannerKey, 'complete_task', {
+      id: first.payload.task.id, result: { headline: 'Done' },
+    })).isError).toBe(false);
+    expect((await mcpTool(guestKey, 'get_task', { id: first.payload.task.id })).payload.task.status).toBe('done');
+    expect((await mcpTool(plannerKey, 'set_availability', { accepting_shared_requests: true })).payload)
+      .toEqual({ accepting_shared_requests: true });
+    expect((await submit()).isError).toBe(false);
+    expect((await submit()).payload.error).toBe('rate_limited');
+  });
+
   it('keeps the decided free-plan numbers', () => {
     expect(FREE_GUEST_WORKSPACES).toBe(250);
     expect(DEFAULT_SHARE_DAILY_CAP).toBe(50);

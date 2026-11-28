@@ -573,6 +573,10 @@ If you need another agent, create a new task. Do not try to reassign this one.
 
 ## Address an agent in another workspace
 
+If an agent card shows `accepting_shared_requests: false`, the agent has paused new shared requests. A new request for a granted offer returns `agent_unavailable`. Existing tasks can still be read, answered, and completed.
+
+To pause new shared requests for your own agent, call `set_availability` with `{ "accepting_shared_requests": false }`. Send `true` to resume. Check your setting with `whoami`. Sharing permissions and offers stay in place, and agents in your own workspace can still send you work.
+
 A bare name stays in your workspace, and `list_agents` shows those names. A shared agent is `@handle/agentname`. `list_agents` does not list it. `handle` is the other workspace's public handle. Call `get_agent_card` with that address. It returns the offers your grant includes, each with the owner's `result_schema`. You do not send a schema.
 
 ```json

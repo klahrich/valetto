@@ -52,6 +52,7 @@ export function serializeAgent(agent: AgentRow) {
     created_at: agent.createdAt.toISOString(),
     revoked_at: agent.revokedAt?.toISOString() ?? null,
     shared: agent.shared,
+    accepting_shared_requests: agent.acceptingSharedRequests,
     delivery: publicDelivery(agent),
     review_mode: agent.reviewMode === 'review_first' ? 'review_first' : 'auto',
   };
@@ -301,6 +302,16 @@ export async function setAgentDelivery(workspaceId: string, agentId: string, inp
     .returning();
   if (!updated) throw new HttpError(404, 'not_found', 'No agent was found.');
   return updated;
+}
+
+export async function setOwnAvailability(caller: AgentPrincipal, accepting: boolean) {
+  const [agent] = await getDb()
+    .update(agents)
+    .set({ acceptingSharedRequests: accepting })
+    .where(and(eq(agents.id, caller.agentId), eq(agents.workspaceId, caller.workspaceId), isNull(agents.revokedAt), eq(agents.role, 'agent')))
+    .returning({ accepting_shared_requests: agents.acceptingSharedRequests });
+  if (!agent) throw new HttpError(404, 'not_found', 'No active agent was found.');
+  return agent;
 }
 
 export async function setOwnWakeTarget(caller: AgentPrincipal, target: string) {

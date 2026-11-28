@@ -232,7 +232,12 @@ export async function getCustomerBot(user: SessionUser, agentId: string) {
   let shareBody: Record<string, unknown>;
   let jobs: Awaited<ReturnType<typeof jobsFor>> = [];
   if (status === 'approved') {
-    shareBody = { status, daily_cap: share.dailyCap, ...(await shareUsage(db, share)) };
+    shareBody = {
+      status,
+      accepting_shared_requests: agent.acceptingSharedRequests,
+      daily_cap: share.dailyCap,
+      ...(await shareUsage(db, share)),
+    };
     jobs = await jobsFor(db, share.id, agent.id);
   } else if (status === 'pending') {
     shareBody = { status, requested_at: share.createdAt.toISOString() };
@@ -637,6 +642,8 @@ function customerError(err: HttpError, schema: InputSchema | null): HttpError {
       return notFound();
     case 'offer_not_found':
       return new HttpError(404, 'offer_not_found', OFFER_NOT_FOUND);
+    case 'agent_unavailable':
+      return new HttpError(409, 'agent_unavailable', 'New requests are paused. Try again later.');
     case 'rate_limited': {
       const message =
         details.scope === 'bot'
@@ -747,8 +754,9 @@ export async function createCustomerRequest(user: SessionUser, agentId: string, 
       clientRequestId: body.client_request_id,
     });
   } catch (err) {
-    if (body.client_request_id && isUniqueViolation(err)) {
-      // A concurrent retry won the insert; its request is the answer.
+    const paused = err instanceof HttpError && err.code === 'agent_unavailable';
+    if (body.client_request_id && (isUniqueViolation(err) || paused)) {
+      // A concurrent attempt may have committed between the initial lookup and the pause or insert check.
       const existing = await existingByClientId(db, workspaceId, body.client_request_id);
       if (existing) return replay(db, existing, agent.id);
     }

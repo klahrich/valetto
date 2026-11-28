@@ -1092,6 +1092,9 @@ export async function resolveSharedTask(
     .where(and(eq(agentShareOffers.shareId, fresh.id), eq(agentOffers.agentId, recipient.id), eq(agentOffers.name, offer)))
     .limit(1);
   if (!menu) throw offerNotAvailable(offer, shown);
+  if (!recipient.acceptingSharedRequests) {
+    throw new HttpError(409, 'agent_unavailable', 'This agent is temporarily unavailable for new shared requests. Try again later.');
+  }
   // Input checks come after the grant lookup (an ungranted offer stays offer_not_found) and before the
   // cap, so a rejected input never uses the guest's daily cap.
   const accepted = menu.inputSchema
@@ -1273,6 +1276,7 @@ export async function getAgentCard(caller: AgentPrincipal, to: string) {
     address: shown,
     name: recipient.name,
     description: recipient.description,
+    accepting_shared_requests: recipient.acceptingSharedRequests,
     branding,
     offers: offers.map((offer) => ({
       name: offer.name,

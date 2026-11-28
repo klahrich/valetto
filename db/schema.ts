@@ -134,6 +134,7 @@ export const agents = pgTable(
     revokedAt: ts('revoked_at'),
     /** When true, other workspaces can be granted tasks to this agent at @handle/name. */
     shared: boolean('shared').notNull().default(false),
+    acceptingSharedRequests: boolean('accepting_shared_requests').notNull().default(true),
     /**
      * agent; customer_sender: the hidden keyless `valetto` agent a customer workspace sends tasks as; or
      * telegram_sender: the hidden keyless `telegram` agent that Telegram chats message this workspace's agents as.

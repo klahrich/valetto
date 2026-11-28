@@ -30,6 +30,9 @@ export function SharingToggle({ agent, handle, onChange }: { agent: Agent; handl
       {shared ? (
         <p>
           <span className="dash-pill dash-pill-done">shared</span>{' '}
+          <span className={`dash-pill ${agent.accepting_shared_requests === false ? 'dash-pill-needs_info' : 'dash-pill-done'}`}>
+            {agent.accepting_shared_requests === false ? 'New requests paused' : 'Accepting new requests'}
+          </span>{' '}
           {handle ? (
             <span className="dash-muted">
               Other teams you approve reach it at <code translate="no">@{handle}/{agent.name}</code>

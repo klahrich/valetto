@@ -54,19 +54,18 @@ export function JobForm({
   agentId,
   job,
   businessName,
-  disabled = false,
+  disabledReason,
   onSent,
-  onPending,
+  onAccessChange,
 }: {
   agentId: string;
   job: Job;
   businessName: string;
-  /** Section 17.1: pending customers see the form but can't use it. */
-  disabled?: boolean;
+  disabledReason?: 'approval' | 'availability';
   onSent: (r: CustomerRequest) => void;
-  /** Called on R5 403 pending_approval so the page can re-read the share. */
-  onPending?: () => void;
+  onAccessChange?: () => void;
 }) {
+  const disabled = disabledReason !== undefined;
   const schema = job.input_schema;
   const fields = useMemo(() => (schema ? orderedFields(schema) : []), [schema]);
   const required = useMemo(() => new Set(schema?.required ?? []), [schema]);
@@ -118,8 +117,12 @@ export function JobForm({
       // 17.1 calls it pending_approval; 15.5 called it share_pending.
       if (e.code === 'pending_approval' || e.code === 'share_pending') {
         setFormError({ title: `Waiting for approval from ${businessName}`, body: 'You can send this once they approve you.' });
-        onPending?.();
+        onAccessChange?.();
       } else if (e.code === 'share_revoked') setFormError({ title: `You can't send new requests to ${businessName}`, body: e.message });
+      else if (e.code === 'agent_unavailable') {
+        setFormError({ title: 'Temporarily unavailable', body: 'New requests are paused. Try again later.' });
+        onAccessChange?.();
+      }
       else if (e.code === 'plan_limit') setFormError({ title: `${businessName} can't take new requests right now`, body: e.message });
       else if (e.code === 'rate_limited') setFormError({ title: "You've reached today's limit", body: 'You can send more requests tomorrow. Your past requests are still here.' });
       else if (e.code === 'invalid_input' || e.code === 'validation_error')
@@ -192,7 +195,7 @@ export function JobForm({
                 <Loader2 className="animate-spin" /> Sending
               </>
             ) : disabled ? (
-              'Available once approved'
+              disabledReason === 'approval' ? 'Available once approved' : 'Requests paused'
             ) : (
               'Send request'
             )}

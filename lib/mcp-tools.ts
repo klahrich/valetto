@@ -54,7 +54,7 @@ export const TOOL_DOCS: ToolDoc[] = [
     name: 'create_task',
     title: 'Create task',
     description:
-      'Ask exactly one other agent for a result. A bare name is an agent in your workspace: title, description, and result_schema are required. @handle/agentname is a shared agent: pass offer from get_agent_card and do not send result_schema. The stored schema is the owner offer. If the offer has input_schema, send input that matches it, leave out title (the server sets it), and put optional notes in description (at most notes_max characters; none when notes_max is 0). If the offer has no input_schema, send title and description and do not send input. The task starts open and the target is woken. You cannot hand this task on.',
+      'Ask exactly one other agent for a result. A bare name is an agent in your workspace: title, description, and result_schema are required. @handle/agentname is a shared agent: pass offer from get_agent_card and do not send result_schema. The stored schema is the owner offer. If the offer has input_schema, send input that matches it, leave out title (the server sets it), and put optional notes in description (at most notes_max characters; none when notes_max is 0). If the offer has no input_schema, send title and description and do not send input. A shared agent that has paused new requests returns agent_unavailable. The task starts open and the target is woken. You cannot hand this task on.',
     args: [
       {
         name: 'to',
@@ -153,7 +153,7 @@ export const TOOL_DOCS: ToolDoc[] = [
     name: 'whoami',
     title: 'Who am I',
     description:
-      'Report your agent name, id, workspace name, workspace handle, whether you are shared, delivery mode, plan, and usage. Webhook delivery includes only the host. Local delivery also reports watcher_last_seen_at and watcher_online. plan, usage, and limits describe the free cap. No secrets and no URL path.',
+      'Report your agent name, id, workspace name, workspace handle, whether you are shared, accepting_shared_requests, delivery mode, plan, and usage. Webhook delivery includes only the host. Local delivery also reports watcher_last_seen_at and watcher_online. plan, usage, and limits describe the free cap. No secrets and no URL path.',
     args: [],
   },
   {
@@ -279,10 +279,22 @@ export const TOOL_DOCS: ToolDoc[] = [
     args: [{ name: 'target', required: true, type: 'string', description: 'Your new Orca pane key or session address, or your herdr pane name.' }],
   },
   {
+    name: 'set_availability',
+    title: 'Set availability for shared requests',
+    description:
+      'Pause or resume new shared requests for your own agent. Existing tasks, sharing permissions, and work from your own workspace stay in place. While paused, authorized external callers see your availability and new requests return agent_unavailable. Returns { accepting_shared_requests }. An invite-link guest cannot call this.',
+    args: [{
+      name: 'accepting_shared_requests',
+      required: true,
+      type: 'boolean',
+      description: 'Pass false to pause new shared requests or true to resume.',
+    }],
+  },
+  {
     name: 'get_agent_card',
     title: 'Get agent card',
     description:
-      'Read the offers a shared agent grants this workspace. address is @handle/agentname. The card lists only the offers your grant includes, each with name (the key you pass as offer), title (readable: the owner’s title, else the name humanized), the owner result_schema, input_schema (null for a free-text offer), notes_enabled, and notes_max (max notes characters on a form offer, 0 when notes are off, null for a free-text offer). It does not list the owner’s other agents.',
+      'Read the offers a shared agent grants this workspace. address is @handle/agentname. If accepting_shared_requests is false, the agent has paused new shared requests. The card lists only the offers your grant includes, each with name (the key you pass as offer), title (readable: the owner’s title, else the name humanized), the owner result_schema, input_schema (null for a free-text offer), notes_enabled, and notes_max (max notes characters on a form offer, 0 when notes are off, null for a free-text offer). It does not list the owner’s other agents.',
     args: [
       {
         name: 'address',
@@ -484,6 +496,7 @@ export const toolInputs = {
   set_wake_target: z.strictObject({
     target: z.string().min(1).max(200),
   }),
+  set_availability: z.strictObject({ accepting_shared_requests: z.boolean() }),
   get_agent_card: z.object({
     address: z.string().min(1).max(98).describe('Shared address @handle/agentname.'),
   }),

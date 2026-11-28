@@ -11,6 +11,7 @@ export const TOOL_SCOPES = {
   list_agents: OAUTH_SCOPE,
   rename_agent: OAUTH_SCOPE,
   set_wake_target: SCOPE_OWNER,
+  set_availability: OAUTH_SCOPE,
   test_wake: OAUTH_SCOPE,
   get_wake_status: OAUTH_SCOPE,
   get_agent_card: OAUTH_SCOPE,

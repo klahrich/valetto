@@ -4,7 +4,7 @@ import { createMcpHandler, withMcpAuth } from 'mcp-handler';
 import { getDb } from '@/db';
 import { workspaces } from '@/db/schema';
 import { agentAuthErrorDescription, replaceWwwAuthenticateDescription } from './agent-auth-error';
-import { authenticateAgentKey, getAgent, listTeammates, renameAgent, revokedCredentialFlags, serializeAgent, setOwnWakeTarget, watcherPresence, workspaceWatcherLastSeen, type AgentPrincipal } from './agents';
+import { authenticateAgentKey, getAgent, listTeammates, renameAgent, revokedCredentialFlags, serializeAgent, setOwnAvailability, setOwnWakeTarget, watcherPresence, workspaceWatcherLastSeen, type AgentPrincipal } from './agents';
 import { whoamiDelivery } from './delivery';
 import { HttpError } from './errors';
 import { PlanLimitError, workspacePlanUsage } from './plans';
@@ -339,6 +339,7 @@ export const mcpHandler = createMcpHandler(
             workspace_name: workspace?.name ?? null,
             workspace_handle: workspace?.handle ?? null,
             shared: agent.shared,
+            accepting_shared_requests: agent.acceptingSharedRequests,
             delivery: whoamiDelivery(agent),
             ...watcherPresence(agent, seen),
             plan: plan.plan,
@@ -508,6 +509,23 @@ export const mcpHandler = createMcpHandler(
           const seen = await workspaceWatcherLastSeen(workspaceId);
           const wake = args.wake_id ? await getAgentWake(workspaceId, agentId, args.wake_id) : undefined;
           return ok({ delivery: whoamiDelivery(agent), ...watcherPresence(agent, seen), ...(wake ? { wake } : {}) });
+        } catch (err) {
+          return fail(err);
+        }
+      },
+    );
+
+    server.registerTool(
+      'set_availability',
+      {
+        title: docsByName.get('set_availability')!.title,
+        description: docsByName.get('set_availability')!.description,
+        inputSchema: toolInputs.set_availability,
+      },
+      async (args, ctx) => {
+        try {
+          requireToolScope(ctx as ToolCtx, 'set_availability');
+          return ok(await setOwnAvailability(principalFrom(ctx as ToolCtx), args.accepting_shared_requests));
         } catch (err) {
           return fail(err);
         }

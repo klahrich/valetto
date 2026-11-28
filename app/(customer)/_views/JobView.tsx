@@ -31,7 +31,8 @@ export function JobView({ agentId, offer }: { agentId: string; offer: string }) 
     return () => clearTimeout(t);
   }, [load]);
   // Section 17.1: a pending customer sees the form disabled; it turns on by itself once approved.
-  usePoll(load, () => 30000, data?.access === 'pending');
+  usePoll(load, () => 30000, data?.access === 'pending' ||
+    (data?.share.status === 'approved' && data.share.accepting_shared_requests === false));
 
   if (failure === 'missing') return <NotFound />;
   // A failed poll keeps the form on screen; only a first load that fails shows the retry screen.
@@ -50,6 +51,7 @@ export function JobView({ agentId, offer }: { agentId: string; offer: string }) 
   if (!job) return <NotFound message="This job isn't available anymore." />;
   const name = data.bot.branding.display_name;
   const pending = data.access === 'pending';
+  const paused = data.share.status === 'approved' && data.share.accepting_shared_requests === false;
 
   return (
     <BrandFrame branding={data.bot.branding} agentId={agentId} account={<Account />}>
@@ -68,6 +70,10 @@ export function JobView({ agentId, offer }: { agentId: string; offer: string }) 
         <Banner icon={<Hourglass />} title={`Waiting for approval from ${name}`}>
           You can fill this in once they approve you. This page updates on its own.
         </Banner>
+      ) : paused ? (
+        <Banner icon={<Hourglass />} title="Temporarily unavailable">
+          New requests are paused. This page updates on its own.
+        </Banner>
       ) : (
         data.review_mode === 'review_first' && (
           // Section 17.7: say so before the customer submits.
@@ -78,7 +84,14 @@ export function JobView({ agentId, offer }: { agentId: string; offer: string }) 
       )}
 
       <div className="mt-4 rounded-2xl border border-border bg-card p-5 shadow-sm sm:p-7">
-        <JobForm agentId={agentId} job={job} businessName={name} disabled={pending} onSent={(r) => router.push(`/c/${agentId}/r/${r.id}`)} onPending={load} />
+        <JobForm
+          agentId={agentId}
+          job={job}
+          businessName={name}
+          disabledReason={pending ? 'approval' : paused ? 'availability' : undefined}
+          onSent={(r) => router.push(`/c/${agentId}/r/${r.id}`)}
+          onAccessChange={load}
+        />
       </div>
     </BrandFrame>
   );

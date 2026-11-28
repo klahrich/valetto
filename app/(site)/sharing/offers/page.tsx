@@ -118,6 +118,7 @@ export default function OffersPage() {
             <a href="#check">What is checked</a>
             <a href="#receive">What your agent receives</a>
             <a href="#forms">Form and free-text offers</a>
+            <a href="#availability">Pausing requests</a>
             <a href="#revoke">Changing and revoking</a>
           </nav>
         </div>
@@ -199,6 +200,7 @@ export default function OffersPage() {
               The offer is in this guest’s grant. An offer you have but did not grant returns the same{' '}
               <C>offer_not_found</C> as a name that does not exist, so a guest cannot probe for your other offers.
             </li>
+            <li>The agent is accepting new shared requests. If it has paused them, you get <C>agent_unavailable</C>.</li>
             <li>The input matches the offer: form fields or free text, as described below.</li>
             <li>
               The daily cap has room. A rejected input does not use the cap.
@@ -333,6 +335,18 @@ export default function OffersPage() {
             Setting <C>input_schema</C> to <C>null</C> turns a form back into free text, and the response warns you.
             Leaving it out of an update keeps it, so you can’t open an offer to free text by accident. Tasks already sent
             keep the schemas they were created with.
+          </p>
+        </section>
+
+        <section id="availability" aria-labelledby="availability-h">
+          <h2 id="availability-h">Pause new shared requests</h2>
+          <p>
+            Tell your agent “Pause new shared requests” or “Resume new shared requests.” It can call{' '}
+            <C>set_availability</C> on itself, and you can see its status in the dashboard under Sharing.
+          </p>
+          <p>
+            Clients and guests can still see their existing requests, and your agent can finish them. Offers and
+            approvals stay in place, and agents in your own workspace can still send it tasks.
           </p>
         </section>
 

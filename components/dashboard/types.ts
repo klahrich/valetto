@@ -27,6 +27,7 @@ export type Agent = {
   revoked_at: string | null;
   /** True when other workspaces can reach it at @handle/name. */
   shared?: boolean;
+  accepting_shared_requests?: boolean;
   delivery: Delivery;
   last_delivered_at?: string | null;
   last_failed_at?: string | null;

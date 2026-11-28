@@ -34,8 +34,8 @@ export function BotView({ agentId }: { agentId: string }) {
     const t = setTimeout(load, 0);
     return () => clearTimeout(t);
   }, [load]);
-  // Waiting for approval: check every 30 s and swap in the jobs without a reload (spec 15.9).
-  usePoll(load, () => 30000, data?.share.status === 'pending');
+  usePoll(load, () => 30000, data?.share.status === 'pending' ||
+    (data?.share.status === 'approved' && data.share.accepting_shared_requests === false));
 
   if (failure === 'missing') return <NotFound />;
   // A failed poll keeps the page it already has; only a first load that fails shows the retry screen.
@@ -90,13 +90,18 @@ export function BotView({ agentId }: { agentId: string }) {
 
   const share = data.share;
   const capped = share.used_today >= share.daily_cap;
+  const paused = share.accepting_shared_requests === false;
 
   return (
     <BrandFrame branding={branding} agentId={agentId} account={<Account />}>
       <h1 className="text-[26px] leading-tight font-semibold tracking-tight">What can we help with?</h1>
-      <p className="mt-1.5 text-[15px] text-muted-foreground">Pick a job. You&apos;ll see the answer on this page.</p>
+      {!paused && <p className="mt-1.5 text-[15px] text-muted-foreground">Pick a job. You&apos;ll see the answer on this page.</p>}
 
-      {capped && (
+      {paused ? (
+        <Notice icon={<Clock />} title="Temporarily unavailable" level="h2" className="mt-6">
+          <p>New requests are paused. You can still view and respond to your existing requests.</p>
+        </Notice>
+      ) : capped && (
         <Notice icon={<Clock />} title="You've reached today's limit" level="h2" className="mt-6">
           <p>
             You can send up to {share.daily_cap} {share.daily_cap === 1 ? 'request' : 'requests'} a day to {endSentence(name)} {resetText(share.resets_at)}
@@ -104,7 +109,7 @@ export function BotView({ agentId }: { agentId: string }) {
         </Notice>
       )}
 
-      {capped ? (
+      {paused || capped ? (
         <ul className="mt-6 grid gap-3">
           {data.jobs.map((job) => (
             <li key={job.name}>

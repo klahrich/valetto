@@ -90,7 +90,7 @@ export type Job = {
   result_fields: ResultField[];
 };
 
-export type ApprovedShare = { status: 'approved'; daily_cap: number; used_today: number; resets_at: string | null };
+export type ApprovedShare = { status: 'approved'; accepting_shared_requests: boolean; daily_cap: number; used_today: number; resets_at: string | null };
 export type PendingShare = { status: 'pending'; requested_at: string };
 export type RevokedShare = { status: 'revoked' };
 

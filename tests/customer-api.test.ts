@@ -222,6 +222,27 @@ describe('R4 GET /api/v1/c/bots/:agent_id', () => {
 });
 
 describe('R5 POST /api/v1/c/bots/:agent_id/requests', () => {
+  it('reports a pause, rejects new requests, and replays an existing request', async () => {
+    const o = await owner();
+    const customer = await approvedCustomer(o);
+    const client_request_id = randomUUID();
+    const first = await quote(o, customer, validInput, { client_request_id });
+    expect(first.status).toBe(201);
+    const pause = await mcpTool(o.agentKey, 'set_availability', { accepting_shared_requests: false });
+    expect(pause.isError, pause.text).toBe(false);
+    expect((await getBot(customer, o.agentId)).data.share).toMatchObject({
+      status: 'approved', accepting_shared_requests: false,
+    });
+    const blocked = await quote(o, customer);
+    expect(blocked.status).toBe(409);
+    expect(blocked.data.error.code).toBe('agent_unavailable');
+    const replay = await quote(o, customer, validInput, { client_request_id });
+    expect(replay.status).toBe(200);
+    expect(replay.data.request.id).toBe(first.data.request.id);
+    expect((await mcpTool(o.agentKey, 'set_availability', { accepting_shared_requests: true })).isError).toBe(false);
+    expect((await quote(o, customer)).status).toBe(201);
+  });
+
   it('creates a form request with display rows, and replays client_request_id', async () => {
     const o = await owner();
     const customer = await approvedCustomer(o);
